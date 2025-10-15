@@ -1,0 +1,4969 @@
+openapi: 3.0.3
+info:
+  title: 日志易 API 集合
+  version: v3.0
+paths:
+  /api/v3/agent/assigned/{id}/:
+    get:
+      operationId: get_assigned_group_list
+      description: 获得某个Agent已分配的分组信息
+      tags:
+      - agent
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      - in: query
+        name: group_ids
+        schema:
+          type: string
+          description: 分组id
+          example: '"1,2,3,4"'
+        required: false
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  traceid:
+                    type: string
+                    description: 请求唯一标识
+                    example: d1e754e2b2354276a1fa22ce2a1a9b51
+                  result:
+                    type: boolean
+                    description: 请求是否成功
+                  objects:
+                    type: object
+                    properties:
+                      creator_id:
+                        type: number
+                        description: 创建用户id
+                        default: 1
+                      domain_id:
+                        type: number
+                        default: 1
+                      extra:
+                        type: string
+                        description: 采集配置
+                      from_app:
+                        type: number
+                        description: 创建的时候关联的应用
+                        default: -1
+                      id:
+                        type: number
+                      memo:
+                        type: string
+                        description: 描述
+                      name:
+                        type: string
+                        description: 名称
+                  meta:
+                    type: object
+                    description: 资源集合元数据
+                    properties:
+                      total:
+                        type: number
+                        description: 资源总数
+                      count:
+                        type: number
+                        description: 当前页返回资源数
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+  /api/v3/agent/config/:
+    get:
+      operationId: get_agent_config
+      description: 获取agent配置
+      tags:
+      - agent
+      parameters:
+      - in: query
+        name: proxy
+        schema:
+          type: string
+          description: 代理
+        required: false
+      - in: query
+        name: ip_port
+        schema:
+          type: string
+          description: ip 和端口号
+        required: true
+      - in: query
+        name: type
+        schema:
+          type: string
+          description: 类型
+        required: false
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  traceid:
+                    type: string
+                    description: 请求唯一标识
+                    example: d1e754e2b2354276a1fa22ce2a1a9b51
+                  result:
+                    type: boolean
+                    description: 请求是否成功
+                  objects:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        appname:
+                          type: string
+                        cert_file:
+                          type: string
+                        collector_addrs:
+                          type: array
+                          example:
+                          - 192.168.1.141:5180
+                          items:
+                            type: string
+                        delimited:
+                          type: object
+                          example:
+                            delimiter: ''
+                            quote: ''
+                            names: null
+                        disabled:
+                          type: boolean
+                        flows_enabled:
+                          type: boolean
+                        icmp_enabled:
+                          type: boolean
+                          description: 是否开启采集 ICMP 协议
+                        kafka_config:
+                          type: object
+                          example:
+                            type: ''
+                            commit_interval_second: 0
+                            offset: ''
+                            bootstrap_servers: ''
+                            group_id: ''
+                            topics: null
+                            report_metrics: false
+                            report_interval_second: 0
+                            properties: null
+                            appname: ''
+                            tag: ''
+                            hostname: ''
+                            source: ''
+                            ip: ''
+                            log_timestamp: ''
+                            payload: ''
+                            context_id: ''
+                            worker: 0
+                            router_chan_size: 0
+                            disabled: false
+                            charset: ''
+                            token_prefix: null
+                            debug: null
+                        key_file:
+                          type: string
+                        order_by_field_alias:
+                          type: string
+                        rate_limit:
+                          type: number
+                          description: 发送速率限制
+                        source:
+                          type: string
+                        tag:
+                          type: string
+                        token:
+                          type: string
+                        type:
+                          type: string
+                          enum:
+                          - AgentGroup
+                          - DBInput
+                          - EventlogInput
+                          - KafkaInput
+                          - LogstreamerInput
+                          - LumberjackInput
+                          - PacketbeatInput
+                          - ProcessInput
+                          - S3Input
+                          - TcpInput
+                          - TopInput
+                          - UdpInput
+                          - WinlogInput
+                        use_ssl:
+                          type: boolean
+                        use_tls:
+                          type: boolean
+                          description: 启用TLS
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+    post:
+      operationId: create_agent_config
+      description: 创建agent配置(请求体参考get_agent_config接口返回体)
+      externalDocs:
+        url: /#tag/agent/operation/get_agent_config
+      tags:
+      - agent
+      parameters:
+      - in: query
+        name: proxy
+        schema:
+          type: string
+          description: 代理
+        required: false
+      - in: query
+        name: ip_port
+        schema:
+          type: string
+          description: ip 和端口号
+        required: true
+      - in: query
+        name: type
+        schema:
+          type: string
+          description: 类型
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  traceid:
+                    type: string
+                    description: 请求唯一标识
+                    example: d1e754e2b2354276a1fa22ce2a1a9b51
+                  result:
+                    type: boolean
+                    description: 请求是否成功
+                  object:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        result:
+                          type: boolean
+                        reason:
+                          type: string
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+    put:
+      operationId: update_agent_config
+      description: 更新agent配置(请求体参考get_agent_config接口返回体)
+      externalDocs:
+        url: /#tag/agent/operation/get_agent_config
+      tags:
+      - agent
+      parameters:
+      - in: query
+        name: proxy
+        schema:
+          type: string
+          description: 代理
+        required: false
+      - in: query
+        name: ip_port
+        schema:
+          type: string
+          description: ip 和端口号
+        required: true
+      - in: query
+        name: type
+        schema:
+          type: string
+          description: 类型
+        required: true
+      - in: query
+        name: source
+        schema:
+          type: string
+          description: 来源
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  traceid:
+                    type: string
+                    description: 请求唯一标识
+                    example: d1e754e2b2354276a1fa22ce2a1a9b51
+                  result:
+                    type: boolean
+                    description: 请求是否成功
+                  object:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        result:
+                          type: boolean
+                        reason:
+                          type: string
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+    delete:
+      operationId: delete_agent_config
+      description: 删除agent配置
+      tags:
+      - agent
+      parameters:
+      - in: query
+        name: proxy
+        schema:
+          type: string
+          description: 代理
+        required: false
+      - in: query
+        name: ip_port
+        schema:
+          type: string
+          description: ip 和端口号
+        required: true
+      - in: query
+        name: type
+        schema:
+          type: string
+          description: 类型
+        required: true
+      - in: query
+        name: source
+        schema:
+          type: string
+          description: 来源
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  traceid:
+                    type: string
+                    description: 请求唯一标识
+                    example: d1e754e2b2354276a1fa22ce2a1a9b51
+                  result:
+                    type: boolean
+                    description: 请求是否成功
+                  object:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        result:
+                          type: boolean
+                        reason:
+                          type: string
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+  /api/v3/agent/status/:
+    get:
+      operationId: get_agent_status
+      description: 获取agent状态
+      tags:
+      - agent
+      parameters:
+      - in: query
+        name: proxy
+        schema:
+          type: string
+          description: 代理
+        required: false
+      - in: query
+        name: ip_port
+        schema:
+          type: string
+          description: ip 和端口号
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  traceid:
+                    type: string
+                    description: 请求唯一标识
+                    example: d1e754e2b2354276a1fa22ce2a1a9b51
+                  result:
+                    type: boolean
+                    description: 请求是否成功
+                  object:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        result:
+                          type: boolean
+                        reason:
+                          type: string
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+    post:
+      operationId: update_agent_status
+      description: 更新agent状态
+      tags:
+      - agent
+      parameters:
+      - in: query
+        name: proxy
+        schema:
+          type: string
+          description: 代理
+        required: false
+      - in: query
+        name: ip_port
+        schema:
+          type: string
+          description: ip 和端口号
+        required: true
+      - in: query
+        name: cmd
+        schema:
+          type: string
+          enum:
+          - clear
+          - restart
+          - start
+          - stop
+          pattern: ^(start|stop|restart|clear)$
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  traceid:
+                    type: string
+                    description: 请求唯一标识
+                    example: d1e754e2b2354276a1fa22ce2a1a9b51
+                  result:
+                    type: boolean
+                    description: 请求是否成功
+                  object:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        result:
+                          type: boolean
+                        reason:
+                          type: string
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+  /api/v3/agent/stats/:
+    get:
+      operationId: get_agent_stats
+      description: 获取agent统计
+      tags:
+      - agent
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  traceid:
+                    type: string
+                    description: 请求唯一标识
+                    example: d1e754e2b2354276a1fa22ce2a1a9b51
+                  result:
+                    type: boolean
+                    description: 请求是否成功
+                  objects:
+                    type: object
+                    properties:
+                      Expired:
+                        type: number
+                        description: 已过期 agent 数量
+                      Pending:
+                        type: number
+                        description: 正在启动 agent 数量
+                      Running:
+                        type: string
+                        description: 已启动 agent 数量
+                      Stop:
+                        type: number
+                        description: 停止 agent 数量
+                      Upgrading:
+                        type: number
+                        description: 升级中 agent 数量
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+  /api/v3/agent/:
+    get:
+      operationId: get_agent_list
+      description: 获取agent列表
+      tags:
+      - agent
+      parameters:
+      - $ref: '#/components/parameters/fields'
+      - $ref: '#/components/parameters/permits'
+      - $ref: '#/components/parameters/page'
+      - $ref: '#/components/parameters/size'
+      - in: query
+        name: ip
+        schema:
+          type: string
+          description: Agent地址
+        required: false
+      - in: query
+        name: group_ids
+        schema:
+          type: string
+          description: Agent分组id，全部分组id为all
+        required: true
+        default:
+          - "all"
+      - in: query
+        name: port
+        schema:
+          type: integer
+          description: 端口
+        required: false
+      - in: query
+        name: status
+        schema:
+          type: string
+          description: 启动状态
+        required: false
+      - in: query
+        name: os
+        schema:
+          type: string
+          description: 操作系统
+        required: false
+      - in: query
+        name: platform
+        schema:
+          type: string
+          description: 平台
+        required: false
+      - in: query
+        name: cur_version
+        schema:
+          type: string
+          description: 版本
+        required: false
+      - in: query
+        name: expected_version
+        schema:
+          type: string
+          description: 预期版本
+        required: false
+      - in: query
+        name: is_server_heka
+        schema:
+          type: boolean
+          description: 类型 false-Agent,true-Server
+          enum:
+          - 'false'
+          - 'true'
+        required: false
+      - in: query
+        name: proxy_ip
+        schema:
+          type: string
+          description: 代理地址
+        required: false
+      - in: query
+        name: proxy_port
+        schema:
+          type: integer
+          description: 代理端口
+        required: false
+      - in: query
+        name: id
+        schema:
+          type: integer
+        required: false
+      - in: query
+        name: domain_id
+        schema:
+          type: integer
+        required: false
+      - in: query
+        name: hostname
+        schema:
+          type: string
+          description: 主机名
+        required: false
+      - in: query
+        name: comment
+        schema:
+          type: string
+          description: 备注
+        required: false
+      - in: query
+        name: cmd
+        schema:
+          type: string
+        required: false
+      - in: query
+        name: cmd_timestamp
+        schema:
+          type: string
+        required: false
+      - in: query
+        name: create_timestamp
+        schema:
+          type: string
+          description: agent 接入时间
+        required: false
+      - in: query
+        name: last_update_timestamp
+        schema:
+          type: string
+          description: 更新时间
+        required: false
+      - in: query
+        name: sort
+        schema:
+          type: string
+          description: 排序规则
+          default:
+          - -id
+          enum:
+          - cmd
+          - cmd_timestamp
+          - comment
+          - create_timestamp
+          - cur_version
+          - domain_id
+          - expected_version
+          - hostname
+          - id
+          - ip
+          - is_server_heka
+          - last_update_timestamp
+          - os
+          - platform
+          - port
+          - proxy_ip
+          - proxy_port
+          - status
+        required: false
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  traceid:
+                    type: string
+                    description: 请求唯一标识
+                    example: d1e754e2b2354276a1fa22ce2a1a9b51
+                  result:
+                    type: boolean
+                    description: 请求是否成功
+                  objects:
+                    type: object
+                    properties:
+                      create_timestamp:
+                        type: number
+                        description: agent接入时间
+                      last_update_timestamp:
+                        type: number
+                        description: 更新/心跳时间
+                      cmd:
+                        type: string
+                      cmd_timestamp:
+                        type: string
+                        format: date-time
+                      comment:
+                        type: string
+                        description: 备注
+                      cur_version:
+                        type: string
+                        description: 版本
+                      domain_id:
+                        type: number
+                      expected_version:
+                        type: string
+                        description: 预期版本
+                      group_ids:
+                        type: string
+                      hostname:
+                        type: string
+                        description: 主机名
+                      id:
+                        type: number
+                      ip:
+                        type: string
+                        description: Agent 地址
+                      is_server_heka:
+                        type: boolean
+                        description: 类型
+                      os:
+                        type: string
+                        description: 操作系统
+                      platform:
+                        type: string
+                        description: 平台
+                      port:
+                        type: number
+                        description: 端口
+                      proxy_ip:
+                        type: string
+                        description: 代理地址
+                      proxy_port:
+                        type: number
+                        description: 代理端口
+                      status:
+                        type: string
+                        description: 启动状态
+                  permits:
+                    type: string
+                    format: boolean
+                    description: 是否获取资源相关权限集合
+                  current_time:
+                    type: number
+                    description: 当前时间
+                  meta:
+                    type: object
+                    description: 资源集合元数据
+                    properties:
+                      total:
+                        type: number
+                        description: 资源总数
+                      page:
+                        type: number
+                        description: 当前请求页码
+                      size:
+                        type: number
+                        description: 每页资源数
+                      count:
+                        type: number
+                        description: 当前页返回资源数
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+  /api/v3/agent/set/:
+    put:
+      operationId: update_agent_set
+      description: 批量更新agent
+      tags:
+      - agent
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                comment:
+                  type: string
+                  description: 备注
+                target_agents:
+                  type: array
+                  description: 所选agent
+                  example:
+                  - id: 1
+                    group_ids: 1,2,3
+                  - id: 2
+                    group_ids: 1,2,3
+                  items:
+                    type: object
+                    properties:
+                      id:
+                        type: number
+                      group_ids:
+                        type: string
+              required:
+              - target_agents
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/response-base'
+                - type: object
+                  properties:
+                    objects:
+                      type: array
+                      items:
+                        allOf:
+                        - $ref: '#/components/schemas/AgentStatus'
+                        - $ref: '#/components/schemas/AgentStatusReadOnly'
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+  /api/v3/agent/{id}/:
+    put:
+      operationId: update_agent_detail
+      description: 更新单个agent
+      tags:
+      - agent
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: group_ids
+        schema:
+          type: string
+          description: 分组id
+          example: '"1,2,3,4"'
+        required: false
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ip:
+                  description: Agent地址
+                  maxLength: 64
+                  type: string
+                port:
+                  description: 端口
+                  type: integer
+                status:
+                  description: 启动状态
+                  maxLength: 64
+                  type: string
+                os:
+                  description: 操作系统
+                  maxLength: 32
+                  type: string
+                platform:
+                  description: 平台
+                  maxLength: 64
+                  type: string
+                cur_version:
+                  description: 版本
+                  maxLength: 64
+                  type: string
+                expected_version:
+                  description: 预期版本
+                  maxLength: 64
+                  type: string
+                is_server_heka:
+                  description: 类型 false-Agent,true-Server
+                  enum:
+                  - 'false'
+                  - 'true'
+                  type: boolean
+                proxy_ip:
+                  description: 代理地址
+                  maxLength: 64
+                  type: string
+                proxy_port:
+                  description: 代理端口
+                  type: integer
+                hostname:
+                  description: 主机名
+                  maxLength: 256
+                  type: string
+                comment:
+                  description: 备注
+                  maxLength: 256
+                  type: string
+                cmd:
+                  maxLength: 64
+                  type: string
+                cmd_timestamp:
+                  type: string
+                  format: date-time
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/response-base'
+                - type: object
+                  properties:
+                    object:
+                      allOf:
+                      - $ref: '#/components/schemas/AgentStatus'
+                      - $ref: '#/components/schemas/AgentStatusReadOnly'
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+    delete:
+      operationId: delete_agent_detail
+      description: 删除单个agent
+      tags:
+      - agent
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: group_ids
+        schema:
+          type: string
+          description: 分组id
+          example: '"1,2,3,4"'
+        required: false
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/response-base'
+                - type: object
+                  properties:
+                    object:
+                      allOf:
+                      - $ref: '#/components/schemas/AgentStatus'
+                      - $ref: '#/components/schemas/AgentStatusReadOnly'
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+  /api/v3/agentgroup/{id}/add_member/:
+    post:
+      operationId: add_resource_to_group
+      description: 给某个group添加agent
+      tags:
+      - agentgroup
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                target_agents:
+                  type: array
+                  description: 目标agents
+                  items:
+                    type: object
+                    properties:
+                      id:
+                        type: number
+                      group_ids:
+                        type: string
+                        example: 1,2,3
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  traceid:
+                    type: string
+                    description: 请求唯一标识
+                    example: d1e754e2b2354276a1fa22ce2a1a9b51
+                  result:
+                    type: boolean
+                    description: 请求是否成功
+                  meta:
+                    type: object
+                    description: 资源集合元数据
+                    properties:
+                      total:
+                        type: number
+                        description: 资源总数
+                  objects:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: number
+                          description: 关联表id
+                        resource_group_id:
+                          type: string
+                          description: agent分组id
+                        resource_id:
+                          type: number
+                          description: agent id
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+  /api/v3/agentgroup/{id}/remove_member/:
+    post:
+      operationId: remove_resource_from_group
+      description: 从某个 group 中移除 agent
+      tags:
+      - agentgroup
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                target_agents:
+                  type: string
+                  description: 目标agents
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  traceid:
+                    type: string
+                    description: 请求唯一标识
+                    example: d1e754e2b2354276a1fa22ce2a1a9b51
+                  result:
+                    type: boolean
+                    description: 请求是否成功
+                  meta:
+                    type: object
+                    description: 资源集合元数据
+                    properties:
+                      total:
+                        type: number
+                        description: 资源总数
+                  objects:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: number
+                          description: 关联表id
+                        resource_group_id:
+                          type: string
+                          description: agent分组id
+                        resource_id:
+                          type: number
+                          description: agent id
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+  /api/v3/agentgroup/platforms/{id}/:
+    get:
+      operationId: get_platforms
+      description: 获取某个 group 下所有的 platform
+      tags:
+      - agentgroup
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  traceid:
+                    type: string
+                    description: 请求唯一标识
+                    example: d1e754e2b2354276a1fa22ce2a1a9b51
+                  result:
+                    type: boolean
+                    description: 请求是否成功
+                  meta:
+                    type: object
+                    description: 资源集合元数据
+                    properties:
+                      total:
+                        type: number
+                        description: 资源总数
+                  objects:
+                    type: array
+                    example:
+                    - linux-x64-db
+                    items:
+                      type: string
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+  /api/v3/agentgroup/inputs/{id}/:
+    get:
+      operationId: get_group_extra_inputs
+      description: 获取某个group的extra字段
+      tags:
+      - agentgroup
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  traceid:
+                    type: string
+                    description: 请求唯一标识
+                    example: d1e754e2b2354276a1fa22ce2a1a9b51
+                  result:
+                    type: boolean
+                    description: 请求是否成功
+                  object:
+                    type: object
+                    description: 采集配置(json解析出extra字段)
+                    properties:
+                      logstreamer_input:
+                        type: object
+                        example:
+                          1c4a095b71313ccbaf967eccc8b17d69:
+                            appname: test
+                            tag: heka
+                            log_directory: /mnt/www01/var/log
+                            file_match: /mnt/www01/var/log
+                            exclude: ''
+                            splitter_regex: \n
+                            charset: utf-8
+                            oldest_duration: 720h
+                            disabled: false
+                            id: 1c4a095b71313ccbaf967eccc8b17d69
+                            input_type: logstreamer_input
+                            isSwitching: false
+                            isUpdateable: true
+                      syslog_input:
+                        type: object
+                        example:
+                          a6d86d1de63338c29f264d3abe72ff63:
+                            protocol: Udp
+                            address: 192.168.1.31:514
+                            mappings: 192.168.1.31:test:tag:utf-8
+                            disabled: false
+                      process_input:
+                        type: object
+                        example:
+                          7d10e5e0fc25301386dc2937de11969e:
+                            args: []
+                            splitter_regex: \n
+                            appname: '1'
+                            tag: heka
+                            charset: utf-8
+                            ticker_interval: 60
+                            bin: /bin/ls
+                            disabled: false
+                      top_input:
+                        type: object
+                        example:
+                          top:
+                            appname: top_info
+                            tag: top_info
+                            rescan_interval: 300s
+                            disk: true
+                            system: true
+                            proc: false
+                            procs: .*
+                            per_cpu: false
+                            per_net: false
+                            disk_io: true
+                            disabled: false
+                      kafka_input:
+                        type: object
+                        example:
+                          ad23a631c6ad315d9e0d07afab44bf43:
+                            appname: kafa
+                            tag: kafaa
+                            hostname: ''
+                            source: ''
+                            worker: 1
+                            ip: ''
+                            payload: ''
+                            context_id: ''
+                            log_timestamp: ''
+                            bootstrap_servers: 192.168.1.131:123
+                            group_id: a
+                            topics:
+                            - aa
+                            commit_interval_second: 5
+                            report_metrics: false
+                            report_interval_second: 60
+                            router_chan_size: 30
+                            properties: {}
+                            charset: ''
+                            debug: false
+                            disabled: false
+                      eventlog_input:
+                        type: object
+                        example:
+                          Application:
+                            appname: windowslog
+                            tag: heka
+                            ignore_older: 720h
+                            event_ids:
+                            - 1
+                            levels:
+                            - info
+                            providers:
+                            - testproviders
+                            channel: Application
+                            disabled: false
+                          Security:
+                            appname: windowslog
+                            tag: heka
+                            ignore_older: 720h
+                            event_ids:
+                            - 1
+                            levels:
+                            - info
+                            providers:
+                            - testproviders
+                            channel: Security
+                            disabled: false
+                          ForwardedEvents:
+                            appname: windowslog
+                            tag: heka
+                            ignore_older: 720h
+                            event_ids:
+                            - 1
+                            levels:
+                            - info
+                            providers:
+                            - testproviders
+                            channel: ForwardedEvents
+                            disabled: false
+                          Setup:
+                            appname: windowslog
+                            tag: heka
+                            ignore_older: 720h
+                            event_ids:
+                            - 1
+                            levels:
+                            - info
+                            providers:
+                            - testproviders
+                            channel: Setup
+                            disabled: false
+                          System:
+                            appname: windowslog
+                            tag: heka
+                            ignore_older: 720h
+                            event_ids:
+                            - 1
+                            levels:
+                            - info
+                            providers:
+                            - testproviders
+                            channel: System
+                            disabled: false
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+    put:
+      operationId: update_group_extra_inputs
+      description: 更新某个group的extra字段
+      tags:
+      - agentgroup
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: 采集配置id(只传id表示删除)
+                input:
+                  type: object
+                  description: 不同类型的采集输入(只传input表示新建, 同时传id跟input表示更新)
+                  example:
+                    appname: test123
+                    tag: heka
+                    log_directory: /var/log
+                    file_match: .*\.log
+                    exclude: ''
+                    splitter_regex: \n
+                    charset: utf-8
+                    oldest_duration: 720h
+                    disabled: false
+                    id: 51850506ebbd3fccbedd6e932355fc28
+                    input_type: logstreamer_input
+                    isSwitching: false
+                    isUpdateable: true
+                type:
+                  type: string
+                  description: 采集配置类型
+                  example: syslog_input
+                  enum:
+                  - <old_inputs>(一些历史旧的输入类型)
+                  - eventlog_input
+                  - kafka_input
+                  - logstreamer_input
+                  - process_input
+                  - syslog_input
+                  - top_input
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  traceid:
+                    type: string
+                    description: 请求唯一标识
+                    example: d1e754e2b2354276a1fa22ce2a1a9b51
+                  result:
+                    type: boolean
+                    description: 请求是否成功
+                  object:
+                    type: object
+                    properties:
+                      creator_id:
+                        type: number
+                        description: 创建用户id
+                      domain_id:
+                        type: number
+                      extra:
+                        type: string
+                        description: 采集配置
+                      id:
+                        type: number
+                      memo:
+                        type: string
+                        description: 描述
+                      name:
+                        type: string
+                        description: 名称
+                      from_app:
+                        type: number
+                        description: 创建的时候关联的应用
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+  /api/v3/agentgroup/:
+    get:
+      operationId: get_agentgroup_list
+      description: 获取agent分组列表
+      tags:
+      - agentgroup
+      parameters:
+      - $ref: '#/components/parameters/fields'
+      - $ref: '#/components/parameters/permits'
+      - $ref: '#/components/parameters/page'
+      - $ref: '#/components/parameters/size'
+      - $ref: '#/components/parameters/custom_collection'
+      - in: query
+        name: id
+        schema:
+          type: integer
+        required: false
+      - in: query
+        name: domain_id
+        schema:
+          type: integer
+        required: false
+      - in: query
+        name: name
+        schema:
+          type: string
+          description: 名称
+        required: false
+      - in: query
+        name: memo
+        schema:
+          type: string
+          description: 描述
+        required: false
+      - in: query
+        name: creator_id
+        schema:
+          type: integer
+        required: false
+      - in: query
+        name: from_app
+        schema:
+          type: integer
+          description: 创建的时候关联的应用
+        required: false
+      - in: query
+        name: rt_ids
+        schema:
+          type: string
+          description: 资源标签过滤，支持多标签过滤，多个标签id之间用`,`分割
+          pattern: ^(-?\d+|all)(,-?\d+)*$|^$
+        required: false
+      - in: query
+        name: sort
+        schema:
+          type: string
+          description: 排序规则
+          default:
+          - -id
+          enum:
+          - creator_id
+          - domain_id
+          - from_app
+          - id
+          - memo
+          - name
+        required: false
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/response-base'
+                - $ref: '#/components/schemas/response-permits'
+                - $ref: '#/components/schemas/response-meta'
+                - type: object
+                  properties:
+                    objects:
+                      type: array
+                      items:
+                        allOf:
+                        - $ref: '#/components/schemas/AgentGroup'
+                        - $ref: '#/components/schemas/AgentGroupReadOnly'
+                        - type: object
+                          properties:
+                            rt_list:
+                              type: array
+                              description: 关联的资源标签
+                              example:
+                              - id: 1
+                                name: 标签1
+                              - id: 2
+                                name: 标签2
+                              items:
+                                type: object
+                            creator_enabled:
+                              type: boolean
+                              description: 用户是否可用
+                            creator_name:
+                              type: string
+                              description: 用户名称
+                              example: admin
+                            creator_full_name:
+                              type: string
+                              description: 用户全名
+                              example: admin
+                            is_collected:
+                              type: boolean
+                              description: 资源是否被收藏
+                              example: true
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+    post:
+      operationId: create_agentgroup
+      description: 新建agent分组
+      tags:
+      - agentgroup
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: 名称
+                  pattern: .+
+                memo:
+                  type: string
+                  description: 描述
+                rt_names:
+                  type: string
+                  description: 资源标签
+                  pattern: ^$|^org(\.[-A-Za-z_0-9\u4e00-\u9fa5]+){1,4}$
+                roles:
+                  type: array
+                  description: 分配角色
+                  items:
+                    type: number
+              required:
+              - name
+              - roles
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/response-base'
+                - type: object
+                  properties:
+                    object:
+                      type: object
+                      properties:
+                        id:
+                          readOnly: true
+                          type: integer
+                        name:
+                          description: 名称
+                          maxLength: 255
+                          type: string
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+  /api/v3/agentgroup/{id}/:
+    get:
+      operationId: get_agentgroup_detail
+      tags:
+      - agentgroup
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - $ref: '#/components/parameters/fields'
+      - $ref: '#/components/parameters/permit'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/response-base'
+                - $ref: '#/components/schemas/response-permit'
+                - type: object
+                  properties:
+                    object:
+                      allOf:
+                      - $ref: '#/components/schemas/AgentGroup'
+                      - $ref: '#/components/schemas/AgentGroupReadOnly'
+                      - type: object
+                        properties:
+                          rt_list:
+                            type: array
+                            description: 关联的资源标签
+                            example:
+                            - id: 1
+                              name: 标签1
+                            - id: 2
+                              name: 标签2
+                            items:
+                              type: object
+                          creator_enabled:
+                            type: boolean
+                            description: 用户是否可用
+                          creator_name:
+                            type: string
+                            description: 用户名称
+                            example: admin
+                          creator_full_name:
+                            type: string
+                            description: 用户全名
+                            example: admin
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+    put:
+      operationId: update_agentgroup_detail
+      description: 更新单个agent分组
+      tags:
+      - agentgroup
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: 名称
+                  pattern: .+
+                memo:
+                  type: string
+                  description: 描述
+                rt_names:
+                  type: string
+                  description: 资源标签
+                  pattern: ^$|^org(\.[-A-Za-z_0-9\u4e00-\u9fa5]+){1,4}$
+                roles:
+                  type: array
+                  description: 分配角色
+                  items:
+                    type: number
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/response-base'
+                - type: object
+                  properties:
+                    object:
+                      type: object
+                      properties:
+                        id:
+                          readOnly: true
+                          type: integer
+                        name:
+                          description: 名称
+                          maxLength: 255
+                          type: string
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+    delete:
+      operationId: delete_agentgroup_detail
+      description: 删除单个agent分组
+      tags:
+      - agentgroup
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/response-base'
+                - type: object
+                  properties:
+                    object:
+                      type: object
+                      properties:
+                        id:
+                          readOnly: true
+                          type: integer
+                        name:
+                          description: 名称
+                          maxLength: 255
+                          type: string
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+  /api/v3/alerts/:
+    get:
+      operationId: get_alerts_list
+      description: 获取监控列表
+      tags:
+      - alerts
+      parameters:
+      - $ref: '#/components/parameters/fields'
+      - $ref: '#/components/parameters/permits'
+      - $ref: '#/components/parameters/page'
+      - $ref: '#/components/parameters/size'
+      - in: query
+        name: id
+        schema:
+          type: integer
+        required: false
+      - in: query
+        name: name
+        schema:
+          type: string
+          description: 告警名字
+        required: false
+      - in: query
+        name: domain_id
+        schema:
+          type: integer
+        required: false
+      - in: query
+        name: executor_id
+        schema:
+          type: integer
+        required: false
+      - in: query
+        name: creator_id
+        schema:
+          type: integer
+        required: false
+      - in: query
+        name: description
+        schema:
+          type: string
+          description: 描述
+        required: false
+      - in: query
+        name: crontab
+        schema:
+          type: string
+        required: false
+      - in: query
+        name: query
+        schema:
+          type: string
+        required: false
+      - in: query
+        name: extend_query
+        schema:
+          type: string
+        required: false
+      - in: query
+        name: graph_enabled
+        schema:
+          type: boolean
+        required: false
+      - in: query
+        name: use_spark
+        schema:
+          type: boolean
+        required: false
+      - in: query
+        name: extend_use_spark
+        schema:
+          type: boolean
+        required: false
+      - in: query
+        name: extend_conf
+        schema:
+          type: string
+        required: false
+      - in: query
+        name: segmentation_field
+        schema:
+          type: string
+        required: false
+      - in: query
+        name: alert_line_send
+        schema:
+          type: boolean
+        required: false
+      - in: query
+        name: hosted_flag
+        schema:
+          type: boolean
+        required: false
+      - in: query
+        name: category
+        schema:
+          type: integer
+          description: 报警类型
+        required: false
+      - in: query
+        name: app_id
+        schema:
+          type: integer
+          description: 所属应用
+        required: false
+      - in: query
+        name: rt_ids
+        schema:
+          type: string
+          description: 资源标签过滤，支持多标签过滤，多个标签id之间用`,`分割
+          pattern: ^(-?\d+|all)(,-?\d+)*$|^$
+        required: false
+      - in: query
+        name: sort
+        schema:
+          type: string
+          description: 排序规则
+          default:
+          - -id
+          enum:
+          - check_interval
+          - continuous_trigger_value
+          - crontab
+          - enabled
+          - group_suppress_field
+          - id
+          - name
+          - restrain_interval
+          - segmentation_field
+        required: false
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/response-base'
+                - $ref: '#/components/schemas/response-permits'
+                - $ref: '#/components/schemas/response-meta'
+                - type: object
+                  properties:
+                    objects:
+                      type: array
+                      items:
+                        allOf:
+                        - $ref: '#/components/schemas/Alert'
+                        - $ref: '#/components/schemas/AlertReadOnly'
+                        - type: object
+                          properties:
+                            rt_list:
+                              type: array
+                              description: 关联的资源标签
+                              example:
+                              - id: 1
+                                name: 标签1
+                              - id: 2
+                                name: 标签2
+                              items:
+                                type: object
+                            creator_enabled:
+                              type: boolean
+                              description: 用户是否可用
+                            creator_name:
+                              type: string
+                              description: 用户名称
+                              example: admin
+                            creator_full_name:
+                              type: string
+                              description: 用户全名
+                              example: admin
+                            executor_enabled:
+                              type: boolean
+                              description: 执行人是否可用
+                            executor_name:
+                              type: string
+                              description: 执行人名称
+                              example: admin
+                            executor_full_name:
+                              type: string
+                              description: 执行人全名
+                              example: admin
+                            app_name:
+                              type: string
+                              description: 所属应用名称
+                              example: 应用名称
+                            is_maintain:
+                              type: boolean
+                              description: 是否在维护期
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+    post:
+      operationId: create_alerts
+      description: 新建监控
+      tags:
+      - alerts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  description: 告警名字
+                  maxLength: 255
+                  type: string
+                executor_id:
+                  type: integer
+                description:
+                  description: 描述
+                  type: string
+                check_interval:
+                  description: 定时执行时间间隔
+                  type: integer
+                interval_unit:
+                  description: 标记check_interval的单位，0表示分钟，1表示秒
+                  type: integer
+                check_condition:
+                  description: 触发条件
+                  type: string
+                enabled:
+                  description: 状态,0关闭,1开启
+                  type: boolean
+                category:
+                  description: 报警类型
+                  type: integer
+                crontab:
+                  maxLength: 255
+                  type: string
+                restrain_interval:
+                  description: 告警抑制
+                  type: integer
+                now_restrain_interval:
+                  type: integer
+                max_restrain_interval:
+                  description: 告警抑制的最大时间
+                  type: integer
+                continuous_trigger_value:
+                  type: integer
+                group_suppress_field:
+                  maxLength: 255
+                  type: string
+                alert_when_recover:
+                  description: 告警恢复时是否提示
+                  type: integer
+                generate:
+                  type: boolean
+                graph_enabled:
+                  type: boolean
+                query:
+                  type: string
+                extend_query:
+                  type: string
+                run_results:
+                  type: string
+                dataset_ids:
+                  type: string
+                extend_dataset_ids:
+                  type: string
+                extend_conf:
+                  type: string
+                use_spark:
+                  type: boolean
+                extend_use_spark:
+                  type: boolean
+                segmentation_field:
+                  maxLength: 255
+                  type: string
+                segmentation_result:
+                  description: 字段切分运行结果
+                  type: string
+                statistics_field:
+                  maxLength: 255
+                  type: string
+                market_day:
+                  description: 交易日id, -1表示默认交易日
+                  type: integer
+                alert_line_send:
+                  type: boolean
+                schedule_priority:
+                  description: 调度优先级 0-默认,1-更高,2-最高
+                  enum:
+                  - 0
+                  - 1
+                  - 2
+                  type: integer
+                schedule_window:
+                  description: 调度窗口，单位 m/h/d
+                  maxLength: 15
+                  type: string
+                window:
+                  description: 主时间窗口
+                  maxLength: 32
+                  type: string
+                topic:
+                  description: topic名称
+                  maxLength: 32
+                  type: string
+                check_condition_group:
+                  type: string
+                group_trigger_flag:
+                  type: boolean
+                hosted_flag:
+                  type: boolean
+                composite_info:
+                  description: 联合监控配置
+                  type: string
+                app_id:
+                  description: 所属应用
+                  type: integer
+                export:
+                  description: 资源范围 local-本APP内可见,system-全局可见
+                  enum:
+                  - local
+                  - system
+                  maxLength: 255
+                  type: string
+                timezone:
+                  description: 执行时区
+                  maxLength: 255
+                  type: string
+                alert_condition:
+                  type: string
+                recover_condition:
+                  type: string
+                alert_state:
+                  maxLength: 30
+                  type: string
+                alert_segmentation_result:
+                  type: string
+                rt_names:
+                  type: string
+                  description: 关联的资源标签
+                  example: 标签1,标签2
+              required:
+              - category
+              - name
+              - query
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/response-base'
+                - type: object
+                  properties:
+                    object:
+                      type: object
+                      properties:
+                        id:
+                          readOnly: true
+                          type: integer
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+  /api/v3/alerts/{id}/:
+    get:
+      operationId: get_alerts_detail
+      description: 获取单个监控
+      tags:
+      - alerts
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - $ref: '#/components/parameters/fields'
+      - $ref: '#/components/parameters/permit'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/response-base'
+                - $ref: '#/components/schemas/response-permit'
+                - type: object
+                  properties:
+                    object:
+                      allOf:
+                      - $ref: '#/components/schemas/Alert'
+                      - $ref: '#/components/schemas/AlertReadOnly'
+                      - type: object
+                        properties:
+                          rt_list:
+                            type: array
+                            description: 关联的资源标签
+                            example:
+                            - id: 1
+                              name: 标签1
+                            - id: 2
+                              name: 标签2
+                            items:
+                              type: object
+                          creator_enabled:
+                            type: boolean
+                            description: 用户是否可用
+                          creator_name:
+                            type: string
+                            description: 用户名称
+                            example: admin
+                          creator_full_name:
+                            type: string
+                            description: 用户全名
+                            example: admin
+                          executor_enabled:
+                            type: boolean
+                            description: 执行人是否可用
+                          executor_name:
+                            type: string
+                            description: 执行人名称
+                            example: admin
+                          executor_full_name:
+                            type: string
+                            description: 执行人全名
+                            example: admin
+                          app_name:
+                            type: string
+                            description: 所属应用名称
+                            example: 应用名称
+                          is_maintain:
+                            type: boolean
+                            description: 是否在维护期
+                          alert_metas:
+                            type: string
+                            description: 告警插件元数据
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+    put:
+      operationId: update_alerts_detail
+      description: 更新单个监控
+      tags:
+      - alerts
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  description: 告警名字
+                  maxLength: 255
+                  type: string
+                executor_id:
+                  type: integer
+                description:
+                  description: 描述
+                  type: string
+                check_interval:
+                  description: 定时执行时间间隔
+                  type: integer
+                interval_unit:
+                  description: 标记check_interval的单位，0表示分钟，1表示秒
+                  type: integer
+                check_condition:
+                  description: 触发条件
+                  type: string
+                enabled:
+                  description: 状态,0关闭,1开启
+                  type: boolean
+                category:
+                  description: 报警类型
+                  type: integer
+                crontab:
+                  maxLength: 255
+                  type: string
+                restrain_interval:
+                  description: 告警抑制
+                  type: integer
+                now_restrain_interval:
+                  type: integer
+                max_restrain_interval:
+                  description: 告警抑制的最大时间
+                  type: integer
+                continuous_trigger_value:
+                  type: integer
+                group_suppress_field:
+                  maxLength: 255
+                  type: string
+                alert_when_recover:
+                  description: 告警恢复时是否提示
+                  type: integer
+                generate:
+                  type: boolean
+                graph_enabled:
+                  type: boolean
+                query:
+                  type: string
+                extend_query:
+                  type: string
+                run_results:
+                  type: string
+                dataset_ids:
+                  type: string
+                extend_dataset_ids:
+                  type: string
+                extend_conf:
+                  type: string
+                use_spark:
+                  type: boolean
+                extend_use_spark:
+                  type: boolean
+                segmentation_field:
+                  maxLength: 255
+                  type: string
+                segmentation_result:
+                  description: 字段切分运行结果
+                  type: string
+                statistics_field:
+                  maxLength: 255
+                  type: string
+                market_day:
+                  description: 交易日id, -1表示默认交易日
+                  type: integer
+                alert_line_send:
+                  type: boolean
+                schedule_priority:
+                  description: 调度优先级 0-默认,1-更高,2-最高
+                  enum:
+                  - 0
+                  - 1
+                  - 2
+                  type: integer
+                schedule_window:
+                  description: 调度窗口，单位 m/h/d
+                  maxLength: 15
+                  type: string
+                window:
+                  description: 主时间窗口
+                  maxLength: 32
+                  type: string
+                topic:
+                  description: topic名称
+                  maxLength: 32
+                  type: string
+                check_condition_group:
+                  type: string
+                group_trigger_flag:
+                  type: boolean
+                hosted_flag:
+                  type: boolean
+                composite_info:
+                  description: 联合监控配置
+                  type: string
+                app_id:
+                  description: 所属应用
+                  type: integer
+                export:
+                  description: 资源范围 local-本APP内可见,system-全局可见
+                  enum:
+                  - local
+                  - system
+                  maxLength: 255
+                  type: string
+                timezone:
+                  description: 执行时区
+                  maxLength: 255
+                  type: string
+                alert_condition:
+                  type: string
+                recover_condition:
+                  type: string
+                alert_state:
+                  maxLength: 30
+                  type: string
+                alert_segmentation_result:
+                  type: string
+                rt_names:
+                  type: string
+                  description: 关联的资源标签
+                  example: 标签1,标签2
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/response-base'
+                - type: object
+                  properties:
+                    object:
+                      type: object
+                      properties:
+                        id:
+                          readOnly: true
+                          type: integer
+                        name:
+                          description: 告警名字
+                          maxLength: 255
+                          type: string
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+    delete:
+      operationId: delete_alerts_detail
+      description: 删除单个告警
+      tags:
+      - alerts
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/response-base'
+                - type: object
+                  properties:
+                    object:
+                      type: object
+                      properties:
+                        id:
+                          readOnly: true
+                          type: integer
+                        name:
+                          description: 告警名字
+                          maxLength: 255
+                          type: string
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+  /api/v3/indexes/:
+    get:
+      operationId: get_indexes_list
+      description: 获取索引列表
+      tags:
+      - indexes
+      parameters:
+      - $ref: '#/components/parameters/fields'
+      - $ref: '#/components/parameters/permits'
+      - $ref: '#/components/parameters/page'
+      - $ref: '#/components/parameters/size'
+      - in: query
+        name: id
+        schema:
+          type: integer
+        required: false
+      - in: query
+        name: name
+        schema:
+          type: string
+        required: false
+      - in: query
+        name: last_modified_time
+        schema:
+          type: string
+          description: 更新时间
+        required: false
+      - in: query
+        name: domain_id
+        schema:
+          type: integer
+        required: false
+      - in: query
+        name: creator_id
+        schema:
+          type: integer
+        required: false
+      - in: query
+        name: description
+        schema:
+          type: string
+        required: false
+      - in: query
+        name: rt_ids
+        schema:
+          type: string
+          description: 资源标签过滤，支持多标签过滤，多个标签id之间用`,`分割
+          pattern: ^(-?\d+|all)(,-?\d+)*$|^$
+        required: false
+      - in: query
+        name: sort
+        schema:
+          type: string
+          description: 排序规则
+          default:
+          - -id
+          enum:
+          - id
+          - last_modified_time
+          - name
+        required: false
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/response-base'
+                - $ref: '#/components/schemas/response-permits'
+                - $ref: '#/components/schemas/response-meta'
+                - type: object
+                  properties:
+                    objects:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          id:
+                            readOnly: true
+                            type: integer
+                          last_modified_time:
+                            description: 更新时间
+                            readOnly: true
+                            type: number
+                            format: date-time
+                          create_time:
+                            description: 创建时间
+                            readOnly: true
+                            type: string
+                            format: date-time
+                          name:
+                            type: string
+                          alias:
+                            type: string
+                          disabled:
+                            type: boolean
+                          rotation_period:
+                            type: string
+                          description:
+                            type: string
+                          domain_id:
+                            type: integer
+                          phantom_time:
+                            maxLength: 255
+                            type: string
+                          creator_id:
+                            type: integer
+                          rt_list:
+                            type: array
+                            description: 关联的资源标签
+                            example:
+                            - id: 1
+                              name: 标签1
+                            - id: 2
+                              name: 标签2
+                            items:
+                              type: object
+                          creator_enabled:
+                            type: boolean
+                            description: 用户是否可用
+                          creator_name:
+                            type: string
+                            description: 用户名称
+                            example: admin
+                          creator_full_name:
+                            type: string
+                            description: 用户全名
+                            example: admin
+                          expired:
+                            type: string
+                          index_quota:
+                            type: string
+                          route_count:
+                            type: number
+                          app_name:
+                            type: string
+                            description: 所属应用名称
+                            example: 应用名称
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+    post:
+      operationId: create_indexes
+      description: 创建索引（请求体的更多字段，请参考get_indexes_detail接口返回体）
+      externalDocs:
+        url: /#tag/indexes/operation/get_indexes_detail
+      tags:
+      - indexes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  pattern: ^[a-z][_a-z0-9]{0,31}$|^(_internal|_log_anomaly|_o11y_metrics|_o11y_trace|_o11y_topology|_o11y_alert|_o11y_event|_o11y_rum|_o11y_profiling_frame|_o11y_profiling_event|_o11y_profiling_stack_trace|_keywordmonitor)$
+                alias:
+                  type: string
+                disabled:
+                  type: boolean
+                rotation_period:
+                  type: string
+                  pattern: \d+[y,m,d,h]
+                description:
+                  type: string
+                quota:
+                  maxLength: 255
+                  type: string
+                phantom_time:
+                  type: string
+                rt_names:
+                  type: string
+                  description: 关联的资源标签
+                  example: 标签1,标签2
+                pattern:
+                  type: string
+                  pattern: ^$|^(kCompression|kNumeric|kNormal)$
+                expired:
+                  type: string
+                  pattern: \d+[y,m,d]
+                index_quota:
+                  type: string
+                  pattern: ^$|^(\d+)(b|k|m|g|t|p)$
+                db_type:
+                  type: string
+                  pattern: ^$|^(tsdb|default)$
+                write_hash_for_block:
+                  type: boolean
+                data_reduce:
+                  type: object
+                data_reduce_plan:
+                  type: array
+                  items:
+                    type: object
+                index_tokenizer:
+                  type: object
+                index_name_pattern:
+                  type: string
+                number_of_replicas:
+                  type: integer
+                discard_stored_field:
+                  type: string
+                reduce_inner_fields:
+                  type: boolean
+                use_zstd_compress:
+                  type: boolean
+                enable_compress_encrypt:
+                  type: boolean
+                number_of_shards:
+                  type: integer
+                node_filter_plan:
+                  type: array
+                  items:
+                    type: object
+              required:
+              - pattern
+              - rotation_period
+              - name
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/response-base'
+                - type: object
+                  properties:
+                    object:
+                      type: object
+                      properties:
+                        id:
+                          type: number
+                        name:
+                          type: string
+                        alias:
+                          type: string
+                        disabled:
+                          type: boolean
+                        expired_time:
+                          type: string
+                        rotation_period:
+                          type: string
+                        last_modified_time:
+                          type: string
+                        description:
+                          type: string
+                        domain_id:
+                          type: number
+                        quota:
+                          type: string
+                        phantom_time:
+                          type: string
+                        creator_id:
+                          type: number
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+  /api/v3/indexes/{id}/:
+    get:
+      operationId: get_indexes_detail
+      description: 获取索引详情
+      tags:
+      - indexes
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - $ref: '#/components/parameters/fields'
+      - $ref: '#/components/parameters/permit'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/response-base'
+                - $ref: '#/components/schemas/response-permit'
+                - type: object
+                  properties:
+                    object:
+                      allOf:
+                      - $ref: '#/components/schemas/IndexInfo'
+                      - type: object
+                        properties:
+                          id:
+                            readOnly: true
+                            type: integer
+                          last_modified_time:
+                            description: 更新时间
+                            readOnly: true
+                            type: number
+                            format: date-time
+                          create_time:
+                            description: 创建时间
+                            readOnly: true
+                            type: string
+                            format: date-time
+                          rt_list:
+                            type: array
+                            description: 关联的资源标签
+                            example:
+                            - id: 1
+                              name: 标签1
+                            - id: 2
+                              name: 标签2
+                            items:
+                              type: object
+                          creator_enabled:
+                            type: boolean
+                            description: 用户是否可用
+                          creator_name:
+                            type: string
+                            description: 用户名称
+                            example: admin
+                          creator_full_name:
+                            type: string
+                            description: 用户全名
+                            example: admin
+                          app_name:
+                            type: string
+                            description: 所属应用名称
+                            example: 应用名称
+                          discard_backup:
+                            type: string
+                          sink_to_hdd:
+                            type: string
+                          sink_to_nas:
+                            type: string
+                          sink_to_blob:
+                            type: string
+                          blob_name:
+                            type: string
+                          freeze:
+                            type: string
+                          pattern:
+                            type: string
+                          db_type:
+                            type: string
+                          use_zstd_compress:
+                            type: boolean
+                          reduce_inner_fields:
+                            type: boolean
+                          node_filter_plan:
+                            type: array
+                            items:
+                              type: object
+                          number_of_shards:
+                            type: string
+                          data_reduce:
+                            type: string
+                          data_reduce_plan:
+                            type: array
+                            items:
+                              type: object
+                          inject_reduce:
+                            type: object
+                          compress_option:
+                            type: string
+                          enable_compress_encrypt:
+                            type: boolean
+                          index_range_bef:
+                            type: string
+                          index_range_aft:
+                            type: string
+                          discard_out_of_range:
+                            type: boolean
+                          rotation_period_oor:
+                            type: string
+                          diff_to_timestamp:
+                            type: boolean
+                          write_hash_for_block:
+                            type: boolean
+                          discard_stored_field:
+                            type: boolean
+                          number_of_replicas:
+                            type: number
+                          index_tokenizer:
+                            type: object
+                          data_reduce_min_time:
+                            type: string
+                          expired:
+                            type: string
+                          index_quota:
+                            type: string
+                          permission_cover_flag:
+                            type: boolean
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+    put:
+      operationId: update_indexes_detail
+      description: 更新索引（请求体的更多字段，请参考get_indexes_detail接口返回体）
+      externalDocs:
+        url: /#tag/indexes/operation/get_indexes_detail
+      tags:
+      - indexes
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  pattern: ^[a-z][_a-z0-9]{0,31}$|^(_internal|_log_anomaly|_o11y_metrics|_o11y_trace|_o11y_topology|_o11y_alert|_o11y_event|_o11y_rum|_o11y_profiling_frame|_o11y_profiling_event|_o11y_profiling_stack_trace|_keywordmonitor)$
+                alias:
+                  type: string
+                disabled:
+                  type: boolean
+                rotation_period:
+                  type: string
+                  pattern: \d+[y,m,d,h]
+                description:
+                  type: string
+                quota:
+                  maxLength: 255
+                  type: string
+                phantom_time:
+                  type: string
+                rt_names:
+                  type: string
+                  description: 关联的资源标签
+                  example: 标签1,标签2
+                pattern:
+                  type: string
+                  pattern: ^$|^(kCompression|kNumeric|kNormal)$
+                expired:
+                  type: string
+                  pattern: \d+[y,m,d]
+                index_quota:
+                  type: string
+                  pattern: ^$|^(\d+)(b|k|m|g|t|p)$
+                db_type:
+                  type: string
+                  pattern: ^$|^(tsdb|default)$
+                write_hash_for_block:
+                  type: boolean
+                data_reduce:
+                  type: object
+                data_reduce_plan:
+                  type: array
+                  items:
+                    type: object
+                index_tokenizer:
+                  type: object
+                index_name_pattern:
+                  type: string
+                number_of_replicas:
+                  type: integer
+                discard_stored_field:
+                  type: string
+                reduce_inner_fields:
+                  type: boolean
+                use_zstd_compress:
+                  type: boolean
+                enable_compress_encrypt:
+                  type: boolean
+                number_of_shards:
+                  type: integer
+                node_filter_plan:
+                  type: array
+                  items:
+                    type: object
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/response-base'
+                - type: object
+                  properties:
+                    object:
+                      type: object
+                      properties:
+                        id:
+                          type: number
+                        name:
+                          type: string
+                        alias:
+                          type: string
+                        disabled:
+                          type: boolean
+                        expired_time:
+                          type: string
+                        rotation_period:
+                          type: string
+                        last_modified_time:
+                          type: string
+                        description:
+                          type: string
+                        domain_id:
+                          type: number
+                        quota:
+                          type: string
+                        phantom_time:
+                          type: string
+                        creator_id:
+                          type: number
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+    delete:
+      operationId: delete_indexes_detail
+      description: 删除索引
+      tags:
+      - indexes
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: engine
+        schema:
+          type: string
+        required: false
+      - in: query
+        name: index_name
+        schema:
+          type: string
+        required: false
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/response-base'
+                - type: object
+                  properties:
+                    object:
+                      type: object
+                      properties:
+                        id:
+                          type: number
+                        name:
+                          type: string
+                        alias:
+                          type: string
+                        disabled:
+                          type: boolean
+                        expired_time:
+                          type: string
+                        rotation_period:
+                          type: string
+                        last_modified_time:
+                          type: string
+                        description:
+                          type: string
+                        domain_id:
+                          type: number
+                        quota:
+                          type: string
+                        phantom_time:
+                          type: string
+                        creator_id:
+                          type: number
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+  /api/v3/parserrules/event/list/{rule_id}/:
+    get:
+      operationId: get_saved_event_list
+      description: 获日志列表
+      tags:
+      - parserrules
+      parameters:
+      - in: path
+        name: rule_id
+        schema:
+          type: string
+          description: 字段提取id
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  traceid:
+                    type: string
+                    description: 请求唯一标识
+                    example: d1e754e2b2354276a1fa22ce2a1a9b51
+                  result:
+                    type: boolean
+                    description: 请求是否成功
+                  list:
+                    type: array
+                    example:
+                    - id: 1
+                      raw_message: '[{a:1}, {a:2}]'
+                      source: ''
+                      appname: ''
+                      tag: ''
+                      hostname: ''
+                      ip: ''
+                      timestamp: 1692775134040
+                      inner_fields: '{"logtype": "json"}'
+                    items:
+                      type: object
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+  /api/v3/parserrules/:
+    get:
+      operationId: get_parserrules_list
+      description: 获取字段提取列表
+      tags:
+      - parserrules
+      parameters:
+      - $ref: '#/components/parameters/fields'
+      - $ref: '#/components/parameters/permits'
+      - $ref: '#/components/parameters/page'
+      - $ref: '#/components/parameters/size'
+      - in: query
+        name: id
+        schema:
+          type: integer
+        required: false
+      - in: query
+        name: uuid
+        schema:
+          type: string
+        required: false
+      - in: query
+        name: domain_id
+        schema:
+          type: integer
+        required: false
+      - in: query
+        name: creator_id
+        schema:
+          type: integer
+        required: false
+      - in: query
+        name: name
+        schema:
+          type: string
+          description: 自定义规则
+        required: false
+      - in: query
+        name: from_app
+        schema:
+          type: integer
+          description: 创建的时候关联的应用
+        required: false
+      - in: query
+        name: enable
+        schema:
+          type: boolean
+        required: false
+      - in: query
+        name: desc
+        schema:
+          type: string
+        required: false
+      - in: query
+        name: logtype
+        schema:
+          type: string
+        required: false
+      - in: query
+        name: rt_ids
+        schema:
+          type: string
+          description: 资源标签过滤，支持多标签过滤，多个标签id之间用`,`分割
+          pattern: ^(-?\d+|all)(,-?\d+)*$|^$
+        required: false
+      - in: query
+        name: sort
+        schema:
+          type: string
+          description: 排序规则
+          default:
+          - -id
+          enum:
+          - category_id
+          - creator_id
+          - domain_id
+          - enable
+          - from_app
+          - id
+          - last_modified_timename
+        required: false
+      - in: query
+        name: useAdvancedSearch
+        schema:
+          type: string
+          format: boolean
+          description: 是否启用高级搜索
+        required: false
+      - in: query
+        name: appname
+        schema:
+          type: string
+          description: appname,当useAdvancedSearch为true时该值必传
+        required: false
+      - in: query
+        name: tag
+        schema:
+          type: string
+          description: appname,当useAdvancedSearch为true时该值才有效
+        required: false
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/response-base'
+                - $ref: '#/components/schemas/response-permits'
+                - $ref: '#/components/schemas/response-meta'
+                - type: object
+                  properties:
+                    objects:
+                      type: array
+                      items:
+                        allOf:
+                        - $ref: '#/components/schemas/ParserRule'
+                        - $ref: '#/components/schemas/ParserRuleReadOnly'
+                        - type: object
+                          properties:
+                            rt_list:
+                              type: array
+                              description: 关联的资源标签
+                              example:
+                              - id: 1
+                                name: 标签1
+                              - id: 2
+                                name: 标签2
+                              items:
+                                type: object
+                            creator_enabled:
+                              type: boolean
+                              description: 用户是否可用
+                            creator_name:
+                              type: string
+                              description: 用户名称
+                              example: admin
+                            creator_full_name:
+                              type: string
+                              description: 用户全名
+                              example: admin
+                            data_source:
+                              type: string
+                              description: 数据源
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+    post:
+      operationId: create_parserrules
+      description: 创建字段提取
+      tags:
+      - parserrules
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  description: 自定义规则
+                  maxLength: 40
+                  type: string
+                  pattern: .+
+                conf:
+                  type: string
+                logtype:
+                  type: string
+                  pattern: .+
+                desc:
+                  type: string
+                category_id:
+                  type: integer
+                enable:
+                  type: boolean
+                from_app:
+                  description: 创建的时候关联的应用
+                  type: integer
+                notice_frequency:
+                  description: 未解析日志的消息通知频率
+                  maxLength: 20
+                  type: string
+                sink_conf:
+                  description: 解析规则的指标索引配置
+                  type: string
+                rt_names:
+                  type: string
+                assign_data:
+                  type: array
+                  description: 数据分配
+                  items:
+                    type: object
+                    properties:
+                      appnames:
+                        type: string
+                      tags:
+                        type: string
+              required:
+              - enable
+              - name
+              - conf
+              - category_id
+              - logtype
+              - desc
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/response-base'
+                - type: object
+                  properties:
+                    object:
+                      type: object
+                      properties:
+                        id:
+                          readOnly: true
+                          type: integer
+                        name:
+                          description: 自定义规则
+                          maxLength: 255
+                          type: string
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+  /api/v3/parserrules/set/:
+    delete:
+      operationId: delete_parserrules_set
+      tags:
+      - parserrules
+      parameters:
+      - $ref: '#/components/parameters/id_list'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/response-base'
+                - type: object
+                  properties:
+                    objects:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          id:
+                            readOnly: true
+                            type: integer
+                          name:
+                            description: 自定义规则
+                            maxLength: 255
+                            type: string
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+    put:
+      operationId: update_parserrules_set
+      tags:
+      - parserrules
+      parameters:
+      - $ref: '#/components/parameters/id_list'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              allOf:
+              - $ref: '#/components/schemas/ParserRule'
+              - type: object
+                properties:
+                  rt_names:
+                    type: string
+                    description: 关联的资源标签
+                    example: 标签1,标签2
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/response-base'
+                - type: object
+                  properties:
+                    objects:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          id:
+                            readOnly: true
+                            type: integer
+                          name:
+                            description: 自定义规则
+                            maxLength: 255
+                            type: string
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+  /api/v3/parserrules/{id}/:
+    get:
+      operationId: get_parserrules_detail
+      description: 获取字段提取详情
+      tags:
+      - parserrules
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - $ref: '#/components/parameters/fields'
+      - $ref: '#/components/parameters/permit'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/response-base'
+                - $ref: '#/components/schemas/response-permit'
+                - type: object
+                  properties:
+                    object:
+                      allOf:
+                      - $ref: '#/components/schemas/ParserRule'
+                      - $ref: '#/components/schemas/ParserRuleReadOnly'
+                      - type: object
+                        properties:
+                          rt_list:
+                            type: array
+                            description: 关联的资源标签
+                            example:
+                            - id: 1
+                              name: 标签1
+                            - id: 2
+                              name: 标签2
+                            items:
+                              type: object
+                          creator_enabled:
+                            type: boolean
+                            description: 用户是否可用
+                          creator_name:
+                            type: string
+                            description: 用户名称
+                            example: admin
+                          creator_full_name:
+                            type: string
+                            description: 用户全名
+                            example: admin
+                          assignData:
+                            type: array
+                            description: 分配数据
+                            items:
+                              type: object
+                              properties:
+                                appNames:
+                                  type: string
+                                tags:
+                                  type: string
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+    put:
+      operationId: update_parserrules_detail
+      description: 更新字段提取
+      tags:
+      - parserrules
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  description: 自定义规则
+                  maxLength: 40
+                  type: string
+                  pattern: .+
+                conf:
+                  type: string
+                logtype:
+                  type: string
+                  pattern: .+
+                desc:
+                  type: string
+                category_id:
+                  type: integer
+                enable:
+                  type: boolean
+                from_app:
+                  description: 创建的时候关联的应用
+                  type: integer
+                notice_frequency:
+                  description: 未解析日志的消息通知频率
+                  maxLength: 20
+                  type: string
+                sink_conf:
+                  description: 解析规则的指标索引配置
+                  type: string
+                rt_names:
+                  type: string
+                assign_data:
+                  type: array
+                  description: 数据分配
+                  items:
+                    type: object
+                    properties:
+                      appnames:
+                        type: string
+                      tags:
+                        type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/response-base'
+                - type: object
+                  properties:
+                    object:
+                      type: object
+                      properties:
+                        id:
+                          readOnly: true
+                          type: integer
+                        name:
+                          description: 自定义规则
+                          maxLength: 255
+                          type: string
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+    delete:
+      operationId: delete_parserrules_detail
+      tags:
+      - parserrules
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/response-base'
+                - type: object
+                  properties:
+                    object:
+                      type: object
+                      properties:
+                        id:
+                          readOnly: true
+                          type: integer
+                        name:
+                          description: 自定义规则
+                          maxLength: 255
+                          type: string
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+  /api/v3/search/sheets/:
+    get:
+      operationId: search_sheets
+      description: 获取 sheets 搜索结果，同步搜索
+      tags:
+      - search
+      parameters:
+      - in: query
+        name: now
+        schema:
+          type: string
+          description: 当前时间戳, 默认为机器的系统时间
+        required: false
+      - in: query
+        name: time_range
+        schema:
+          type: string
+          description: 时间范围, 格式为"开始时间,结束时间", 支持毫秒、now、earliest、yyyy-MM-hh:HH:mm:ss、yyyy-MM-hh:HH:mm:ss:SSS格式
+        required: true
+      - in: query
+        name: onlySortByTimestamp
+        schema:
+          type: string
+          format: boolean
+          description: 是否只按时间戳排序, 当 enable_accelerate 为 true 时, 该参数无效
+          default: 'true'
+        required: false
+      - in: query
+        name: page
+        schema:
+          type: string
+          format: number
+          description: 页码
+          default: '0'
+        required: false
+      - in: query
+        name: size
+        schema:
+          type: string
+          format: number
+          description: 每页条数
+          default: '20'
+        required: false
+      - in: query
+        name: savedsearch_name
+        schema:
+          type: string
+          description: 已存搜索名称，如果传入该参数，将会忽略 query 参数
+        required: false
+      - in: query
+        name: queryfilters
+        schema:
+          type: string
+          description: 查询过滤条件
+        required: false
+      - in: query
+        name: executor_id
+        schema:
+          type: string
+          description: 执行者id, 默认为当前用户id
+        required: false
+      - in: query
+        name: filter_field
+        schema:
+          type: string
+        required: false
+      - in: query
+        name: query
+        schema:
+          type: string
+          description: 查询语句
+        required: false
+      - in: query
+        name: use_spark
+        schema:
+          type: string
+          format: boolean
+          description: 是否使用高基模式
+          default: 'false'
+        required: false
+      - in: query
+        name: order
+        schema:
+          type: string
+          description: 排序方式
+          default: desc
+        required: false
+      - in: query
+        name: category
+        schema:
+          type: string
+          description: 查询类别
+          default: other
+        required: false
+      - in: query
+        name: task_name
+        schema:
+          type: string
+          description: 任务名称, 用于区分不同类型的任务
+          default: search_task
+        required: false
+      - in: query
+        name: background
+        schema:
+          type: string
+          format: boolean
+          description: 是否后台执行
+          default: 'false'
+        required: false
+      - in: query
+        name: lang
+        schema:
+          type: string
+          description: 语言
+          default: zh_CN
+        required: false
+      - in: query
+        name: timeline
+        schema:
+          type: string
+          format: boolean
+          description: 是否返回时间轴
+          default: 'true'
+        required: false
+      - in: query
+        name: statsevents
+        schema:
+          type: string
+          format: boolean
+          description: stats搜索时, 搜索结果是否需要保留记录
+          default: 'false'
+        required: false
+      - in: query
+        name: fields
+        schema:
+          type: string
+          format: boolean
+          description: 是否返回字段信息
+          default: 'true'
+        required: false
+      - in: query
+        name: highlight
+        schema:
+          type: string
+          format: boolean
+          description: 是否需要高亮
+          default: 'true'
+        required: false
+      - in: query
+        name: datasets
+        schema:
+          type: string
+          description: 数据集
+          default: '[]'
+        required: false
+      - in: query
+        name: market_day
+        schema:
+          type: string
+          format: number
+          description: '交易日id, -1: 系统默认交易日, 0: 非交易日, 其他: 交易日id'
+        required: false
+      - in: query
+        name: onlyTransactionDate
+        schema:
+          type: string
+          format: boolean
+          description: 是否只查询交易日, 默认为false, 有 market_day 时优先使用 market_day
+          default: 'false'
+        required: false
+      - in: query
+        name: terminated_after_size
+        schema:
+          type: string
+          description: 分片取样数量, 每个shard获取条数, 负数表示不启动
+        required: false
+      - in: query
+        name: test_mode
+        schema:
+          type: string
+          format: boolean
+          default: 'false'
+        required: false
+      - in: query
+        name: timezone
+        schema:
+          type: string
+          description: 时区
+          default: Asia/Shanghai
+        required: false
+      - in: query
+        name: app_id
+        schema:
+          type: string
+          description: 应用id
+        required: false
+      - in: query
+        name: app_name
+        schema:
+          type: string
+          description: 应用名称, 有 app_id 时优先使用 app_id
+        required: false
+      - in: query
+        name: enable_accelerate
+        schema:
+          type: string
+          format: boolean
+          description: 是否启用加速
+          default: 'false'
+        required: false
+      - in: query
+        name: accelerate_id
+        schema:
+          type: string
+          format: number
+          description: 加速id
+        required: false
+      - in: query
+        name: session_id
+        schema:
+          type: string
+          description: 会话id
+        required: false
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  traceid:
+                    type: string
+                    description: 请求唯一标识
+                    example: d1e754e2b2354276a1fa22ce2a1a9b51
+                  result:
+                    type: boolean
+                    description: 请求是否成功
+                  rc:
+                    type: number
+                    description: SPL是否成功返回
+                  results:
+                    type: object
+                    description: 结果
+                    example:
+                      starttime: 1566816000000
+                      endtime: 1702346983770
+                      fields:
+                      - name: AutoTestAppIsApache
+                        dc: '1'
+                        topk:
+                        - count: 2
+                          value: true
+                        total: 2
+                        type: boolean
+                      sheets: {}
+                      timeline: {}
+                      loseDataCommands: []
+                      hit_message: ''
+                      total_hits: 2
+                      type: query
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+  /api/v3/trends/:
+    get:
+      operationId: get_trends_list
+      description: 获取趋势图列表
+      tags:
+      - trends
+      parameters:
+      - $ref: '#/components/parameters/fields'
+      - $ref: '#/components/parameters/permits'
+      - $ref: '#/components/parameters/page'
+      - $ref: '#/components/parameters/size'
+      - in: query
+        name: id
+        schema:
+          type: integer
+        required: false
+      - in: query
+        name: name
+        schema:
+          type: string
+        required: false
+      - in: query
+        name: query
+        schema:
+          type: string
+        required: false
+      - in: query
+        name: domain_id
+        schema:
+          type: integer
+        required: false
+      - in: query
+        name: creator_id
+        schema:
+          type: integer
+        required: false
+      - in: query
+        name: app_id
+        schema:
+          type: integer
+          description: 所属应用
+        required: false
+      - in: query
+        name: export
+        schema:
+          type: string
+          description: 资源范围 local-本APP内可见,system-全局可见
+          enum:
+          - local
+          - system
+        required: false
+      - in: query
+        name: uuid
+        schema:
+          type: string
+        required: false
+      - in: query
+        name: data_user
+        schema:
+          type: string
+          description: 数据用户 viewer-浏览者,creator-创建者
+          enum:
+          - creator
+          - viewer
+        required: false
+      - in: query
+        name: rt_ids
+        schema:
+          type: string
+          description: 资源标签过滤，支持多标签过滤，多个标签id之间用`,`分割
+          pattern: ^(-?\d+|all)(,-?\d+)*$|^$
+        required: false
+      - in: query
+        name: sort
+        schema:
+          type: string
+          description: 排序规则
+          default:
+          - -id
+          enum:
+          - app_id
+          - creator_id
+          - domain_id
+          - export
+          - id
+          - name
+          - update_time
+        required: false
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/response-base'
+                - $ref: '#/components/schemas/response-permits'
+                - $ref: '#/components/schemas/response-meta'
+                - type: object
+                  properties:
+                    objects:
+                      type: array
+                      items:
+                        allOf:
+                        - $ref: '#/components/schemas/Trend'
+                        - type: object
+                          properties:
+                            id:
+                              readOnly: true
+                              type: integer
+                            uuid:
+                              readOnly: true
+                              type: string
+                            domain_id:
+                              readOnly: true
+                              type: integer
+                            creator_id:
+                              readOnly: true
+                              type: integer
+                            create_time:
+                              description: 创建时间
+                              readOnly: true
+                              type: string
+                              format: date-time
+                            update_time:
+                              description: 更新时间
+                              readOnly: true
+                              type: number
+                              format: date-time
+                            rt_list:
+                              type: array
+                              description: 关联的资源标签
+                              example:
+                              - id: 1
+                                name: 标签1
+                              - id: 2
+                                name: 标签2
+                              items:
+                                type: object
+                            creator_enabled:
+                              type: boolean
+                              description: 用户是否可用
+                            creator_name:
+                              type: string
+                              description: 用户名称
+                              example: admin
+                            creator_full_name:
+                              type: string
+                              description: 用户全名
+                              example: admin
+                            app_name:
+                              type: string
+                              description: 所属应用名称
+                              example: 应用名称
+                            is_accelerate:
+                              type: boolean
+                              description: 是否正在加速
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+    post:
+      operationId: create_trends
+      description: 创建趋势图
+      tags:
+      - trends
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  maxLength: 255
+                  type: string
+                  pattern: ^[\w\d\u4e00-\u9fa5\-_()（）]+$
+                trend_id:
+                  maxLength: 255
+                  type: string
+                category:
+                  type: integer
+                content:
+                  type: string
+                data_user:
+                  description: 数据用户 viewer-浏览者,creator-创建者
+                  enum:
+                  - viewer
+                  - creator
+                  maxLength: 255
+                  type: string
+                query:
+                  type: string
+                datasets:
+                  maxLength: 255
+                  type: string
+                trend_app:
+                  type: integer
+                only_sort_by_timestamp:
+                  type: boolean
+                timerange:
+                  maxLength: 255
+                  type: string
+                app_id:
+                  description: 所属应用
+                  type: integer
+                export:
+                  description: 资源范围 local-本APP内可见,system-全局可见
+                  enum:
+                  - local
+                  - system
+                  maxLength: 255
+                  type: string
+                rt_names:
+                  type: string
+                  description: 关联的资源标签
+                  example: 标签1,标签2
+              required:
+              - name
+              - content
+              - app_id
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/response-base'
+                - type: object
+                  properties:
+                    object:
+                      type: object
+                      properties:
+                        id:
+                          readOnly: true
+                          type: integer
+                        name:
+                          maxLength: 255
+                          type: string
+                        app_id:
+                          description: 所属应用
+                          type: integer
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+  /api/v3/trends/set/:
+    get:
+      operationId: get_trends_set
+      tags:
+      - trends
+      parameters:
+      - $ref: '#/components/parameters/permits'
+      - $ref: '#/components/parameters/id_list'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/response-base'
+                - $ref: '#/components/schemas/response-permits'
+                - type: object
+                  properties:
+                    objects:
+                      type: array
+                      items:
+                        allOf:
+                        - $ref: '#/components/schemas/Trend'
+                        - $ref: '#/components/schemas/TrendReadOnly'
+                        - type: object
+                          properties:
+                            rt_list:
+                              type: array
+                              description: 关联的资源标签
+                              example:
+                              - id: 1
+                                name: 标签1
+                              - id: 2
+                                name: 标签2
+                              items:
+                                type: object
+                            creator_enabled:
+                              type: boolean
+                              description: 用户是否可用
+                            creator_name:
+                              type: string
+                              description: 用户名称
+                              example: admin
+                            creator_full_name:
+                              type: string
+                              description: 用户全名
+                              example: admin
+                            app_name:
+                              type: string
+                              description: 所属应用名称
+                              example: 应用名称
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+    delete:
+      operationId: delete_trends_set
+      tags:
+      - trends
+      parameters:
+      - $ref: '#/components/parameters/id_list'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/response-base'
+                - type: object
+                  properties:
+                    objects:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          id:
+                            readOnly: true
+                            type: integer
+                          name:
+                            maxLength: 255
+                            type: string
+                          app_id:
+                            description: 所属应用
+                            type: integer
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+  /api/v3/trends/{id}/:
+    get:
+      operationId: get_trends_detail
+      description: 获取趋势图详情
+      tags:
+      - trends
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - $ref: '#/components/parameters/fields'
+      - $ref: '#/components/parameters/permit'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/response-base'
+                - $ref: '#/components/schemas/response-permit'
+                - type: object
+                  properties:
+                    object:
+                      allOf:
+                      - $ref: '#/components/schemas/Trend'
+                      - type: object
+                        properties:
+                          id:
+                            readOnly: true
+                            type: integer
+                          uuid:
+                            readOnly: true
+                            type: string
+                          domain_id:
+                            readOnly: true
+                            type: integer
+                          creator_id:
+                            readOnly: true
+                            type: integer
+                          create_time:
+                            description: 创建时间
+                            readOnly: true
+                            type: string
+                            format: date-time
+                          update_time:
+                            description: 更新时间
+                            readOnly: true
+                            type: number
+                            format: date-time
+                          rt_list:
+                            type: array
+                            description: 关联的资源标签
+                            example:
+                            - id: 1
+                              name: 标签1
+                            - id: 2
+                              name: 标签2
+                            items:
+                              type: object
+                          creator_enabled:
+                            type: boolean
+                            description: 用户是否可用
+                          creator_name:
+                            type: string
+                            description: 用户名称
+                            example: admin
+                          creator_full_name:
+                            type: string
+                            description: 用户全名
+                            example: admin
+                          app_name:
+                            type: string
+                            description: 所属应用名称
+                            example: 应用名称
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+    put:
+      operationId: update_trends_detail
+      description: 更新趋势图
+      tags:
+      - trends
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  maxLength: 255
+                  type: string
+                  pattern: ^[\w\d\u4e00-\u9fa5\-_()（）]+$
+                trend_id:
+                  maxLength: 255
+                  type: string
+                category:
+                  type: integer
+                content:
+                  type: string
+                data_user:
+                  description: 数据用户 viewer-浏览者,creator-创建者
+                  enum:
+                  - viewer
+                  - creator
+                  maxLength: 255
+                  type: string
+                query:
+                  type: string
+                datasets:
+                  maxLength: 255
+                  type: string
+                trend_app:
+                  type: integer
+                only_sort_by_timestamp:
+                  type: boolean
+                timerange:
+                  maxLength: 255
+                  type: string
+                app_id:
+                  description: 所属应用
+                  type: integer
+                export:
+                  description: 资源范围 local-本APP内可见,system-全局可见
+                  enum:
+                  - local
+                  - system
+                  maxLength: 255
+                  type: string
+                rt_names:
+                  type: string
+                  description: 关联的资源标签
+                  example: 标签1,标签2
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/response-base'
+                - type: object
+                  properties:
+                    object:
+                      type: object
+                      properties:
+                        id:
+                          readOnly: true
+                          type: integer
+                        name:
+                          maxLength: 255
+                          type: string
+                        app_id:
+                          description: 所属应用
+                          type: integer
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+    delete:
+      operationId: delete_trends_detail
+      tags:
+      - trends
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/response-base'
+                - type: object
+                  properties:
+                    object:
+                      type: object
+                      properties:
+                        id:
+                          readOnly: true
+                          type: integer
+                        name:
+                          maxLength: 255
+                          type: string
+                        app_id:
+                          description: 所属应用
+                          type: integer
+          description: 请求成功
+      security:
+      - BasicAuth: []
+      - BearerAuth: []
+      - ApiKeyAuth: []
+components:
+  parameters:
+    custom_collection:
+      in: query
+      name: custom_collection
+      description: 是否仅返回收藏的资源
+      schema:
+        type: boolean
+        default: false
+    fields:
+      in: query
+      name: fields
+      description: 指定返回的字段
+      schema:
+        type: string
+        example: id,name
+    id_list:
+      in: query
+      name: id_list
+      description: 资源id，以`,`分割
+      schema:
+        type: string
+        example: 1,2,3
+    page:
+      in: query
+      name: page
+      description: 所在页数
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+    permit:
+      in: query
+      name: permit
+      description: 是否获取资源相关权限集合
+      schema:
+        type: boolean
+        default: true
+    permits:
+      in: query
+      name: permits
+      description: 是否获取资源相关权限集合
+      schema:
+        type: boolean
+        default: true
+    size:
+      in: query
+      name: size
+      description: 每页条数
+      schema:
+        type: integer
+        minimum: 1
+        default: 10
+  schemas:
+    AgentGroup:
+      type: object
+      properties:
+        domain_id:
+          type: integer
+        name:
+          description: 名称
+          maxLength: 255
+          type: string
+        memo:
+          description: 描述
+          maxLength: 255
+          type: string
+        creator_id:
+          type: integer
+        extra:
+          description: 采集配置
+          type: string
+        from_app:
+          description: 创建的时候关联的应用
+          type: integer
+    AgentGroupReadOnly:
+      type: object
+      properties:
+        id:
+          readOnly: true
+          type: integer
+        create_time:
+          description: 创建时间
+          readOnly: true
+          type: string
+          format: date-time
+        update_time:
+          description: 更新时间
+          readOnly: true
+          type: string
+          format: date-time
+    AgentStatus:
+      type: object
+      properties:
+        ip:
+          description: Agent地址
+          maxLength: 64
+          type: string
+        port:
+          description: 端口
+          type: integer
+        status:
+          description: 启动状态
+          maxLength: 64
+          type: string
+        os:
+          description: 操作系统
+          maxLength: 32
+          type: string
+        platform:
+          description: 平台
+          maxLength: 64
+          type: string
+        cur_version:
+          description: 版本
+          maxLength: 64
+          type: string
+        expected_version:
+          description: 预期版本
+          maxLength: 64
+          type: string
+        is_server_heka:
+          description: 类型 false-Agent,true-Server
+          enum:
+          - 'false'
+          - 'true'
+          type: boolean
+        proxy_ip:
+          description: 代理地址
+          maxLength: 64
+          type: string
+        proxy_port:
+          description: 代理端口
+          type: integer
+        domain_id:
+          type: integer
+        hostname:
+          description: 主机名
+          maxLength: 256
+          type: string
+        comment:
+          description: 备注
+          maxLength: 256
+          type: string
+        cmd:
+          maxLength: 64
+          type: string
+        cmd_timestamp:
+          type: string
+          format: date-time
+    AgentStatusReadOnly:
+      type: object
+      properties:
+        id:
+          readOnly: true
+          type: integer
+        create_timestamp:
+          description: agent 接入时间
+          readOnly: true
+          type: string
+          format: date-time
+        last_update_timestamp:
+          description: 更新时间
+          readOnly: true
+          type: string
+          format: date-time
+    Alert:
+      type: object
+      properties:
+        uuid:
+          maxLength: 32
+          type: string
+        name:
+          description: 告警名字
+          maxLength: 255
+          type: string
+        domain_id:
+          type: integer
+        executor_id:
+          type: integer
+        creator_id:
+          type: integer
+        description:
+          description: 描述
+          type: string
+        check_interval:
+          description: 定时执行时间间隔
+          type: integer
+        interval_unit:
+          description: 标记check_interval的单位，0表示分钟，1表示秒
+          type: integer
+        check_condition:
+          description: 触发条件
+          type: string
+        enabled:
+          description: 状态,0关闭,1开启
+          type: boolean
+        category:
+          description: 报警类型
+          type: integer
+        crontab:
+          maxLength: 255
+          type: string
+        restrain_interval:
+          description: 告警抑制
+          type: integer
+        now_restrain_interval:
+          type: integer
+        max_restrain_interval:
+          description: 告警抑制的最大时间
+          type: integer
+        continuous_trigger_value:
+          type: integer
+        group_suppress_field:
+          maxLength: 255
+          type: string
+        alert_when_recover:
+          description: 告警恢复时是否提示
+          type: integer
+        generate:
+          type: boolean
+        graph_enabled:
+          type: boolean
+        query:
+          type: string
+        extend_query:
+          type: string
+        run_results:
+          type: string
+        dataset_ids:
+          type: string
+        extend_dataset_ids:
+          type: string
+        extend_conf:
+          type: string
+        use_spark:
+          type: boolean
+        extend_use_spark:
+          type: boolean
+        segmentation_field:
+          maxLength: 255
+          type: string
+        segmentation_result:
+          description: 字段切分运行结果
+          type: string
+        statistics_field:
+          maxLength: 255
+          type: string
+        market_day:
+          description: 交易日id, -1表示默认交易日
+          type: integer
+        alert_line_send:
+          type: boolean
+        schedule_priority:
+          description: 调度优先级 0-默认,1-更高,2-最高
+          enum:
+          - 0
+          - 1
+          - 2
+          type: integer
+        schedule_window:
+          description: 调度窗口，单位 m/h/d
+          maxLength: 15
+          type: string
+        window:
+          description: 主时间窗口
+          maxLength: 32
+          type: string
+        topic:
+          description: topic名称
+          maxLength: 32
+          type: string
+        check_condition_group:
+          type: string
+        group_trigger_flag:
+          type: boolean
+        hosted_flag:
+          type: boolean
+        composite_info:
+          description: 联合监控配置
+          type: string
+        app_id:
+          description: 所属应用
+          type: integer
+        export:
+          description: 资源范围 local-本APP内可见,system-全局可见
+          enum:
+          - local
+          - system
+          maxLength: 255
+          type: string
+        timezone:
+          description: 执行时区
+          maxLength: 255
+          type: string
+        alert_condition:
+          type: string
+        recover_condition:
+          type: string
+        alert_state:
+          maxLength: 30
+          type: string
+        alert_segmentation_result:
+          type: string
+    AlertReadOnly:
+      type: object
+      properties:
+        id:
+          readOnly: true
+          type: integer
+        update_timestamp:
+          description: alert修改时间
+          readOnly: true
+          type: integer
+        last_trigger_timestamp:
+          description: 上次触发告警时间
+          readOnly: true
+          type: integer
+        last_run_timestamp:
+          readOnly: true
+          type: integer
+        create_time:
+          description: 创建时间
+          readOnly: true
+          type: string
+          format: date-time
+    IndexInfo:
+      type: object
+      properties:
+        name:
+          type: string
+        alias:
+          type: string
+        disabled:
+          type: boolean
+        expired_time:
+          type: string
+        rotation_period:
+          type: string
+        description:
+          type: string
+        domain_id:
+          type: integer
+        quota:
+          maxLength: 255
+          type: string
+        phantom_time:
+          maxLength: 255
+          type: string
+        creator_id:
+          type: integer
+    IndexInfoReadOnly:
+      type: object
+      properties:
+        id:
+          readOnly: true
+          type: integer
+        last_modified_time:
+          description: 更新时间
+          readOnly: true
+          type: string
+          format: date-time
+        create_time:
+          description: 创建时间
+          readOnly: true
+          type: string
+          format: date-time
+    ParserRule:
+      type: object
+      properties:
+        name:
+          description: 自定义规则
+          maxLength: 255
+          type: string
+        conf:
+          type: string
+        logtype:
+          type: string
+        desc:
+          type: string
+        category_id:
+          type: integer
+        enable:
+          type: boolean
+        from_app:
+          description: 创建的时候关联的应用
+          type: integer
+        notice_frequency:
+          description: 未解析日志的消息通知频率
+          maxLength: 20
+          type: string
+        sink_conf:
+          description: 解析规则的指标索引配置
+          type: string
+    ParserRuleReadOnly:
+      type: object
+      properties:
+        id:
+          readOnly: true
+          type: integer
+        uuid:
+          readOnly: true
+          type: string
+        domain_id:
+          readOnly: true
+          type: integer
+        creator_id:
+          readOnly: true
+          type: integer
+        last_modified_time:
+          description: 更新时间
+          readOnly: true
+          type: string
+          format: date-time
+        create_time:
+          description: 创建时间
+          readOnly: true
+          type: string
+          format: date-time
+    SavedSearch:
+      type: object
+      properties:
+        name:
+          maxLength: 255
+          type: string
+        query:
+          description: 查询语句
+          type: string
+        time_range:
+          description: 搜索时间范围
+          maxLength: 255
+          type: string
+        market_day:
+          description: 是否只搜索交易日数据
+          maxLength: 255
+          type: string
+        highlight:
+          description: 资源是否高亮，true或false
+          maxLength: 255
+          type: string
+        only_sort_by_timestamp:
+          maxLength: 255
+          type: string
+        source_groups:
+          maxLength: 255
+          type: string
+        filters:
+          type: string
+        dataset_ids:
+          description: 资源数据集列表，例如:[{"dataset_id":28},{"dataset_id":2,"node_id":5}]
+          type: string
+        parameters:
+          description: 资源参数
+          type: string
+        event_list_properties:
+          description: 已存搜索的展示模式配置
+          type: string
+        anonymous:
+          description: 是否匿名
+          type: boolean
+        marked:
+          description: 是否标记重要
+          type: boolean
+        old_es_id:
+          description: 旧的ES_ID，要被废弃掉，但是导入的时候还需要
+          maxLength: 255
+          type: string
+        source_group_ids:
+          maxLength: 255
+          type: string
+        use_spark:
+          type: boolean
+        search_mode:
+          description: 搜索模式
+          maxLength: 255
+          type: string
+        data_user:
+          description: 已存搜索数据用户
+          maxLength: 255
+          type: string
+        is_published:
+          description: 已存搜索是否发布
+          type: boolean
+        app_id:
+          description: 所属应用
+          type: integer
+        export:
+          description: 资源范围 local-本APP内可见,system-全局可见
+          enum:
+          - local
+          - system
+          maxLength: 255
+          type: string
+    SavedSearchReadOnly:
+      type: object
+      properties:
+        id:
+          readOnly: true
+          type: integer
+        uuid:
+          readOnly: true
+          type: string
+        domain_id:
+          readOnly: true
+          type: integer
+        creator_id:
+          readOnly: true
+          type: integer
+        create_time:
+          description: 创建时间
+          readOnly: true
+          type: string
+          format: date-time
+        update_time:
+          description: 更新时间
+          readOnly: true
+          type: string
+          format: date-time
+    Trend:
+      type: object
+      properties:
+        name:
+          maxLength: 255
+          type: string
+        trend_id:
+          maxLength: 255
+          type: string
+        category:
+          type: integer
+        content:
+          type: string
+        data_user:
+          description: 数据用户 viewer-浏览者,creator-创建者
+          enum:
+          - viewer
+          - creator
+          maxLength: 255
+          type: string
+        query:
+          type: string
+        datasets:
+          maxLength: 255
+          type: string
+        trend_app:
+          type: integer
+        only_sort_by_timestamp:
+          type: boolean
+        timerange:
+          maxLength: 255
+          type: string
+        app_id:
+          description: 所属应用
+          type: integer
+        export:
+          description: 资源范围 local-本APP内可见,system-全局可见
+          enum:
+          - local
+          - system
+          maxLength: 255
+          type: string
+    TrendReadOnly:
+      type: object
+      properties:
+        id:
+          readOnly: true
+          type: integer
+        uuid:
+          readOnly: true
+          type: string
+        domain_id:
+          readOnly: true
+          type: integer
+        creator_id:
+          readOnly: true
+          type: integer
+        create_time:
+          description: 创建时间
+          readOnly: true
+          type: string
+          format: date-time
+        update_time:
+          description: 更新时间
+          readOnly: true
+          type: string
+          format: date-time
+    response-base:
+      type: object
+      properties:
+        result:
+          type: boolean
+          description: 请求是否成功
+          example: true
+        traceid:
+          type: string
+          description: 请求唯一标识
+          example: d1e754e2b2354276a1fa22ce2a1a9b51
+    response-meta:
+      type: object
+      properties:
+        meta:
+          type: object
+          description: 资源集合元数据
+          properties:
+            total:
+              type: integer
+              description: 资源总数
+              example: 10
+            size:
+              type: integer
+              description: 每页资源数
+              example: 10
+            page:
+              type: integer
+              description: 当前请求页码
+              example: 0
+            count:
+              type: integer
+              description: 当前页返回资源数
+              example: 5
+            category:
+              type: string
+              description: 资源分类
+              example: Macro
+    response-permit:
+      type: object
+      properties:
+        permit:
+          type: object
+          properties:
+            id:
+              type: integer
+              description: 资源id
+              example: 1
+            read:
+              type: boolean
+              description: 是否具有读取权限
+              example: true
+            update:
+              type: boolean
+              description: 是否具有更新权限
+              example: true
+            delete:
+              type: boolean
+              description: 是否具有删除权限
+              example: true
+    response-permits:
+      type: object
+      properties:
+        permits:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+                description: 资源id
+                example: 1
+              read:
+                type: boolean
+                description: 是否具有读取权限
+                example: true
+              update:
+                type: boolean
+                description: 是否具有更新权限
+                example: true
+              delete:
+                type: boolean
+                description: 是否具有删除权限
+                example: true
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: query
+      name: apikey
+    BasicAuth:
+      type: http
+      scheme: basic
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
