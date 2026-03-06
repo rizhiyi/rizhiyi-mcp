@@ -16,9 +16,9 @@ export class LogEaseClient {
     /**
      * 执行GET请求
      */
-    async get<T>(path: string, params?: Record<string, any>): Promise<ApiResponse<T>> {
+    async get<T>(path: string, params?: Record<string, any>, options?: any): Promise<ApiResponse<T>> {
         try {
-            const response: AxiosResponse<T> = await this.client.get(path, { params });
+            const response: AxiosResponse<T> = await this.client.get(path, { params, ...options });
             return {
                 status: response.status,
                 data: response.data,
@@ -105,12 +105,13 @@ export class LogEaseClient {
         checkComplete: (response: ApiResponse<T>) => boolean,
         maxRetries: number = 10,
         retryInterval: number = 5000,
-        params?: Record<string, any>
+        params?: Record<string, any>,
+        options?: any
     ): Promise<ApiResponse<T>> {
         let retries = 0;
         
         while (retries < maxRetries) {
-            const result = await this.get<T>(path, params);
+            const result = await this.get<T>(path, params, options);
             
             if (checkComplete(result)) {
                 return result;

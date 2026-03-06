@@ -9,7 +9,61 @@ import {
 } from '../types.js';
 
 export class LogSearchModule {
-    constructor(private client: LogEaseClient) {}
+    private baseURL: string;
+
+    constructor(private client: LogEaseClient, baseURL: string = '') {
+        // 移除末尾的斜杠，确保格式统一
+        this.baseURL = baseURL.endsWith('/') ? baseURL.slice(0, -1) : baseURL;
+    }
+
+    /**
+     * 生成精准溯源链接
+     */
+    private generateQuickLinks(row: any, originalQuery: string, timeRange: string, indexName: string): Record<string, string> {
+        const links: Record<string, string> = {};
+        if (!this.baseURL) return links;
+
+        // 关键唯一标识字段 - 直接查询该ID
+        const uniqueIdFields = ['context_id', 'trace_id', 'request_id', 'spanid', '_id', 'traceid'];
+        
+        // 特征字段 - 追加到原查询条件
+        const featureFields = ['appname', 'hostname', 'host', 'client_ip', 'ip', 'level', 'severity', 'status', 'uri', 'url'];
+
+        // 基础参数
+        const baseParams = new URLSearchParams();
+        baseParams.append('time_range', timeRange);
+        if (indexName) baseParams.append('index_name', indexName); // 注意：Web端参数可能不叫index_name，通常是datasets或隐含
+        // Web UI 通常使用 datasets=["index_name"]，这里简化处理，或者忽略 index_name 如果它是默认的 yotta
+        // 根据用户提供的样例: datasets=[] (空数组), app_id=45. 
+        // 既然无法准确知道 Web 端对应的 datasets 格式，且通常 search 页面默认会选当前 index，我们暂时只传 query 和 time_range
+        // 补充：用户提供的 URL 包含 searchMode=intelligent
+        baseParams.append('searchMode', 'intelligent');
+
+        // 遍历行数据中的字段
+        for (const [key, value] of Object.entries(row)) {
+            if (value === undefined || value === null || value === '') continue;
+            const strValue = String(value);
+
+            // 1. 处理唯一标识符
+            if (uniqueIdFields.includes(key.toLowerCase())) {
+                const query = `${key}:${strValue}`;
+                const params = new URLSearchParams(baseParams);
+                params.append('query', query);
+                links[key] = `${this.baseURL}/search/?${params.toString()}`;
+            }
+            // 2. 处理特征字段
+            else if (featureFields.includes(key.toLowerCase())) {
+                // 如果原查询是 *，则直接查字段；否则追加 AND
+                const cleanQuery = originalQuery === '*' ? '' : `(${originalQuery}) AND `;
+                const query = `${cleanQuery}${key}:${strValue}`;
+                const params = new URLSearchParams(baseParams);
+                params.append('query', query);
+                links[key] = `${this.baseURL}/search/?${params.toString()}`;
+            }
+        }
+
+        return links;
+    }
 
     /**
      * 提取数据行 - 从搜索结果中提取行数据
@@ -99,6 +153,12 @@ export class LogSearchModule {
                 total = data.total || hits.length;
             }
 
+            // 为每行数据注入 _links
+            hits = hits.map(row => {
+                const links = this.generateQuickLinks(row, query, timeRange, indexName);
+                return { ...row, _links: links };
+            });
+
             return {
                 status: result.status,
                 data: {
@@ -184,6 +244,23 @@ export class LogSearchModule {
                 retryInterval,
                 {
                     sid: sid
+                },
+                {
+                    timeout: 30000, // 增加超时时间到 30 秒
+                    transformResponse: [(data: any) => {
+                        // 处理 API 返回重复 result 键的问题
+                        if (typeof data === 'string') {
+                            // 将 "result": true/false 替换为 "success": true/false
+                            // 避免覆盖包含数据的 "result": { ... } 对象
+                            const fixedData = data.replace(/"result"\s*:\s*(true|false)/g, '"success":$1');
+                            try {
+                                return JSON.parse(fixedData);
+                            } catch (e) {
+                                return data;
+                            }
+                        }
+                        return data;
+                    }]
                 }
             );
             
@@ -193,9 +270,17 @@ export class LogSearchModule {
 
             const data = result.data;
             
+            // 确定结果数据位置：可能在 result.body 或 tree_layer.clusters
+            let patterns = [];
+            if (data?.result?.body) {
+                patterns = data.result.body;
+            } else if (data?.tree_layer?.clusters) {
+                patterns = data.tree_layer.clusters;
+            }
+
             // 移除 _cus_raw 字段以节省上下文空间
-            if (data?.result?.body && Array.isArray(data.result.body)) {
-                data.result.body.forEach((item: any) => {
+            if (patterns && Array.isArray(patterns)) {
+                patterns.forEach((item: any) => {
                     if (item._cus_raw) {
                         delete item._cus_raw;
                     }
@@ -207,7 +292,7 @@ export class LogSearchModule {
                 data: {
                     sid: data?.sid,
                     job_status: data?.job_status,
-                    result: data.result.body
+                    result: patterns
                 }
             };
         } catch (error: any) {

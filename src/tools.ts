@@ -4,7 +4,7 @@ import { ToolDefinition } from './types.js';
 export const basicLogTools: ToolDefinition[] = [
     {
         name: 'log_search_sheet',
-        description: '基础数据概览：返回总命中数、窗口时长、每秒事件数等，支持指定字段统计和百分位数计算',
+        description: '基础数据概览：返回总命中数、窗口时长、每秒事件数等。支持指定字段统计和百分位数计算。**注意：返回结果会自动包含 `_links` 字段，其中提供了用于在浏览器中打开的、针对关键字段（如 trace_id, context_id, appname 等）的精准跳转 URL。这些链接仅供用户点击查看，不可用于 API 调用。**',
         inputSchema: {
             type: 'object',
             properties: {

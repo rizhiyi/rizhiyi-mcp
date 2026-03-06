@@ -13,7 +13,7 @@ import { TrendForecastModule } from './modules/trend-forecast.js';
 import { AnomalyDetectionModule } from './modules/anomaly-detection.js';
 
 // 加载环境变量
-dotenv.config();
+dotenv.config({path: ['.env.local', '.env']});
 
 // 配置HTTP客户端（从环境变量读取）
 const baseURL = process.env.LOGEASE_BASE_URL ?? 'http://127.0.0.1:8090';
@@ -42,7 +42,7 @@ const httpClientConfig: HttpClientConfig = {
 
 // 创建模块实例
 const client = new LogEaseClient(httpClientConfig);
-const logSearchModule = new LogSearchModule(client);
+const logSearchModule = new LogSearchModule(client, baseURL);
 const statisticsModule = new StatisticsModule(client);
 const trendForecastModule = new TrendForecastModule(client);
 const anomalyDetectionModule = new AnomalyDetectionModule(client);
