@@ -121,7 +121,8 @@ export class LogSearchModule {
         query: string, 
         timeRange: string, 
         indexName: string = "yotta", 
-        limit: number = 100
+        limit: number = 100,
+        fields?: string[]
     ): Promise<ApiResponse<LogSearchResponse>> {
         try {
             const apiPath = '/api/v3/search/sheets/';
@@ -158,6 +159,24 @@ export class LogSearchModule {
                 const links = this.generateQuickLinks(row, query, timeRange, indexName);
                 return { ...row, _links: links };
             });
+
+            // 可选字段投影：减少返回体积，避免上下文爆炸
+            if (Array.isArray(fields) && fields.length > 0) {
+                const requested = new Set(fields);
+                hits = hits.map((row: Record<string, unknown>) => {
+                    const projected: Record<string, unknown> = {};
+                    for (const key of fields) {
+                        if (Object.prototype.hasOwnProperty.call(row, key)) {
+                            projected[key] = row[key];
+                        }
+                    }
+                    // 仅在显式请求时返回 _links
+                    if (requested.has('_links') && Object.prototype.hasOwnProperty.call(row, '_links')) {
+                        projected._links = row._links;
+                    }
+                    return projected;
+                });
+            }
 
             return {
                 status: result.status,

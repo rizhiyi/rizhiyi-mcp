@@ -6,11 +6,12 @@ import dotenv from 'dotenv';
 import type { HttpClientConfig } from './types.js';
 
 import { LogEaseClient } from './client.js';
-import { allTools } from './tools.js';
+import { searchTools } from './tools.js';
 import { LogSearchModule } from './modules/log-search.js';
 import { StatisticsModule } from './modules/statistics.js';
 import { TrendForecastModule } from './modules/trend-forecast.js';
 import { AnomalyDetectionModule } from './modules/anomaly-detection.js';
+import { formatErrorPayload, formatSuccessPayload } from './result-formatter.js';
 
 // 加载环境变量
 dotenv.config({path: ['.env.local', '.env']});
@@ -47,11 +48,37 @@ const statisticsModule = new StatisticsModule(client);
 const trendForecastModule = new TrendForecastModule(client);
 const anomalyDetectionModule = new AnomalyDetectionModule(client);
 
+const SERVER_LEVEL_INSTRUCTIONS = `使用说明:
+## 核心原则：先统计，后采样
+1. 数量：时间窗口内有多少日志？
+2. 分布：涉及哪些服务/级别/错误类型？
+3. 趋势：数量在增加、稳定还是减少？
+4. 再采样：先摸清全局，再获取具体条目
+
+## 分析框架
+### 第一步：俯瞰全局
+- 日志总量
+- 错误率及其分布
+- 受影响最大的服务
+
+### 第二步：识别模式
+- 错误聚集（短时间内大量错误）
+- 时间规律（从 X 时间点开始）
+- 服务关联（服务 A 报错 → 服务 B 报错）
+
+### 第三步：精准采样
+- 在错误高峰处采样
+- 获取每种不同错误类型的示例
+- 与基线时段对比
+## 如需减少上下文，请优先传 fields 仅选择关键字段。
+## 遇到错误时，优先根据 suggestion 字段修正参数后自动重试一次。`;
+
 // 创建MCP服务器
 const server = new Server(
     {
         name: 'logease-mcp-server',
-        version: '1.0.0',
+        version: '1.1.0',
+        instructions: SERVER_LEVEL_INSTRUCTIONS,
     },
     {
         capabilities: {
@@ -115,22 +142,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 return await handleAnomalyAlert(parameters);
 
             default:
-                return {
-                    isError: true,
-                    content: [{
-                        type: 'text',
-                        text: `未知的工具: ${name}`
-                    }]
-                };
+                return buildToolError(
+                    'UNKNOWN_TOOL',
+                    `未知的工具: ${name}`,
+                    '请先调用 tools 列表确认可用工具名称，再重试。'
+                );
         }
     } catch (error: any) {
-        return {
-            isError: true,
-            content: [{
-                type: 'text',
-                text: `执行工具出错: ${error.message}`
-            }]
-        };
+        return buildToolError(
+            'TOOL_EXECUTION_EXCEPTION',
+            `执行工具出错: ${error.message}`,
+            '请检查输入参数格式；如果是时间范围查询，建议先缩小范围后重试。'
+        );
     }
 });
 
@@ -139,50 +162,86 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
  */
 server.setRequestHandler(ListToolsRequestSchema, async () => {
     return {
-        tools: allTools,
+        tools: searchTools,
     };
 });
 
 // 工具处理函数
 async function handleLogSearchSheet(params: any) {
+    if (!params?.time_range) {
+        return buildToolError(
+            'MISSING_REQUIRED_PARAM',
+            '缺少必填参数 time_range。',
+            '请传入 time_range，例如 now-15m,now。'
+        );
+    }
     const result = await logSearchModule.executeLogSearchSheet(
         params.query || "*",
         params.time_range,
         params.index_name || "yotta",
-        params.limit || 100
+        params.limit || 100,
+        params.fields
     );
-    return formatResult(result);
+    return formatResult(result, params);
 }
 
 async function handleLogReducePattern(params: any) {
+    if (!params?.time_range) {
+        return buildToolError(
+            'MISSING_REQUIRED_PARAM',
+            '缺少必填参数 time_range。',
+            '请传入 time_range，例如 now-15m,now。'
+        );
+    }
     const result = await logSearchModule.executeLogReducePattern(
         params.query || "*",
         params.time_range,
         params.index_name || "yotta",
         params.pattern_options || {}
     );
-    return formatResult(result);
+    return formatResult(result, params);
 }
 
 async function handleLogReducePreview(params: any) {
+    if (!params?.sid) {
+        return buildToolError(
+            'MISSING_REQUIRED_PARAM',
+            '缺少必填参数 sid。',
+            '请先调用 log_reduce_pattern 获取 sid，再调用 log_reduce_preview。'
+        );
+    }
     const result = await logSearchModule.executeLogReducePreview(
         params.sid,
         params.max_retries || 10,
         params.retry_interval || 5000
     );
-    return formatResult(result);
+    return formatResult(result, params);
 }
 
 async function handleListFields(params: any) {
+    if (!params?.time_range) {
+        return buildToolError(
+            'MISSING_REQUIRED_PARAM',
+            '缺少必填参数 time_range。',
+            '请传入 time_range，例如 now-15m,now。'
+        );
+    }
     const result = await logSearchModule.executeListFields(
         params.query || "*",
         params.time_range,
         params.index_name || "yotta"
     );
-    return formatResult(result);
+    return formatResult(result, params);
 }
 
 async function handleListFieldValues(params: any) {
+    if (!params?.field || !params?.time_range) {
+        return buildToolError(
+            'MISSING_REQUIRED_PARAM',
+            'list_field_values 需要 field 和 time_range。',
+            '请补充 field（如 status）与 time_range（如 now-1h,now）。'
+        );
+    }
     const result = await logSearchModule.executeListFieldValues(
         params.field,
         params.query || "*",
@@ -190,10 +249,17 @@ async function handleListFieldValues(params: any) {
         params.index_name || "yotta",
         params.limit || 100
     );
-    return formatResult(result);
+    return formatResult(result, params);
 }
 
 async function handleDataOverview(params: any) {
+    if (!params?.time_range) {
+        return buildToolError(
+            'MISSING_REQUIRED_PARAM',
+            '缺少必填参数 time_range。',
+            '请传入 time_range，例如 now-15m,now。'
+        );
+    }
     const result = await statisticsModule.executeDataOverview(
         params.query || "*",
         params.time_range,
@@ -201,10 +267,17 @@ async function handleDataOverview(params: any) {
         params.metric_field,
         params.percentiles || [50, 90, 99]
     );
-    return formatResult(result);
+    return formatResult(result, params);
 }
 
 async function handleTrendSummary(params: any) {
+    if (!params?.time_range) {
+        return buildToolError(
+            'MISSING_REQUIRED_PARAM',
+            '缺少必填参数 time_range。',
+            '请传入 time_range，例如 now-15m,now。'
+        );
+    }
     const result = await statisticsModule.executeTrendSummary(
         params.query || "*",
         params.time_range,
@@ -213,10 +286,17 @@ async function handleTrendSummary(params: any) {
         params.metric_field,
         params.limit_peaks || 3
     );
-    return formatResult(result);
+    return formatResult(result, params);
 }
 
 async function handleAnomalyPoints(params: any) {
+    if (!params?.time_range) {
+        return buildToolError(
+            'MISSING_REQUIRED_PARAM',
+            '缺少必填参数 time_range。',
+            '请传入 time_range，例如 now-15m,now。'
+        );
+    }
     const result = await statisticsModule.executeAnomalyPoints(
         params.query || "*",
         params.time_range,
@@ -227,7 +307,7 @@ async function handleAnomalyPoints(params: any) {
         params.sensitivity || 3,
         params.min_support || 0
     );
-    return formatResult(result);
+    return formatResult(result, params);
 }
 
 async function handlePatternClassification(params: any) {
@@ -237,18 +317,16 @@ async function handlePatternClassification(params: any) {
             params.previous_result,
             params.limit || 20
         );
-        return formatResult(result);
+        return formatResult(result, params);
     }
     
     // 否则执行完整的聚类分析流程
     if (!params.query || !params.time_range) {
-        return {
-            isError: true,
-            content: [{
-                type: 'text',
-                text: '必须提供 previous_result 或者同时提供 query 和 time_range 参数'
-            }]
-        };
+        return buildToolError(
+            'INVALID_ARGUMENT',
+            '必须提供 previous_result 或者同时提供 query 和 time_range 参数。',
+            '若已有上一步结果，请传 previous_result；否则传 query 和 time_range。'
+        );
     }
     
     const result = await anomalyDetectionModule.executePatternClassification({
@@ -258,20 +336,18 @@ async function handlePatternClassification(params: any) {
         pattern_options: params.pattern_options || {},
         limit: params.limit || 20
     });
-    return formatResult(result);
+    return formatResult(result, params);
 }
 
 async function handlePeriodCompare(params: any) {
     // 如果提供了之前的时间序列数据，直接构建数据对象进行分析
     if (params.previous_time_series_a || params.previous_time_series_b) {
         if (!params.previous_time_series_a || !params.previous_time_series_b) {
-            return {
-                isError: true,
-                content: [{
-                    type: 'text',
-                    text: '必须同时提供 previous_time_series_a 和 previous_time_series_b 参数'
-                }]
-            };
+            return buildToolError(
+                'INVALID_ARGUMENT',
+                '必须同时提供 previous_time_series_a 和 previous_time_series_b 参数。',
+                '请一次性传入两个时间序列，或改为使用 time_range_a/time_range_b。'
+            );
         }
         
         // 构建符合模块方法期望格式的数据对象
@@ -296,18 +372,16 @@ async function handlePeriodCompare(params: any) {
                 topk: params.topk || 10
             }
         );
-        return formatResult(result);
+        return formatResult(result, params);
     }
     
     // 否则执行完整的数据获取流程
     if (!params.time_range_a || !params.time_range_b) {
-        return {
-            isError: true,
-            content: [{
-                type: 'text',
-                text: '必须提供 previous_time_series 或者 time_range_a 和 time_range_b 参数'
-            }]
-        };
+        return buildToolError(
+            'INVALID_ARGUMENT',
+            '必须提供 previous_time_series 或者 time_range_a 和 time_range_b 参数。',
+            '请传入 previous_time_series_a/b，或同时传 time_range_a 和 time_range_b。'
+        );
     }
     
     const result = await anomalyDetectionModule.executePeriodCompare({
@@ -320,7 +394,7 @@ async function handlePeriodCompare(params: any) {
         topk: params.topk || 10,
         metric_field: params.metric_field
     });
-    return formatResult(result);
+    return formatResult(result, params);
 }
 
 async function handleCorrelationAnalysis(params: any) {
@@ -332,7 +406,7 @@ async function handleCorrelationAnalysis(params: any) {
         method: params.method || 'mixed',
         limit: params.limit || 50
     });
-    return formatResult(result);
+    return formatResult(result, params);
 }
 
 async function handleRootCauseSuggestions(params: any) {
@@ -345,7 +419,7 @@ async function handleRootCauseSuggestions(params: any) {
         significance_threshold: params.significance_threshold || 0.1,
         topk: params.topk || 5
     });
-    return formatResult(result);
+    return formatResult(result, params);
 }
 
 async function handleTrendForecast(params: any) {
@@ -361,7 +435,7 @@ async function handleTrendForecast(params: any) {
         window: params.window || 10,
         alpha: params.alpha || 0.3
     });
-    return formatResult(result);
+    return formatResult(result, params);
 }
 
 async function handleAnomalyAlert(params: any) {
@@ -377,19 +451,25 @@ async function handleAnomalyAlert(params: any) {
         forecast_horizon: params.forecast_horizon || 6,
         metric_field: params.metric_field
     });
-    return formatResult(result);
+    return formatResult(result, params);
 }
 
 /**
  * 格式化结果
  */
-function formatResult(result: any): any {
+function formatResult(result: any, params: any = {}): any {
     if (result.error) {
         return {
             isError: true,
             content: [{
                 type: 'text',
-                text: result.message || result.error
+                text: formatErrorPayload({
+                    error_code: result.error_code || inferErrorCode(result),
+                    message: result.message || result.error,
+                    suggestion: result.suggestion || inferSuggestion(result),
+                    retryable: typeof result.retryable === 'boolean' ? result.retryable : true,
+                    details: result.details
+                })
             }]
         };
     }
@@ -397,7 +477,47 @@ function formatResult(result: any): any {
     return {
         content: [{
             type: 'text',
-            text: JSON.stringify(result.data || result, null, 2)
+            text: formatSuccessPayload(result.data || result, {
+                outputFormat: params.output_format,
+                includeRawJson: params.include_raw_json
+            })
+        }]
+    };
+}
+
+function inferErrorCode(result: any): string {
+    const message = String(result?.message || result?.error || '');
+    if (message.includes('time_range')) return 'INVALID_TIME_RANGE';
+    if (message.includes('bucket')) return 'INVALID_BUCKET';
+    if (message.includes('field')) return 'INVALID_FIELD';
+    return 'TOOL_EXECUTION_ERROR';
+}
+
+function inferSuggestion(result: any): string {
+    const message = String(result?.message || result?.error || '');
+    if (message.includes('time_range')) {
+        return '请检查 time_range，示例：now-15m,now。';
+    }
+    if (message.includes('bucket')) {
+        return '请检查 bucket，示例：1m、5m、1h。';
+    }
+    if (message.includes('field')) {
+        return '请先调用 list_fields 确认字段名，再重试。';
+    }
+    return '请根据错误信息修正参数后重试；若数据量过大，建议先用聚合缩小范围。';
+}
+
+function buildToolError(errorCode: string, message: string, suggestion: string): any {
+    return {
+        isError: true,
+        content: [{
+            type: 'text',
+            text: formatErrorPayload({
+                error_code: errorCode,
+                message,
+                suggestion,
+                retryable: true
+            })
         }]
     };
 }

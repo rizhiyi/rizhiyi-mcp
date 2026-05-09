@@ -17,6 +17,9 @@ export interface ApiResponse<T> {
     status?: number;
     data?: T;
     error?: string;
+    error_code?: string;
+    suggestion?: string;
+    retryable?: boolean;
     details?: any;
     progress?: any;
     message?: string;
