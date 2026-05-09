@@ -134,6 +134,8 @@ desktop.ini
 # Editor directories and files
 .idea
 .vscode
+*.swp
+*.swo
 *.suo
 *.ntvs*
 *.njsproj
@@ -145,6 +147,10 @@ desktop.ini
 # claude related files
 .claude/
 CLAUDE.md
+
+# trae local files
+.trae
+.trae/
 
 # api response files
 api-responses/

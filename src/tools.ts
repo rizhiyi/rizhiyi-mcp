@@ -1,5 +1,32 @@
 import { ToolDefinition } from './types.js';
 
+const outputControlProperties = {
+    output_format: {
+        type: 'string',
+        description: '输出格式，auto会自动选择（扁平表格优先CSV，嵌套对象优先YAML）',
+        default: 'auto',
+        enum: ['auto', 'yaml', 'csv', 'json']
+    },
+    include_raw_json: {
+        type: 'boolean',
+        description: '是否在输出中附带原始JSON数据，默认false',
+        default: false
+    }
+};
+
+function withOutputControls(tools: ToolDefinition[]): ToolDefinition[] {
+    return tools.map((tool) => ({
+        ...tool,
+        inputSchema: {
+            ...tool.inputSchema,
+            properties: {
+                ...tool.inputSchema.properties,
+                ...outputControlProperties
+            }
+        }
+    }));
+}
+
 // 基础日志工具
 export const basicLogTools: ToolDefinition[] = [
     {
@@ -27,6 +54,12 @@ export const basicLogTools: ToolDefinition[] = [
                     type: 'integer',
                     description: '返回结果数量限制',
                     default: 20
+                },
+                fields: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: '可选字段投影，仅返回指定字段，例如 ["_time","status","trace_id","message"]',
+                    default: []
                 },
                 metric_field: { 
                     type: 'string', 
@@ -626,10 +659,326 @@ export const predictiveAnalysisTools: ToolDefinition[] = [
     }
 ];
 
+// 仪表盘工具
+export const dashboardTools: ToolDefinition[] = [
+    {
+        name: 'list_dashboard_tabs',
+        description: '列出指定 dashboard 下的 tabs 摘要，便于后续定位 tab 和查看 panel 数量。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                dashboard_id: {
+                    type: 'string',
+                    description: '仪表盘 ID'
+                }
+            },
+            required: ['dashboard_id']
+        }
+    },
+    {
+        name: 'list_dashboard_panels',
+        description: '列出指定 dashboard/tab 下的 panel 摘要，返回 panel_id，便于后续按 panel_id 或 panel_title 做增删改。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                dashboard_id: {
+                    type: 'string',
+                    description: '仪表盘 ID'
+                },
+                tab_name: {
+                    type: 'string',
+                    description: '标签页名称'
+                }
+            },
+            required: ['dashboard_id', 'tab_name']
+        }
+    },
+    {
+        name: 'create_dashboard_from_template',
+        description: '按模板和少量上下文创建仪表盘，适合“错误排查 / 服务概览 / 流量趋势 / 主机健康”等常见场景。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                template: {
+                    type: 'string',
+                    description: '模板名称',
+                    enum: ['service_overview', 'error_investigation', 'traffic_trend', 'host_health']
+                },
+                name: {
+                    type: 'string',
+                    description: '仪表盘名称'
+                },
+                app_id: {
+                    type: 'integer',
+                    description: '所属应用ID。可选；不传时由服务端按当前用户默认应用处理'
+                },
+                context: {
+                    type: 'object',
+                    description: '模板上下文，例如 appname、query、time_range、host_field 等',
+                    additionalProperties: true
+                },
+                data_user: {
+                    type: 'string',
+                    description: '数据用户权限，"viewer"或"creator"，默认 "viewer"',
+                    default: 'viewer',
+                    enum: ['viewer', 'creator']
+                },
+                export: {
+                    type: 'string',
+                    description: '可见范围，"local"或"system"，默认 "local"',
+                    default: 'local',
+                    enum: ['local', 'system']
+                }
+            },
+            required: ['template', 'name']
+        }
+    },
+    {
+        name: 'create_dashboard_from_spec',
+        description: '根据完整的 dashboard 说明创建仪表盘。适合已经明确 tabs 和 panels 结构的场景。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                name: {
+                    type: 'string',
+                    description: '仪表盘名称'
+                },
+                app_id: {
+                    type: 'integer',
+                    description: '所属应用ID。可选；不传时由服务端按当前用户默认应用处理'
+                },
+                data_user: {
+                    type: 'string',
+                    description: '数据用户权限，"viewer"或"creator"，默认 "viewer"',
+                    default: 'viewer',
+                    enum: ['viewer', 'creator']
+                },
+                export: {
+                    type: 'string',
+                    description: '可见范围，"local"或"system"，默认 "local"',
+                    default: 'local',
+                    enum: ['local', 'system']
+                },
+                tabs: {
+                    type: 'array',
+                    description: '标签页列表',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            name: {
+                                type: 'string',
+                                description: '标签页名称'
+                            },
+                            panels: {
+                                type: 'array',
+                                description: '图表列表',
+                                items: {
+                                    type: 'object',
+                                    properties: {
+                                        title: { type: 'string', description: '图表标题' },
+                                        type: { type: 'string', description: 'panel 类型。当前写入优先支持 "trend" 和 "eventsTable"；若误传 "pie"/"single"/"table" 等旧写法，服务端会自动归一到 trend + chartType。', enum: ['trend', 'eventsTable', 'pie', 'single', 'table', 'line', 'bar', 'column', 'sunburst'] },
+                                        query: { type: 'string', description: 'SPL 查询语句，例如: * | stats count() by hostname' },
+                                        time_range: { type: 'string', description: '时间范围，例如: -1h,now' },
+                                        chartType: { type: 'string', description: '图表展示类型。trend 常见值包括 "line"、"pie"、"single"、"table"、"sunburst"、"multiaxis"、"bar"、"column"；eventsTable 固定为 "eventsTable"。', enum: ['line', 'pie', 'single', 'table', 'sunburst', 'multiaxis', 'bar', 'column', 'scatter', 'area', 'networkflow', 'tracing', 'eventsTable'] },
+                                        xField: { type: 'string', description: 'X轴字段名' },
+                                        yField: { type: 'string', description: 'Y轴字段名' },
+                                        byFields: { type: 'array', items: { type: 'string' }, description: '分组字段名列表' },
+                                        grid: {
+                                            type: 'object',
+                                            description: '图表布局位置和大小。网格系统总宽12。例如 {"x":0, "y":0, "w":6, "h":5}',
+                                            properties: {
+                                                x: { type: 'integer' },
+                                                y: { type: 'integer' },
+                                                w: { type: 'integer' },
+                                                h: { type: 'integer' }
+                                            }
+                                        }
+                                    },
+                                    required: ['title', 'query']
+                                }
+                            }
+                        },
+                        required: ['name', 'panels']
+                    }
+                }
+            },
+            required: ['name', 'tabs']
+        }
+    },
+    {
+        name: 'update_dashboard_layout',
+        description: '调整指定 dashboard 某个 tab 下 panel 的布局，不修改 query 内容。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                dashboard_id: {
+                    type: 'string',
+                    description: '仪表盘 ID'
+                },
+                tab_name: {
+                    type: 'string',
+                    description: '标签页名称'
+                },
+                layout_strategy: {
+                    type: 'string',
+                    description: '布局策略，默认 auto_two_columns',
+                    default: 'auto_two_columns',
+                    enum: ['auto_two_columns', 'single_column', 'compact']
+                },
+                panel_positions: {
+                    type: 'array',
+                    description: '手动布局配置；如果提供则优先于 layout_strategy',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            panel_title: { type: 'string', description: 'panel 标题' },
+                            x: { type: 'integer', description: '横坐标' },
+                            y: { type: 'integer', description: '纵坐标' },
+                            w: { type: 'integer', description: '宽度' },
+                            h: { type: 'integer', description: '高度' }
+                        },
+                        required: ['panel_title']
+                    }
+                }
+            },
+            required: ['dashboard_id', 'tab_name']
+        }
+    },
+    {
+        name: 'add_dashboard_panel',
+        description: '向指定 dashboard/tab 新增一个 panel。请注意：panel 类型(type) 与图表展示类型(chartType) 是两回事。当前写入优先支持 type=trend 或 type=eventsTable；pie/single/table/sunburst/bar/column 等应放在 chartType 中，而不是 type 中。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                dashboard_id: {
+                    type: 'string',
+                    description: '仪表盘 ID'
+                },
+                tab_name: {
+                    type: 'string',
+                    description: '标签页名称'
+                },
+                panel: {
+                    type: 'object',
+                    description: '要新增的 panel 配置。建议优先使用 type=trend，再通过 chartType 指定具体展示样式。',
+                    properties: {
+                        title: { type: 'string', description: '图表标题' },
+                        type: { type: 'string', description: 'panel 类型。当前写入优先支持 trend / eventsTable。不要把 pie/single/table 这类展示样式填在这里；若误传旧写法，服务端会自动归一到 trend + chartType。', enum: ['trend', 'eventsTable', 'pie', 'single', 'table', 'line', 'bar', 'column', 'sunburst'] },
+                        query: { type: 'string', description: 'SPL 查询语句' },
+                        time_range: { type: 'string', description: '时间范围，例如 -1h,now' },
+                        chartType: { type: 'string', description: '图表展示类型。对于 type=trend，可选 line/pie/single/table/sunburst/multiaxis/bar/column/scatter/area/networkflow/tracing；对于 type=eventsTable，固定为 eventsTable。', enum: ['line', 'pie', 'single', 'table', 'sunburst', 'multiaxis', 'bar', 'column', 'scatter', 'area', 'networkflow', 'tracing', 'eventsTable'] },
+                        xField: { type: 'string', description: 'X 轴字段' },
+                        yField: { type: 'string', description: 'Y 轴字段' },
+                        byFields: { type: 'array', items: { type: 'string' }, description: '分组字段列表' },
+                        description: { type: 'string', description: '图表说明' },
+                        grid: {
+                            type: 'object',
+                            description: '图表布局位置和大小',
+                            properties: {
+                                x: { type: 'integer' },
+                                y: { type: 'integer' },
+                                w: { type: 'integer' },
+                                h: { type: 'integer' }
+                            }
+                        }
+                    },
+                    required: ['title', 'query']
+                }
+            },
+            required: ['dashboard_id', 'tab_name', 'panel']
+        }
+    },
+    {
+        name: 'update_dashboard_panel',
+        description: '更新指定 dashboard/tab 下某个 panel 的内容，例如标题、query、时间范围、chartType 或局部布局。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                dashboard_id: {
+                    type: 'string',
+                    description: '仪表盘 ID'
+                },
+                tab_name: {
+                    type: 'string',
+                    description: '标签页名称'
+                },
+                panel_id: {
+                    type: 'string',
+                    description: '要修改的 panel 唯一 ID。若提供，则优先使用该字段精确定位。'
+                },
+                panel_title: {
+                    type: 'string',
+                    description: '要修改的 panel 标题。未提供 panel_id 时使用。'
+                },
+                changes: {
+                    type: 'object',
+                    description: '要修改的字段',
+                    properties: {
+                        title: { type: 'string', description: '新的标题' },
+                        query: { type: 'string', description: '新的查询语句' },
+                        time_range: { type: 'string', description: '新的时间范围' },
+                        chartType: { type: 'string', description: '新的图表展示类型。trend 常见值为 line/pie/single/table/sunburst/multiaxis/bar/column，eventsTable 固定为 eventsTable', enum: ['line', 'pie', 'single', 'table', 'sunburst', 'multiaxis', 'bar', 'column', 'scatter', 'area', 'networkflow', 'tracing', 'eventsTable'] },
+                        xField: { type: 'string', description: '新的 X 轴字段' },
+                        yField: { type: 'string', description: '新的 Y 轴字段' },
+                        byFields: { type: 'array', items: { type: 'string' }, description: '新的分组字段列表' },
+                        description: { type: 'string', description: '新的图表说明' },
+                        grid: {
+                            type: 'object',
+                            description: '新的布局位置和大小',
+                            properties: {
+                                x: { type: 'integer' },
+                                y: { type: 'integer' },
+                                w: { type: 'integer' },
+                                h: { type: 'integer' }
+                            }
+                        }
+                    }
+                }
+            },
+            required: ['dashboard_id', 'tab_name', 'changes']
+        }
+    },
+    {
+        name: 'remove_dashboard_panel',
+        description: '删除指定 dashboard/tab 下的单个 panel。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                dashboard_id: {
+                    type: 'string',
+                    description: '仪表盘 ID'
+                },
+                tab_name: {
+                    type: 'string',
+                    description: '标签页名称'
+                },
+                panel_id: {
+                    type: 'string',
+                    description: '要删除的 panel 唯一 ID。若提供，则优先使用该字段精确定位。'
+                },
+                panel_title: {
+                    type: 'string',
+                    description: '要删除的 panel 标题。未提供 panel_id 时使用。'
+                }
+            },
+            required: ['dashboard_id', 'tab_name']
+        }
+    }
+];
+
+export const searchTools: ToolDefinition[] = [
+    ...withOutputControls(basicLogTools),
+    ...withOutputControls(statisticalAnalysisTools),
+    ...withOutputControls(intelligentAnalysisTools),
+    ...withOutputControls(predictiveAnalysisTools)
+];
+
+export const dashboardServerTools: ToolDefinition[] = [
+    ...withOutputControls(dashboardTools)
+];
+
 // 所有工具
 export const allTools: ToolDefinition[] = [
-    ...basicLogTools,
-    ...statisticalAnalysisTools,
-    ...intelligentAnalysisTools,
-    ...predictiveAnalysisTools
+    ...searchTools,
+    ...dashboardServerTools
 ];

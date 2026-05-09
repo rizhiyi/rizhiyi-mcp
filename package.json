@@ -1,6 +1,6 @@
 {
   "name": "rizhiyi-mcp",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "rizhiyi-mcp MCP server",
   "type": "module",
   "bin": {
@@ -13,7 +13,13 @@
     "build": "tsc",
     "watch": "tsc --watch",
     "start": "npm run build && node dist/log-tools-server.js",
-    "dev": "node --experimental-specifier-resolution=node --loader ts-node/esm src/log-tools-server.ts"
+    "dev": "node --experimental-specifier-resolution=node --loader ts-node/esm src/log-tools-server.ts",
+    "start:search": "npm run build && node dist/log-tools-server.js",
+    "start:manage": "npm run build && node dist/manage-server.js",
+    "start:dashboard": "npm run build && node dist/dashboard-server.js",
+    "dev:search": "node --experimental-specifier-resolution=node --loader ts-node/esm src/log-tools-server.ts",
+    "dev:manage": "node --experimental-specifier-resolution=node --loader ts-node/esm src/manage-server.ts",
+    "dev:dashboard": "node --experimental-specifier-resolution=node --loader ts-node/esm src/dashboard-server.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.9.0",
