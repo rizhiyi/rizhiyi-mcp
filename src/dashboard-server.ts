@@ -66,6 +66,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         switch (name) {
             case 'list_dashboard_tabs':
                 return await handleToolExecution(() => dashboardModule.listDashboardTabs(parameters), parameters);
+            case 'get_dashboard_tab_content':
+                return await handleToolExecution(() => dashboardModule.getDashboardTabContent(parameters), parameters);
+            case 'evaluate_dashboard_aesthetics':
+                return await handleToolExecution(() => dashboardModule.evaluateDashboardAesthetics(parameters), parameters);
             case 'list_dashboard_panels':
                 return await handleToolExecution(() => dashboardModule.listDashboardPanels(parameters), parameters);
             case 'create_dashboard_from_template':

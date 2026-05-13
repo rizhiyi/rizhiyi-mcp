@@ -676,6 +676,42 @@ export const dashboardTools: ToolDefinition[] = [
         }
     },
     {
+        name: 'get_dashboard_tab_content',
+        description: '读取指定 dashboard/tab 的解析后 content JSON，便于校验 widgets、filters、theme 以及扩展字段是否被保留。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                dashboard_id: {
+                    type: 'string',
+                    description: '仪表盘 ID'
+                },
+                tab_name: {
+                    type: 'string',
+                    description: '标签页名称'
+                }
+            },
+            required: ['dashboard_id', 'tab_name']
+        }
+    },
+    {
+        name: 'evaluate_dashboard_aesthetics',
+        description: '评估指定 dashboard/tab 的布局美学质量，返回 7 个指标评分、综合分、问题解释和布局建议。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                dashboard_id: {
+                    type: 'string',
+                    description: '仪表盘 ID'
+                },
+                tab_name: {
+                    type: 'string',
+                    description: '标签页名称'
+                }
+            },
+            required: ['dashboard_id', 'tab_name']
+        }
+    },
+    {
         name: 'list_dashboard_panels',
         description: '列出指定 dashboard/tab 下的 panel 摘要，返回 panel_id，便于后续按 panel_id 或 panel_title 做增删改。',
         inputSchema: {
@@ -912,12 +948,13 @@ export const dashboardTools: ToolDefinition[] = [
                 },
                 changes: {
                     type: 'object',
-                    description: '要修改的字段',
+                    description: '要修改的字段。未传的配置项会尽量保持原值不变。',
                     properties: {
                         title: { type: 'string', description: '新的标题' },
                         query: { type: 'string', description: '新的查询语句' },
                         time_range: { type: 'string', description: '新的时间范围' },
                         chartType: { type: 'string', description: '新的图表展示类型。trend 常见值为 line/pie/single/table/sunburst/multiaxis/bar/column，eventsTable 固定为 eventsTable', enum: ['line', 'pie', 'single', 'table', 'sunburst', 'multiaxis', 'bar', 'column', 'scatter', 'area', 'networkflow', 'tracing', 'eventsTable'] },
+                        color: { type: 'string', description: '新的图表主色，映射到 searchData.chartStartingColor，例如 #F6903D' },
                         xField: { type: 'string', description: '新的 X 轴字段' },
                         yField: { type: 'string', description: '新的 Y 轴字段' },
                         byFields: { type: 'array', items: { type: 'string' }, description: '新的分组字段列表' },
