@@ -41,7 +41,7 @@ const dashboardModule = new DashboardModule(client);
 const SERVER_LEVEL_INSTRUCTIONS = `使用说明:
 1. 仪表盘配置是复杂 JSON body，请优先使用动作型工具：先 list tabs/panels 看现状，再按模板创建、按 spec 创建、调整 layout、增删改 panel。
 2. panel 默认可用 tab_name + panel_title 定位；若存在同名 panel，请优先使用 list_dashboard_panels 返回的 panel_id 精准定位。
-3. 若布局(grid)未提供，服务端会按两列默认布局自动补齐。
+3. 若布局(grid)未提供，服务端会根据 panel 数量、图表类型和阅读顺序自动补齐更合理的默认布局；若无法命中细粒度规则，会回退到稳定的两列布局。
 4. 当前写入优先支持 trend 和 eventsTable；pie、single、table 等属于 trend 的 chartType，而不是独立 panel 类型。
 5. 输出默认使用 output_format=auto，以减少上下文消耗。
 6. 遇到错误时，优先根据 suggestion 字段修正参数后重试一次。`;

@@ -1,22 +1,24 @@
 import { LogEaseClient } from '../client.js';
+import { buildAestheticsAnalysis as analyzeDashboardAesthetics } from './dashboard/aesthetics.js';
+import {
+    applyLayoutStrategy as applyLayoutStrategyToWidgets,
+    assignDefaultLayoutToPanels as assignDefaultPanelLayout,
+    buildGridForAdditionalPanel as buildAdditionalPanelGrid
+} from './dashboard/layout.js';
+import {
+    findPanelMatches as findMatchingPanels,
+    getWidgetId as extractWidgetId,
+    getWidgetTitle as extractWidgetTitle,
+    normalizePanelSpec as normalizePanelDefinition,
+    panelToWidget as mapPanelToWidget,
+    patchWidgetWithChanges as patchWidget,
+    validatePanelSpec as validatePanelDefinition,
+    widgetToPanel as mapWidgetToPanel
+} from './dashboard/panel-utils.js';
+import { buildDashboardTemplateSpec } from './dashboard/templates/index.js';
 
 export class DashboardModule {
     private client: LogEaseClient;
-    private readonly supportedPanelTypes = new Set(['trend', 'eventsTable']);
-    private readonly trendChartTypes = new Set([
-        'line',
-        'pie',
-        'single',
-        'table',
-        'sunburst',
-        'multiaxis',
-        'bar',
-        'column',
-        'scatter',
-        'area',
-        'networkflow',
-        'tracing'
-    ]);
 
     constructor(client: LogEaseClient) {
         this.client = client;
@@ -419,7 +421,10 @@ export class DashboardModule {
             );
         }
 
-        const normalizedPanel = this.normalizePanelSpec(panel, widgets.length);
+        const normalizedPanel = this.normalizePanelSpec(panel, widgets.length, { applyDefaultGrid: false });
+        if (!normalizedPanel.grid) {
+            normalizedPanel.grid = this.buildGridForAdditionalPanel(normalizedPanel, widgets);
+        }
         widgets.push(this.panelToWidget(normalizedPanel, widgets.length));
 
         const updatedContent = {
@@ -732,67 +737,17 @@ export class DashboardModule {
     }
 
     private buildTemplateSpec(template: string, name: string, context: any, options: any): any | null {
-        const query = context.query || '*';
-        const timeRange = context.time_range || '-1h,now';
-        const appname = context.appname;
-        const hostField = context.host_field || 'hostname';
-        const scopedQuery = appname ? `appname:${appname}` : query;
-
-        const templates: Record<string, any> = {
-            service_overview: {
-                name,
-                ...options,
-                tabs: [{
-                    name: '总览',
-                    panels: [
-                        { title: '服务请求趋势', type: 'trend', query: scopedQuery, time_range: timeRange },
-                        { title: '主机分布', type: 'trend', query: `${scopedQuery} | stats count() by ${hostField}`, time_range: timeRange, chartType: 'table' }
-                    ]
-                }]
-            },
-            error_investigation: {
-                name,
-                ...options,
-                tabs: [{
-                    name: '错误排查',
-                    panels: [
-                        { title: '错误趋势', type: 'trend', query: `${scopedQuery} AND status:error`, time_range: timeRange },
-                        { title: '错误主机 TopN', type: 'trend', query: `${scopedQuery} AND status:error | stats count() by ${hostField}`, time_range: timeRange, chartType: 'table' }
-                    ]
-                }]
-            },
-            traffic_trend: {
-                name,
-                ...options,
-                tabs: [{
-                    name: '流量趋势',
-                    panels: [
-                        { title: '访问趋势', type: 'trend', query: scopedQuery, time_range: timeRange },
-                        { title: '访问来源分布', type: 'trend', query: `${scopedQuery} | stats count() by source`, time_range: timeRange, chartType: 'table' }
-                    ]
-                }]
-            },
-            host_health: {
-                name,
-                ...options,
-                tabs: [{
-                    name: '主机健康',
-                    panels: [
-                        { title: '主机日志趋势', type: 'trend', query: scopedQuery, time_range: timeRange },
-                        { title: '主机日志量 TopN', type: 'trend', query: `${scopedQuery} | stats count() by ${hostField}`, time_range: timeRange, chartType: 'table' }
-                    ]
-                }]
-            }
-        };
-
-        return templates[template] || null;
+        return buildDashboardTemplateSpec(template, name, context, options);
     }
 
     private normalizeDashboardSpec(spec: any): any {
-        const tabs = Array.isArray(spec?.tabs) ? spec.tabs.map((tab: any) => ({
-            name: tab?.name,
-            panels: this.normalizePanels(Array.isArray(tab?.panels) ? tab.panels : [])
-        })) : [];
+        const tabs = Array.isArray(spec?.tabs) ? spec.tabs.map((tab: any) => {
+            const normalizedPanels = this.normalizePanels(Array.isArray(tab?.panels) ? tab.panels : []);
+            return {
+                name: tab?.name,
+                panels: normalizedPanels
+            };
+        }) : [];
 
         return {
             name: spec?.name,
@@ -804,29 +759,12 @@ export class DashboardModule {
     }
 
     private normalizePanels(panels: any[]): any[] {
-        return panels.map((panel, index) => this.normalizePanelSpec(panel, index));
+        const normalizedPanels = panels.map((panel, index) => this.normalizePanelSpec(panel, index, { applyDefaultGrid: false }));
+        return assignDefaultPanelLayout(normalizedPanels);
     }
 
-    private normalizePanelSpec(panel: any, index: number): any {
-        const rawType = panel?.type || panel?.panel_type || 'trend';
-        const normalized = this.normalizePanelKind(rawType, panel?.chartType);
-        const defaultGrid = { x: (index % 2) * 6, y: Math.floor(index / 2) * 5, w: 6, h: 5 };
-
-        return {
-            title: panel?.title,
-            type: normalized.type,
-            query: panel?.query || '*',
-            time_range: panel?.time_range || '-1h,now',
-            chartType: normalized.chartType,
-            xField: panel?.xField || '',
-            yField: panel?.yField || '',
-            byFields: Array.isArray(panel?.byFields) ? panel.byFields : [],
-            description: panel?.description || '',
-            grid: {
-                ...defaultGrid,
-                ...(panel?.grid || {})
-            }
-        };
+    private normalizePanelSpec(panel: any, index: number, options: { applyDefaultGrid?: boolean } = {}): any {
+        return normalizePanelDefinition(panel, index, options);
     }
 
     private validateDashboardSpec(spec: any): any | null {
@@ -859,727 +797,50 @@ export class DashboardModule {
     }
 
     private validatePanelSpec(panel: any): any | null {
-        if (!panel?.title || typeof panel.title !== 'string') {
-            return this.buildError(
-                'INVALID_PANEL_SPEC',
-                'panel 缺少 title。',
-                '请为 panel 提供 title。'
-            );
-        }
-        if (!panel?.query || typeof panel.query !== 'string') {
-            return this.buildError(
-                'INVALID_PANEL_SPEC',
-                `panel ${panel.title || ''} 缺少 query。`,
-                '请为 panel 提供 SPL 查询语句。'
-            );
-        }
-
-        const normalized = this.normalizePanelKind(panel?.type || panel?.panel_type || 'trend', panel?.chartType);
-        if (!this.supportedPanelTypes.has(normalized.type)) {
-            return this.buildError(
-                'UNSUPPORTED_PANEL_TYPE',
-                `当前写入仅支持 trend/eventsTable panel，收到类型: ${normalized.type}`,
-                '请优先使用 trend；事件列表请使用 eventsTable。canvas 目前仅支持读取，不支持写入。'
-            );
-        }
-
-        if (normalized.type === 'eventsTable' && normalized.chartType !== 'eventsTable') {
-            return this.buildError(
-                'INVALID_CHART_TYPE',
-                `eventsTable panel 的 chartType 必须为 eventsTable，收到: ${normalized.chartType}`,
-                '请将 type 设为 eventsTable，并将 chartType 设为 eventsTable。'
-            );
-        }
-
-        if (normalized.type === 'trend' && !this.trendChartTypes.has(normalized.chartType)) {
-            return this.buildError(
-                'INVALID_CHART_TYPE',
-                `trend panel 的 chartType 不受支持，收到: ${normalized.chartType}`,
-                '请使用 line、pie、single、table、sunburst、multiaxis、bar、column、scatter、area、networkflow 或 tracing。'
-            );
-        }
-
-        return null;
+        return validatePanelDefinition(panel, this.buildError.bind(this));
     }
 
     private panelToWidget(panel: any, index: number, widgetId?: string): any {
-        const grid = panel.grid || { x: (index % 2) * 6, y: Math.floor(index / 2) * 5, w: 6, h: 5 };
-        const normalized = this.normalizePanelKind(panel?.type || 'trend', panel?.chartType);
-
-        return {
-            y: grid.y,
-            x: grid.x,
-            w: grid.w,
-            h: grid.h,
-            type: normalized.type,
-            importType: 'clone',
-            id: widgetId || `panel_${Date.now()}_${index}`,
-            searchData: {
-                trendName: panel.title || `Panel ${index + 1}`,
-                query: panel.query || '*',
-                time_range: panel.time_range || '-1h,now',
-                chartType: normalized.chartType,
-                xField: panel.xField || '',
-                yField: panel.yField || '',
-                byFields: panel.byFields || [],
-                description: panel.description || ''
-            }
-        };
+        return mapPanelToWidget(panel, index, widgetId);
     }
 
     private widgetToPanel(widget: any): any {
-        const normalized = this.normalizePanelKind(widget?.type || 'trend', widget?.searchData?.chartType);
-        return {
-            title: this.getWidgetTitle(widget),
-            type: normalized.type,
-            query: widget?.searchData?.query || '*',
-            time_range: widget?.searchData?.time_range || '-1h,now',
-            chartType: normalized.chartType,
-            xField: widget?.searchData?.xField || '',
-            yField: widget?.searchData?.yField || '',
-            byFields: Array.isArray(widget?.searchData?.byFields) ? widget.searchData.byFields : [],
-            description: widget?.searchData?.description || '',
-            grid: {
-                x: widget?.x ?? 0,
-                y: widget?.y ?? 0,
-                w: widget?.w ?? 6,
-                h: widget?.h ?? 5
-            }
-        };
+        return mapWidgetToPanel(widget);
     }
 
     private getWidgetTitle(widget: any): string {
-        return widget?.searchData?.trendName || widget?.title || '';
+        return extractWidgetTitle(widget);
     }
 
     private getWidgetId(widget: any): string {
-        return widget?.id || '';
+        return extractWidgetId(widget);
     }
 
     private patchWidgetWithChanges(widget: any, mergedPanel: any, changes: any): any {
-        const rawWidget = widget && typeof widget === 'object' ? widget : {};
-        const rawSearchData = rawWidget?.searchData && typeof rawWidget.searchData === 'object'
-            ? rawWidget.searchData
-            : {};
-        const gridChanges = changes?.grid && typeof changes.grid === 'object' ? changes.grid : {};
-        const nextWidget = {
-            ...rawWidget,
-            searchData: { ...rawSearchData }
-        };
-
-        if (Object.prototype.hasOwnProperty.call(gridChanges, 'x')) {
-            nextWidget.x = mergedPanel.grid.x;
-        }
-        if (Object.prototype.hasOwnProperty.call(gridChanges, 'y')) {
-            nextWidget.y = mergedPanel.grid.y;
-        }
-        if (Object.prototype.hasOwnProperty.call(gridChanges, 'w')) {
-            nextWidget.w = mergedPanel.grid.w;
-        }
-        if (Object.prototype.hasOwnProperty.call(gridChanges, 'h')) {
-            nextWidget.h = mergedPanel.grid.h;
-        }
-
-        if (Object.prototype.hasOwnProperty.call(changes, 'title')) {
-            nextWidget.title = mergedPanel.title;
-            nextWidget.searchData.trendName = mergedPanel.title;
-        }
-        if (Object.prototype.hasOwnProperty.call(changes, 'query')) {
-            nextWidget.searchData.query = mergedPanel.query;
-        }
-        if (Object.prototype.hasOwnProperty.call(changes, 'time_range')) {
-            nextWidget.searchData.time_range = mergedPanel.time_range;
-        }
-        if (Object.prototype.hasOwnProperty.call(changes, 'chartType')) {
-            nextWidget.type = mergedPanel.type;
-            nextWidget.searchData.chartType = mergedPanel.chartType;
-        }
-        if (Object.prototype.hasOwnProperty.call(changes, 'xField')) {
-            nextWidget.searchData.xField = mergedPanel.xField;
-        }
-        if (Object.prototype.hasOwnProperty.call(changes, 'yField')) {
-            nextWidget.searchData.yField = mergedPanel.yField;
-        }
-        if (Object.prototype.hasOwnProperty.call(changes, 'byFields')) {
-            nextWidget.searchData.byFields = mergedPanel.byFields;
-        }
-        if (Object.prototype.hasOwnProperty.call(changes, 'description')) {
-            nextWidget.searchData.description = mergedPanel.description;
-        }
-        if (Object.prototype.hasOwnProperty.call(changes, 'color')) {
-            nextWidget.searchData.chartStartingColor = changes.color;
-        }
-
-        return nextWidget;
+        return patchWidget(widget, mergedPanel, changes);
     }
 
-    private normalizePanelKind(rawType: string, rawChartType?: string): { type: string; chartType: string } {
-        const type = (rawType || 'trend').trim();
-        const chartType = (rawChartType || '').trim();
-
-        if (type === 'eventsTable') {
-            return {
-                type: 'eventsTable',
-                chartType: chartType || 'eventsTable'
-            };
-        }
-
-        // 兼容旧写法：把 table / pie / single 等误传为 panel type 的输入归一到 trend + chartType
-        if (type === 'table' || this.trendChartTypes.has(type)) {
-            return {
-                type: 'trend',
-                chartType: chartType || (type === 'table' ? 'table' : type)
-            };
-        }
-
-        return {
-            type,
-            chartType: chartType || 'line'
-        };
+    private buildGridForAdditionalPanel(
+        panel: any,
+        occupiedSource: Array<any>,
+        options: { startY?: number } = {}
+    ): { x: number; y: number; w: number; h: number } {
+        return buildAdditionalPanelGrid(panel, occupiedSource, options);
     }
 
     private findPanelMatches(
         widgets: any[],
-        criteria: { panelId?: string; panelTitle?: string }
+        criteria: { panelId?: string; panelTitle?: string } | string
     ): Array<{ index: number; widget: any }> {
-        const panelId = criteria.panelId?.trim();
-        if (panelId) {
-            return widgets
-                .map((widget, index) => ({ index, widget }))
-                .filter(({ widget }) => this.getWidgetId(widget) === panelId);
-        }
-
-        const panelTitle = criteria.panelTitle || '';
-        return widgets
-            .map((widget, index) => ({ index, widget }))
-            .filter(({ widget }) => this.getWidgetTitle(widget) === panelTitle);
+        return findMatchingPanels(widgets, criteria);
     }
 
     private applyLayoutStrategy(widgets: any[], strategy: string): any[] {
-        const normalizedStrategy = strategy || 'auto_two_columns';
-
-        return widgets.map((widget, index) => {
-            const base = { ...widget };
-
-            switch (normalizedStrategy) {
-                case 'single_column':
-                    return {
-                        ...base,
-                        x: 0,
-                        y: index * 6,
-                        w: 12,
-                        h: 5
-                    };
-                case 'compact':
-                    return {
-                        ...base,
-                        x: (index % 3) * 4,
-                        y: Math.floor(index / 3) * 4,
-                        w: 4,
-                        h: 4
-                    };
-                case 'auto_two_columns':
-                default:
-                    return {
-                        ...base,
-                        x: (index % 2) * 6,
-                        y: Math.floor(index / 2) * 5,
-                        w: 6,
-                        h: 5
-                    };
-            }
-        });
+        return applyLayoutStrategyToWidgets(widgets, strategy);
     }
 
     private buildAestheticsAnalysis(widgets: any[]) {
-        const items = this.extractAestheticItems(widgets);
-        const canvas = this.calculateCanvas(items);
-        const overlapPairs = this.findOverlappingPairs(items);
-        const density = this.computeDensityScore(items, canvas);
-        const symmetry = this.computeSymmetryScore(items, canvas);
-        const balance = this.computeBalanceScore(items, canvas);
-        const proportionality = this.computeProportionalityScore(items);
-        const uniformity = this.computeUniformityScore(items, canvas);
-        const simplicity = this.computeSimplicityScore(items.length);
-        const sequence = this.computeSequenceScore(items);
-        const rawScores = {
-            density,
-            symmetry,
-            balance,
-            proportionality,
-            uniformity,
-            simplicity,
-            sequence
-        };
-        const weights = {
-            density: 0.138,
-            symmetry: 0.185,
-            balance: 0.142,
-            proportionality: 0.167,
-            uniformity: 0.126,
-            simplicity: 0.179,
-            sequence: 0.063
-        };
-        const overallRaw = rawScores.density * weights.density
-            + rawScores.symmetry * weights.symmetry
-            + rawScores.balance * weights.balance
-            + rawScores.proportionality * weights.proportionality
-            + rawScores.uniformity * weights.uniformity
-            + rawScores.simplicity * weights.simplicity
-            + rawScores.sequence * weights.sequence;
-
-        const scores = {
-            density: this.toPercentageScore(rawScores.density),
-            symmetry: this.toPercentageScore(rawScores.symmetry),
-            balance: this.toPercentageScore(rawScores.balance),
-            proportionality: this.toPercentageScore(rawScores.proportionality),
-            uniformity: this.toPercentageScore(rawScores.uniformity),
-            simplicity: this.toPercentageScore(rawScores.simplicity),
-            sequence: this.toPercentageScore(rawScores.sequence)
-        };
-
-        return {
-            items,
-            canvas,
-            scores,
-            overallScore: this.toPercentageScore(overallRaw),
-            issues: this.buildAestheticIssues(items, canvas, rawScores, overlapPairs),
-            suggestions: this.buildAestheticSuggestions(items, rawScores, overlapPairs)
-        };
-    }
-
-    private extractAestheticItems(widgets: any[]) {
-        return widgets.map((widget: any, index: number) => {
-            const x = Number.isFinite(widget?.x) ? Number(widget.x) : 0;
-            const y = Number.isFinite(widget?.y) ? Number(widget.y) : 0;
-            const w = Number.isFinite(widget?.w) && Number(widget.w) > 0 ? Number(widget.w) : 6;
-            const h = Number.isFinite(widget?.h) && Number(widget.h) > 0 ? Number(widget.h) : 5;
-            const area = w * h;
-
-            return {
-                index,
-                id: this.getWidgetId(widget) || `panel_${index}`,
-                title: this.getWidgetTitle(widget) || `Panel ${index + 1}`,
-                x,
-                y,
-                w,
-                h,
-                right: x + w,
-                bottom: y + h,
-                cx: x + w / 2,
-                cy: y + h / 2,
-                area
-            };
-        });
-    }
-
-    private calculateCanvas(items: any[]) {
-        const width = Math.max(1, ...items.map((item: any) => item.right));
-        const height = Math.max(1, ...items.map((item: any) => item.bottom));
-        return {
-            width,
-            height,
-            area: width * height
-        };
-    }
-
-    private computeDensityScore(items: any[], canvas: any): number {
-        const totalArea = items.reduce((sum: number, item: any) => sum + item.area, 0);
-        const ratio = totalArea / Math.max(canvas.area, 1);
-        if (ratio < 0.25) {
-            return this.clamp01(ratio / 0.25);
-        }
-        if (ratio <= 0.55) {
-            return 1;
-        }
-        return this.clamp01(1 - ((ratio - 0.55) / 0.45));
-    }
-
-    private computeSymmetryScore(items: any[], canvas: any): number {
-        if (items.length <= 1) {
-            return 1;
-        }
-
-        const centerX = canvas.width / 2;
-        const leftItems = items.filter((item: any) => item.cx < centerX);
-        const rightPool = items.filter((item: any) => item.cx > centerX);
-        const centerItems = items.filter((item: any) => item.cx === centerX);
-        const unmatchedRight = [...rightPool];
-        const deviations: number[] = [];
-
-        for (const left of leftItems) {
-            const targetCx = canvas.width - left.cx;
-            let bestIndex = -1;
-            let bestDeviation = 1;
-
-            unmatchedRight.forEach((right: any, index: number) => {
-                const centerDeviation = Math.abs(right.cx - targetCx) / Math.max(canvas.width, 1);
-                const verticalDeviation = Math.abs(right.cy - left.cy) / Math.max(canvas.height, 1);
-                const areaDeviation = Math.abs(right.area - left.area) / Math.max(left.area, right.area, 1);
-                const combined = (centerDeviation + verticalDeviation + areaDeviation) / 3;
-                if (combined < bestDeviation) {
-                    bestDeviation = combined;
-                    bestIndex = index;
-                }
-            });
-
-            deviations.push(bestDeviation);
-            if (bestIndex >= 0) {
-                unmatchedRight.splice(bestIndex, 1);
-            }
-        }
-
-        for (const centerItem of centerItems) {
-            deviations.push(Math.abs(centerItem.cx - centerX) / Math.max(centerX, 1));
-        }
-
-        for (let i = 0; i < unmatchedRight.length; i++) {
-            deviations.push(1);
-        }
-
-        if (deviations.length === 0) {
-            return 1;
-        }
-
-        const avgDeviation = deviations.reduce((sum: number, value: number) => sum + value, 0) / deviations.length;
-        return this.clamp01(1 - avgDeviation);
-    }
-
-    private computeBalanceScore(items: any[], canvas: any): number {
-        const centerX = canvas.width / 2;
-        let leftMoment = 0;
-        let rightMoment = 0;
-
-        for (const item of items) {
-            if (item.cx < centerX) {
-                leftMoment += item.area * (centerX - item.cx);
-            } else if (item.cx > centerX) {
-                rightMoment += item.area * (item.cx - centerX);
-            }
-        }
-
-        const denominator = Math.max(leftMoment, rightMoment, 1e-6);
-        return this.clamp01(1 - (Math.abs(leftMoment - rightMoment) / denominator));
-    }
-
-    private computeProportionalityScore(items: any[]): number {
-        const goldenRatio = 1.618;
-        const deviations = items.map((item: any) => {
-            const ratio = Math.max(item.w / Math.max(item.h, 1), item.h / Math.max(item.w, 1));
-            return Math.abs(ratio - goldenRatio);
-        });
-        const avgDeviation = deviations.reduce((sum: number, value: number) => sum + value, 0) / Math.max(deviations.length, 1);
-        return this.clamp01(1 - avgDeviation);
-    }
-
-    private computeUniformityScore(items: any[], canvas: any): number {
-        if (items.length <= 1) {
-            return 1;
-        }
-
-        const horizontalGaps: number[] = [];
-        const verticalGaps: number[] = [];
-
-        for (const item of items) {
-            let nearestRightGap: number | null = null;
-            let nearestDownGap: number | null = null;
-
-            for (const other of items) {
-                if (other.index === item.index) continue;
-
-                const verticalOverlap = Math.min(item.bottom, other.bottom) - Math.max(item.y, other.y);
-                if (other.x >= item.right && verticalOverlap > 0) {
-                    const gap = other.x - item.right;
-                    if (nearestRightGap === null || gap < nearestRightGap) {
-                        nearestRightGap = gap;
-                    }
-                }
-
-                const horizontalOverlap = Math.min(item.right, other.right) - Math.max(item.x, other.x);
-                if (other.y >= item.bottom && horizontalOverlap > 0) {
-                    const gap = other.y - item.bottom;
-                    if (nearestDownGap === null || gap < nearestDownGap) {
-                        nearestDownGap = gap;
-                    }
-                }
-            }
-
-            if (nearestRightGap !== null) {
-                horizontalGaps.push(nearestRightGap);
-            }
-            if (nearestDownGap !== null) {
-                verticalGaps.push(nearestDownGap);
-            }
-        }
-
-        if (horizontalGaps.length === 0 && verticalGaps.length === 0) {
-            return 1;
-        }
-
-        const sigmaX = this.computeStandardDeviation(horizontalGaps);
-        const sigmaY = this.computeStandardDeviation(verticalGaps);
-        const parts = [sigmaX, sigmaY].filter((value) => Number.isFinite(value));
-        const sigmaAvg = parts.reduce((sum, value) => sum + value, 0) / Math.max(parts.length, 1);
-        const threshold = Math.max(canvas.width / 10, 1);
-        return this.clamp01(1 - (sigmaAvg / threshold));
-    }
-
-    private computeSimplicityScore(widgetCount: number): number {
-        if (widgetCount < 4) {
-            return this.clamp01(1 - ((4 - widgetCount) / 4));
-        }
-        if (widgetCount <= 9) {
-            return 1;
-        }
-        return this.clamp01(1 - ((widgetCount - 9) / 9));
-    }
-
-    private computeSequenceScore(items: any[]): number {
-        if (items.length <= 1) {
-            return 1;
-        }
-
-        const idealOrder = [...items]
-            .sort((a: any, b: any) => a.y - b.y || a.x - b.x || a.index - b.index)
-            .map((item: any) => item.index);
-        const totalPairs = (idealOrder.length * (idealOrder.length - 1)) / 2;
-
-        if (totalPairs === 0) {
-            return 1;
-        }
-
-        let inversions = 0;
-        for (let i = 0; i < idealOrder.length; i++) {
-            for (let j = i + 1; j < idealOrder.length; j++) {
-                if (idealOrder[i] > idealOrder[j]) {
-                    inversions += 1;
-                }
-            }
-        }
-
-        return this.clamp01(1 - (inversions / totalPairs));
-    }
-
-    private findOverlappingPairs(items: any[]) {
-        const pairs: Array<{ left: string; right: string }> = [];
-        for (let i = 0; i < items.length; i++) {
-            for (let j = i + 1; j < items.length; j++) {
-                const a = items[i];
-                const b = items[j];
-                const overlaps = a.x < b.right && a.right > b.x && a.y < b.bottom && a.bottom > b.y;
-                if (overlaps) {
-                    pairs.push({ left: a.title, right: b.title });
-                }
-            }
-        }
-        return pairs;
-    }
-
-    private buildAestheticIssues(items: any[], canvas: any, rawScores: any, overlapPairs: Array<{ left: string; right: string }>) {
-        const issues: any[] = [];
-        const totalArea = items.reduce((sum: number, item: any) => sum + item.area, 0);
-        const fillRatio = totalArea / Math.max(canvas.area, 1);
-
-        if (overlapPairs.length > 0) {
-            issues.push({
-                metric: 'layout',
-                severity: 'high',
-                reason: `检测到 ${overlapPairs.length} 组 panel 存在重叠，可能影响阅读和交互。`
-            });
-        }
-
-        if (rawScores.density < 0.85) {
-            issues.push({
-                metric: 'density',
-                severity: this.scoreToSeverity(rawScores.density),
-                reason: fillRatio < 0.25
-                    ? `当前填充率约为 ${this.roundNumber(fillRatio * 100)}%，留白偏多，布局显得偏松。`
-                    : `当前填充率约为 ${this.roundNumber(fillRatio * 100)}%，组件偏挤，信息密度过高。`
-            });
-        }
-
-        if (rawScores.symmetry < 0.85) {
-            issues.push({
-                metric: 'symmetry',
-                severity: this.scoreToSeverity(rawScores.symmetry),
-                reason: '左右区域的镜像关系较弱，面板在左右两侧的呼应不够明显。'
-            });
-        }
-
-        if (rawScores.balance < 0.85) {
-            issues.push({
-                metric: 'balance',
-                severity: this.scoreToSeverity(rawScores.balance),
-                reason: '左右视觉重量分布不均衡，画面重心偏向单侧。'
-            });
-        }
-
-        if (rawScores.proportionality < 0.85) {
-            issues.push({
-                metric: 'proportionality',
-                severity: this.scoreToSeverity(rawScores.proportionality),
-                reason: '部分面板长宽比差异较大，整体比例协调性不足。'
-            });
-        }
-
-        if (rawScores.uniformity < 0.85) {
-            issues.push({
-                metric: 'uniformity',
-                severity: this.scoreToSeverity(rawScores.uniformity),
-                reason: '组件之间的水平或垂直间距不够统一，网格节奏不稳定。'
-            });
-        }
-
-        if (rawScores.simplicity < 0.85) {
-            issues.push({
-                metric: 'simplicity',
-                severity: this.scoreToSeverity(rawScores.simplicity),
-                reason: items.length < 4
-                    ? `当前仅有 ${items.length} 个 panel，信息量偏少，层次表达可能不够完整。`
-                    : `当前共有 ${items.length} 个 panel，数量偏多，容易造成画面碎片化。`
-            });
-        }
-
-        if (rawScores.sequence < 0.85) {
-            issues.push({
-                metric: 'sequence',
-                severity: this.scoreToSeverity(rawScores.sequence),
-                reason: '面板顺序与从左上到右下的阅读流不够一致，浏览路径不够自然。'
-            });
-        }
-
-        return issues;
-    }
-
-    private buildAestheticSuggestions(items: any[], rawScores: any, overlapPairs: Array<{ left: string; right: string }>) {
-        const suggestions: any[] = [];
-
-        if (overlapPairs.length > 0) {
-            suggestions.push({
-                category: 'layout',
-                priority: 'high',
-                message: '先消除面板重叠，再进行其他美化调整，避免遮挡和点击冲突。'
-            });
-        }
-
-        if (rawScores.density < 0.85) {
-            suggestions.push({
-                category: 'layout',
-                priority: this.scoreToPriority(rawScores.density),
-                message: rawScores.density < 0.5
-                    ? '优先重新分配画布空间：减少过度留白或缓解组件拥挤，让填充率回到舒适区间。'
-                    : '微调面板尺寸和留白，让画面疏密更均衡。'
-            });
-        }
-
-        if (rawScores.balance < 0.85 || rawScores.symmetry < 0.85) {
-            suggestions.push({
-                category: 'layout',
-                priority: this.scoreToPriority(Math.min(rawScores.balance, rawScores.symmetry)),
-                message: `尝试让左右两侧的组件面积和位置更对称，避免核心视觉重量过度集中在单侧。`
-            });
-        }
-
-        if (rawScores.uniformity < 0.85) {
-            suggestions.push({
-                category: 'layout',
-                priority: this.scoreToPriority(rawScores.uniformity),
-                message: '统一相邻卡片的间距、宽度和高度，尽量让同层级组件使用稳定的网格节奏。'
-            });
-        }
-
-        if (rawScores.proportionality < 0.85) {
-            suggestions.push({
-                category: 'layout',
-                priority: this.scoreToPriority(rawScores.proportionality),
-                message: '减少过扁或过高的面板，优先复用接近统一比例的卡片尺寸。'
-            });
-        }
-
-        if (rawScores.simplicity < 0.85) {
-            suggestions.push({
-                category: 'layout',
-                priority: this.scoreToPriority(rawScores.simplicity),
-                message: items.length > 9
-                    ? '合并零散小面板，减少首屏碎片化信息。'
-                    : '适当增加辅助面板或放大核心面板，增强层次表达。'
-            });
-        }
-
-        if (rawScores.sequence < 0.85) {
-            suggestions.push({
-                category: 'layout',
-                priority: this.scoreToPriority(rawScores.sequence),
-                message: '按“左上到右下”的阅读流重新排序面板，把最重要的内容放在左上或首屏。'
-            });
-        }
-
-        if (suggestions.length === 0) {
-            suggestions.push({
-                category: 'layout',
-                priority: 'low',
-                message: `当前布局整体较稳定，可在保持网格结构的前提下微调关键面板的面积与位置。`
-            });
-        }
-
-        return this.deduplicateSuggestions(suggestions);
-    }
-
-    private deduplicateSuggestions(suggestions: any[]) {
-        const seen = new Set<string>();
-        return suggestions.filter((suggestion) => {
-            const key = `${suggestion.category}|${suggestion.priority}|${suggestion.message}`;
-            if (seen.has(key)) {
-                return false;
-            }
-            seen.add(key);
-            return true;
-        });
-    }
-
-    private computeStandardDeviation(values: number[]): number {
-        if (!Array.isArray(values) || values.length <= 1) {
-            return 0;
-        }
-
-        const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
-        const variance = values.reduce((sum, value) => sum + ((value - mean) ** 2), 0) / (values.length - 1);
-        return Math.sqrt(variance);
-    }
-
-    private scoreToSeverity(score: number): 'high' | 'medium' | 'low' {
-        if (score < 0.5) {
-            return 'high';
-        }
-        if (score < 0.7) {
-            return 'medium';
-        }
-        return 'low';
-    }
-
-    private scoreToPriority(score: number): 'high' | 'medium' | 'low' {
-        if (score < 0.5) {
-            return 'high';
-        }
-        if (score < 0.7) {
-            return 'medium';
-        }
-        return 'low';
-    }
-
-    private toPercentageScore(score: number): number {
-        return this.roundNumber(this.clamp01(score) * 100);
-    }
-
-    private clamp01(value: number): number {
-        if (!Number.isFinite(value)) {
-            return 0;
-        }
-        return Math.min(1, Math.max(0, value));
-    }
-
-    private roundNumber(value: number): number {
-        return Math.round(value * 100) / 100;
+        return analyzeDashboardAesthetics(widgets);
     }
 
     private buildDefaultTabContent(widgets: any[]) {

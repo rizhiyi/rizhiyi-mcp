@@ -821,7 +821,7 @@ export const dashboardTools: ToolDefinition[] = [
                                         byFields: { type: 'array', items: { type: 'string' }, description: '分组字段名列表' },
                                         grid: {
                                             type: 'object',
-                                            description: '图表布局位置和大小。网格系统总宽12。例如 {"x":0, "y":0, "w":6, "h":5}',
+                                            description: '图表布局位置和大小。网格系统总宽12。例如 {"x":0, "y":0, "w":6, "h":5}。若不传，服务端会根据 panel 数量和图表类型自动分配默认布局。',
                                             properties: {
                                                 x: { type: 'integer' },
                                                 y: { type: 'integer' },
@@ -909,7 +909,7 @@ export const dashboardTools: ToolDefinition[] = [
                         description: { type: 'string', description: '图表说明' },
                         grid: {
                             type: 'object',
-                            description: '图表布局位置和大小',
+                            description: '图表布局位置和大小。若不传，服务端会在保留现有 panels 布局的前提下，为新 panel 自动分配一个不重叠的默认位置。',
                             properties: {
                                 x: { type: 'integer' },
                                 y: { type: 'integer' },
