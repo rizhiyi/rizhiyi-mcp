@@ -6,9 +6,15 @@ import {
     buildGridForAdditionalPanel as buildAdditionalPanelGrid
 } from './dashboard/layout.js';
 import {
+    DEFAULT_DASHBOARD_SCHEME,
     findPanelMatches as findMatchingPanels,
+    getWidgetColor as extractWidgetColor,
     getWidgetId as extractWidgetId,
     getWidgetTitle as extractWidgetTitle,
+    isColorInDashboardScheme as isColorAllowedInScheme,
+    isSupportedDashboardScheme as isSupportedColorScheme,
+    listSupportedDashboardSchemes,
+    normalizeDashboardScheme as normalizeColorSchemeName,
     normalizePanelSpec as normalizePanelDefinition,
     panelToWidget as mapPanelToWidget,
     patchWidgetWithChanges as patchWidget,
@@ -106,18 +112,7 @@ export class DashboardModule {
                 const tab = tabs[i];
                 const widgets = (tab.panels || []).map((panel: any, index: number) => this.panelToWidget(panel, index));
 
-                const tabContent = {
-                    refresh: { time: 3, unit: 'm', on: false, showRefreshProcess: true },
-                    showFilters: true,
-                    showTitle: true,
-                    editable: true,
-                    scheme: 'schemecat1',
-                    theme: 'day',
-                    activeDrilldown: false,
-                    autoUpdate: true,
-                    filters: [],
-                    widgets: widgets
-                };
+                const tabContent = this.buildDefaultTabContent(widgets, tab.scheme);
 
                 const tabPayload = {
                     name: tab.name || `Tab ${i + 1}`,
@@ -323,7 +318,7 @@ export class DashboardModule {
             );
         }
 
-        const analysis = this.buildAestheticsAnalysis(widgets);
+        const analysis = this.buildAestheticsAnalysis(widgets, { scheme: content?.scheme });
 
         return {
             status: 200,
@@ -336,6 +331,7 @@ export class DashboardModule {
                 canvas: analysis.canvas,
                 scores: analysis.scores,
                 overall_score: analysis.overallScore,
+                color_analysis: analysis.colorAnalysis,
                 issues: analysis.issues,
                 suggestions: analysis.suggestions,
                 message: 'Dashboard aesthetics evaluated successfully'
@@ -412,6 +408,11 @@ export class DashboardModule {
         const { dashboard, tab, content } = contextResult.data;
         const widgets = Array.isArray(content.widgets) ? [...content.widgets] : [];
         const panelTitle = panel.title;
+        const schemeResult = this.resolveTabScheme(content);
+        if (schemeResult.error) {
+            return schemeResult;
+        }
+        const tabScheme = schemeResult.data.scheme;
 
         if (this.findPanelMatches(widgets, panelTitle).length > 0) {
             return this.buildError(
@@ -422,6 +423,10 @@ export class DashboardModule {
         }
 
         const normalizedPanel = this.normalizePanelSpec(panel, widgets.length, { applyDefaultGrid: false });
+        const panelColorError = this.validatePanelColorForScheme(normalizedPanel, tabScheme);
+        if (panelColorError) {
+            return panelColorError;
+        }
         if (!normalizedPanel.grid) {
             normalizedPanel.grid = this.buildGridForAdditionalPanel(normalizedPanel, widgets);
         }
@@ -429,6 +434,7 @@ export class DashboardModule {
 
         const updatedContent = {
             ...content,
+            scheme: tabScheme,
             widgets
         };
 
@@ -503,12 +509,55 @@ export class DashboardModule {
             return panelError;
         }
 
+        const currentSchemeResult = this.resolveTabScheme(content);
+        if (currentSchemeResult.error) {
+            return currentSchemeResult;
+        }
+
+        const wantsSchemeChange = Object.prototype.hasOwnProperty.call(changes, 'scheme');
+        const wantsColorChange = Object.prototype.hasOwnProperty.call(changes, 'color');
+        let targetScheme = currentSchemeResult.data.scheme;
+        if (wantsSchemeChange) {
+            targetScheme = this.normalizeDashboardColorScheme(changes.scheme);
+            const schemeError = this.validateDashboardScheme(targetScheme);
+            if (schemeError) {
+                return schemeError;
+            }
+        }
+
+        if (wantsSchemeChange || wantsColorChange) {
+            const panelColorError = this.validatePanelColorForScheme(mergedPanel, targetScheme);
+            if (panelColorError) {
+                return panelColorError;
+            }
+        }
+
         widgets[match.index] = this.patchWidgetWithChanges(match.widget, mergedPanel, changes);
 
         const updatedContent = {
             ...content,
+            scheme: targetScheme,
             widgets
         };
+
+        if (wantsSchemeChange) {
+            const conflictResult = this.collectTabSchemeConflicts(updatedContent, targetScheme);
+            if (conflictResult.error) {
+                return conflictResult;
+            }
+            if (conflictResult.data.length > 0) {
+                return this.buildError(
+                    'TAB_SCHEME_COLOR_CONFLICT',
+                    `标签页 ${tab_name} 的目标主题 ${targetScheme} 与现有图表颜色冲突。`,
+                    '请先将当前 tab 内冲突 panel 的 color 改成该主题内的颜色，或保持当前主题。',
+                    {
+                        scheme: targetScheme,
+                        conflicts: conflictResult.data
+                    }
+                );
+            }
+
+        }
 
         const saveResult = await this.saveTabContent(dashboard_id, tab, updatedContent);
         if (saveResult.error) {
@@ -745,6 +794,7 @@ export class DashboardModule {
             const normalizedPanels = this.normalizePanels(Array.isArray(tab?.panels) ? tab.panels : []);
             return {
                 name: tab?.name,
+                scheme: this.normalizeDashboardColorScheme(tab?.scheme ?? spec?.scheme),
                 panels: normalizedPanels
             };
         }) : [];
@@ -785,10 +835,20 @@ export class DashboardModule {
                 );
             }
 
+            const schemeError = this.validateDashboardScheme(tab?.scheme);
+            if (schemeError) {
+                return schemeError;
+            }
+
             for (const panel of tab.panels) {
                 const panelError = this.validatePanelSpec(panel);
                 if (panelError) {
                     return panelError;
+                }
+
+                const panelColorError = this.validatePanelColorForScheme(panel, tab.scheme);
+                if (panelColorError) {
+                    return panelColorError;
                 }
             }
         }
@@ -816,6 +876,10 @@ export class DashboardModule {
         return extractWidgetId(widget);
     }
 
+    private getWidgetColor(widget: any): string {
+        return extractWidgetColor(widget);
+    }
+
     private patchWidgetWithChanges(widget: any, mergedPanel: any, changes: any): any {
         return patchWidget(widget, mergedPanel, changes);
     }
@@ -839,17 +903,88 @@ export class DashboardModule {
         return applyLayoutStrategyToWidgets(widgets, strategy);
     }
 
-    private buildAestheticsAnalysis(widgets: any[]) {
-        return analyzeDashboardAesthetics(widgets);
+    private buildAestheticsAnalysis(widgets: any[], options: { scheme?: string } = {}) {
+        return analyzeDashboardAesthetics(widgets, options);
     }
 
-    private buildDefaultTabContent(widgets: any[]) {
+    private normalizeDashboardColorScheme(scheme?: string): string {
+        return normalizeColorSchemeName(scheme);
+    }
+
+    private validateDashboardScheme(scheme?: string): any | null {
+        if (isSupportedColorScheme(scheme)) {
+            return null;
+        }
+
+        return this.buildError(
+            'INVALID_DASHBOARD_SCHEME',
+            `不支持的主题色方案: ${scheme}`,
+            `请使用以下主题之一：${listSupportedDashboardSchemes().join('、')}。`,
+            { supported_schemes: listSupportedDashboardSchemes() }
+        );
+    }
+
+    private validatePanelColorForScheme(panel: any, scheme: string): any | null {
+        if (!panel?.color) {
+            return null;
+        }
+
+        if (isColorAllowedInScheme(scheme, panel.color)) {
+            return null;
+        }
+
+        return this.buildError(
+            'INVALID_PANEL_COLOR',
+            `panel ${panel.title || ''} 的颜色 ${panel.color} 不属于主题 ${scheme}。`,
+            '请改用当前 tab 主题色卡中的颜色，或先显式切换当前 tab 的 scheme。',
+            {
+                panel_title: panel.title || '',
+                color: panel.color,
+                scheme
+            }
+        );
+    }
+
+    private resolveTabScheme(content: any): any {
+        const scheme = this.normalizeDashboardColorScheme(content?.scheme);
+        const schemeError = this.validateDashboardScheme(scheme);
+        if (schemeError) {
+            return schemeError;
+        }
+
+        return {
+            status: 200,
+            data: { scheme }
+        };
+    }
+
+    private collectTabSchemeConflicts(content: any, targetScheme: string): any {
+        const widgets = Array.isArray(content?.widgets) ? content.widgets : [];
+        const conflicts: Array<{ panel_title: string; color: string }> = [];
+
+        widgets.forEach((widget: any, index: number) => {
+            const color = this.getWidgetColor(widget);
+            if (color && !isColorAllowedInScheme(targetScheme, color)) {
+                conflicts.push({
+                    panel_title: this.getWidgetTitle(widget) || `Panel ${index + 1}`,
+                    color
+                });
+            }
+        });
+
+        return {
+            status: 200,
+            data: conflicts
+        };
+    }
+
+    private buildDefaultTabContent(widgets: any[], scheme: string = DEFAULT_DASHBOARD_SCHEME) {
         return {
             refresh: { time: 3, unit: 'm', on: false, showRefreshProcess: true },
             showFilters: true,
             showTitle: true,
             editable: true,
-            scheme: 'schemecat1',
+            scheme: this.normalizeDashboardColorScheme(scheme),
             theme: 'day',
             activeDrilldown: false,
             autoUpdate: true,

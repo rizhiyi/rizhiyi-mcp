@@ -771,7 +771,7 @@ export const dashboardTools: ToolDefinition[] = [
     },
     {
         name: 'create_dashboard_from_spec',
-        description: '根据完整的 dashboard 说明创建仪表盘。适合已经明确 tabs 和 panels 结构的场景。',
+        description: '根据完整的 dashboard 说明创建仪表盘。适合已经明确 tabs 和 panels 结构的场景。注意：同一个 tab 内所有 chart 必须使用同一套 scheme 主题色，不同 tab 之间可以不同。',
         inputSchema: {
             type: 'object',
             properties: {
@@ -795,6 +795,12 @@ export const dashboardTools: ToolDefinition[] = [
                     default: 'local',
                     enum: ['local', 'system']
                 },
+                scheme: {
+                    type: 'string',
+                    description: '默认主题色方案。作为 tabs[*].scheme 未显式提供时的默认值；默认 schemecat1。',
+                    default: 'schemecat1',
+                    enum: ['schemecat1', 'schemecat2', 'schemecat3', 'schemecat4']
+                },
                 tabs: {
                     type: 'array',
                     description: '标签页列表',
@@ -804,6 +810,11 @@ export const dashboardTools: ToolDefinition[] = [
                             name: {
                                 type: 'string',
                                 description: '标签页名称'
+                            },
+                            scheme: {
+                                type: 'string',
+                                description: '当前 tab 的主题色方案。该 tab 内所有 panel 的 color 都必须来自这套色卡；不传时继承顶层 scheme 或默认 schemecat1。',
+                                enum: ['schemecat1', 'schemecat2', 'schemecat3', 'schemecat4']
                             },
                             panels: {
                                 type: 'array',
@@ -819,6 +830,7 @@ export const dashboardTools: ToolDefinition[] = [
                                         xField: { type: 'string', description: 'X轴字段名' },
                                         yField: { type: 'string', description: 'Y轴字段名' },
                                         byFields: { type: 'array', items: { type: 'string' }, description: '分组字段名列表' },
+                                        color: { type: 'string', description: '图表主色，映射到 searchData.chartStartingColor。必须从当前 tab 的 scheme 色卡中选择，例如 #F6903D。' },
                                         grid: {
                                             type: 'object',
                                             description: '图表布局位置和大小。网格系统总宽12。例如 {"x":0, "y":0, "w":6, "h":5}。若不传，服务端会根据 panel 数量和图表类型自动分配默认布局。',
@@ -882,7 +894,7 @@ export const dashboardTools: ToolDefinition[] = [
     },
     {
         name: 'add_dashboard_panel',
-        description: '向指定 dashboard/tab 新增一个 panel。请注意：panel 类型(type) 与图表展示类型(chartType) 是两回事。当前写入优先支持 type=trend 或 type=eventsTable；pie/single/table/sunburst/bar/column 等应放在 chartType 中，而不是 type 中。',
+        description: '向指定 dashboard/tab 新增一个 panel。请注意：panel 类型(type) 与图表展示类型(chartType) 是两回事。当前写入优先支持 type=trend 或 type=eventsTable；pie/single/table/sunburst/bar/column 等应放在 chartType 中，而不是 type 中。若传 color，必须属于该 tab 当前 scheme。',
         inputSchema: {
             type: 'object',
             properties: {
@@ -906,6 +918,7 @@ export const dashboardTools: ToolDefinition[] = [
                         xField: { type: 'string', description: 'X 轴字段' },
                         yField: { type: 'string', description: 'Y 轴字段' },
                         byFields: { type: 'array', items: { type: 'string' }, description: '分组字段列表' },
+                        color: { type: 'string', description: '图表主色，映射到 searchData.chartStartingColor。必须从当前 tab 的 scheme 色卡中选择，例如 #F6903D。' },
                         description: { type: 'string', description: '图表说明' },
                         grid: {
                             type: 'object',
@@ -926,7 +939,7 @@ export const dashboardTools: ToolDefinition[] = [
     },
     {
         name: 'update_dashboard_panel',
-        description: '更新指定 dashboard/tab 下某个 panel 的内容，例如标题、query、时间范围、chartType 或局部布局。',
+        description: '更新指定 dashboard/tab 下某个 panel 的内容，例如标题、query、时间范围、chartType、主题色或局部布局。注意：同一个 tab 内所有 chart 必须使用同一套 scheme，不同 tab 之间可以不同。',
         inputSchema: {
             type: 'object',
             properties: {
@@ -954,7 +967,8 @@ export const dashboardTools: ToolDefinition[] = [
                         query: { type: 'string', description: '新的查询语句' },
                         time_range: { type: 'string', description: '新的时间范围' },
                         chartType: { type: 'string', description: '新的图表展示类型。trend 常见值为 line/pie/single/table/sunburst/multiaxis/bar/column，eventsTable 固定为 eventsTable', enum: ['line', 'pie', 'single', 'table', 'sunburst', 'multiaxis', 'bar', 'column', 'scatter', 'area', 'networkflow', 'tracing', 'eventsTable'] },
-                        color: { type: 'string', description: '新的图表主色，映射到 searchData.chartStartingColor，例如 #F6903D' },
+                        scheme: { type: 'string', description: '新的当前 tab 主题色方案。传入后只会更新当前 tab 的 scheme，并校验当前 tab 内现有 panel 颜色是否都属于该主题。', enum: ['schemecat1', 'schemecat2', 'schemecat3', 'schemecat4'] },
+                        color: { type: 'string', description: '新的图表主色，映射到 searchData.chartStartingColor，例如 #F6903D。必须属于当前 tab 的 scheme；若同时传 scheme，则必须属于目标 scheme。' },
                         xField: { type: 'string', description: '新的 X 轴字段' },
                         yField: { type: 'string', description: '新的 Y 轴字段' },
                         byFields: { type: 'array', items: { type: 'string' }, description: '新的分组字段列表' },
