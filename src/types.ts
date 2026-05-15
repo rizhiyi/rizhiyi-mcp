@@ -75,6 +75,48 @@ export interface FieldValuesListResponse {
     total?: number;
 }
 
+export type QueryPrecheckMode = 'syntax_only' | 'data_only' | 'full';
+
+export interface QueryPrecheckSyntaxResult {
+    checked: boolean;
+    passed: boolean;
+    error_message?: string;
+    hints?: string[];
+    raw?: Record<string, any>;
+}
+
+export interface QueryPrecheckDataResult {
+    checked: boolean;
+    has_data?: boolean;
+    total_hits?: number;
+    sample_hit_count?: number;
+    available_fields?: string[];
+    sample_rows?: Array<Record<string, any>>;
+    terminated_after_size?: number;
+}
+
+export interface QueryPrecheckFieldResult {
+    checked: boolean;
+    field_match?: boolean;
+    expected_fields?: string[];
+    missing_fields?: string[];
+    field_suggestions?: Record<string, string[]>;
+}
+
+export interface QueryPrecheckResponse {
+    query: string;
+    mode: QueryPrecheckMode;
+    syntax_check: QueryPrecheckSyntaxResult;
+    data_check: QueryPrecheckDataResult;
+    field_check: QueryPrecheckFieldResult;
+    has_data: boolean | null;
+    available_fields: string[];
+    missing_fields: string[];
+    field_suggestions: Record<string, string[]>;
+    recommended_next_action: 'fix_query_syntax' | 'fix_query_or_time_range' | 'fix_field_mapping' | 'proceed';
+    recommendation_reason: string;
+}
+
 // 时间序列相关接口
 export interface TimeSeriesPoint {
     timestamp: string;

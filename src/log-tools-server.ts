@@ -54,6 +54,7 @@ const SERVER_LEVEL_INSTRUCTIONS = `使用说明:
 2. 分布：涉及哪些服务/级别/错误类型？
 3. 趋势：数量在增加、稳定还是减少？
 4. 再采样：先摸清全局，再获取具体条目
+5. 若后续要创建或更新 dashboard 图表，请先调用 query_precheck，确认 query 语法、数据和字段映射都没问题。
 
 ## 分析框架
 ### 第一步：俯瞰全局
@@ -110,6 +111,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 
             case 'list_field_values':
                 return await handleListFieldValues(parameters);
+
+            case 'query_precheck':
+                return await handleQueryPrecheck(parameters);
 
             // 统计分析工具
             case 'data_overview':
@@ -249,6 +253,29 @@ async function handleListFieldValues(params: any) {
         params.index_name || "yotta",
         params.limit || 100
     );
+    return formatResult(result, params);
+}
+
+async function handleQueryPrecheck(params: any) {
+    if (!params?.query) {
+        return buildToolError(
+            'MISSING_REQUIRED_PARAM',
+            'query_precheck 需要 query。',
+            '请提供要预检的 SPL 查询语句；创图前建议使用 mode=full。'
+        );
+    }
+
+    const result = await logSearchModule.executeQueryPrecheck({
+        query: params.query,
+        time_range: params.time_range || 'now-15m,now',
+        index_name: params.index_name || 'yotta',
+        mode: params.mode || 'full',
+        expected_fields: params.expected_fields || [],
+        field_mapping: params.field_mapping || {},
+        sample_size: params.sample_size || 20,
+        terminated_after_size: params.terminated_after_size || 100,
+        sample_fields: params.sample_fields || []
+    });
     return formatResult(result, params);
 }
 

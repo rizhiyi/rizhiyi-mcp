@@ -5,7 +5,12 @@ import {
     LogReduceResponse, 
     FieldsListResponse, 
     FieldValuesListResponse,
-    LogReduceParams 
+    LogReduceParams,
+    QueryPrecheckDataResult,
+    QueryPrecheckFieldResult,
+    QueryPrecheckMode,
+    QueryPrecheckResponse,
+    QueryPrecheckSyntaxResult
 } from '../types.js';
 
 export class LogSearchModule {
@@ -74,6 +79,125 @@ export class LogSearchModule {
         if (data?.data) return this.extractRows(data.data);
         if (data?.hits) return data.hits;
         return [];
+    }
+
+    private extractAvailableFields(data: any): string[] {
+        const fieldsFromMetadata = Array.isArray(data?.results?.fields)
+            ? data.results.fields
+                .map((fieldInfo: any) => fieldInfo?.name)
+                .filter((name: unknown): name is string => typeof name === 'string' && name.length > 0)
+            : [];
+
+        if (fieldsFromMetadata.length > 0) {
+            return Array.from(new Set(fieldsFromMetadata));
+        }
+
+        const rows = Array.isArray(data?.results?.sheets?.rows) ? data.results.sheets.rows : [];
+        const rowFields = rows.flatMap((row: Record<string, unknown>) => Object.keys(row || {}));
+        return Array.from(new Set(rowFields));
+    }
+
+    private normalizeFieldName(field: string): string {
+        return field.toLowerCase().replace(/[^a-z0-9]/g, '');
+    }
+
+    private flattenExpectedFields(expectedFields?: string[], fieldMapping?: Record<string, any>): string[] {
+        const flattened: string[] = [];
+
+        if (Array.isArray(expectedFields)) {
+            flattened.push(...expectedFields);
+        }
+
+        if (fieldMapping && typeof fieldMapping === 'object') {
+            for (const value of Object.values(fieldMapping)) {
+                if (typeof value === 'string') {
+                    flattened.push(value);
+                } else if (Array.isArray(value)) {
+                    flattened.push(...value.filter((item): item is string => typeof item === 'string'));
+                }
+            }
+        }
+
+        return Array.from(new Set(flattened.map((field) => field.trim()).filter(Boolean)));
+    }
+
+    private buildFieldSuggestions(expectedFields: string[], availableFields: string[]): Record<string, string[]> {
+        const availableNormalized = availableFields.map((field) => ({
+            original: field,
+            normalized: this.normalizeFieldName(field)
+        }));
+        const suggestions: Record<string, string[]> = {};
+
+        for (const expectedField of expectedFields) {
+            const normalizedExpected = this.normalizeFieldName(expectedField);
+            const matched = availableNormalized
+                .filter(({ original, normalized }) => {
+                    const originalLower = original.toLowerCase();
+                    const expectedLower = expectedField.toLowerCase();
+                    return normalized === normalizedExpected ||
+                        originalLower.startsWith(expectedLower) ||
+                        expectedLower.startsWith(originalLower) ||
+                        originalLower.includes(expectedLower) ||
+                        expectedLower.includes(originalLower);
+                })
+                .map(({ original }) => original)
+                .slice(0, 3);
+
+            if (matched.length > 0) {
+                suggestions[expectedField] = Array.from(new Set(matched));
+            }
+        }
+
+        return suggestions;
+    }
+
+    private extractSyntaxErrorMessage(raw: any): string | undefined {
+        const candidates = [
+            raw?.error,
+            raw?.message,
+            raw?.msg,
+            raw?.error_info?.message,
+            raw?.error_info?.msg,
+            raw?.detail,
+            raw?.details?.message
+        ];
+
+        return candidates.find((item): item is string => typeof item === 'string' && item.trim().length > 0)?.trim();
+    }
+
+    private extractSyntaxHints(raw: any): string[] {
+        const candidates = [
+            raw?.suggestion,
+            raw?.suggestions,
+            raw?.hint,
+            raw?.hints,
+            raw?.syntax_desc,
+            raw?.desc
+        ];
+
+        const hints = candidates.flatMap((item) => {
+            if (typeof item === 'string' && item.trim().length > 0) {
+                return [item.trim()];
+            }
+            if (Array.isArray(item)) {
+                return item.filter((value): value is string => typeof value === 'string' && value.trim().length > 0).map((value) => value.trim());
+            }
+            return [];
+        });
+
+        return Array.from(new Set(hints));
+    }
+
+    private didSyntaxPrecheckPass(raw: any, errorMessage?: string): boolean {
+        if (raw?.result === false) return false;
+        if (raw?.error || raw?.error_info) return false;
+        if (typeof errorMessage === 'string' && errorMessage.length > 0) {
+            const lowered = errorMessage.toLowerCase();
+            if (lowered.includes('error') || lowered.includes('错误') || lowered.includes('failed') || lowered.includes('失败')) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -436,6 +560,229 @@ export class LogSearchModule {
                 message: `获取字段值列表出错: ${error.message}`
             };
         }
+    }
+
+    async executeQuerySyntaxPrecheck(
+        query: string,
+        timeRange: string = 'now-15m,now'
+    ): Promise<ApiResponse<QueryPrecheckSyntaxResult>> {
+        try {
+            const result = await this.client.get<any>('/api/v3/search/precheck/', {
+                query,
+                time_range: timeRange,
+                lang: 'zh_CN',
+                timeline: 'false',
+                statsevents: 'false'
+            });
+
+            if (result.error) {
+                return result;
+            }
+
+            const raw = result.data ?? {};
+            const errorMessage = this.extractSyntaxErrorMessage(raw);
+            const passed = this.didSyntaxPrecheckPass(raw, errorMessage);
+
+            return {
+                status: result.status,
+                data: {
+                    checked: true,
+                    passed,
+                    error_message: passed ? undefined : (errorMessage || '查询语法预检未通过'),
+                    hints: this.extractSyntaxHints(raw),
+                    raw
+                },
+                message: passed ? '查询语法预检通过' : '查询语法预检未通过'
+            };
+        } catch (error: any) {
+            return {
+                error: error.message,
+                message: `执行查询语法预检出错: ${error.message}`
+            };
+        }
+    }
+
+    async executeQueryDataPrecheck(
+        query: string,
+        timeRange: string,
+        indexName: string = 'yotta',
+        sampleSize: number = 20,
+        terminatedAfterSize: number = 100,
+        sampleFields?: string[]
+    ): Promise<ApiResponse<QueryPrecheckDataResult>> {
+        try {
+            const result = await this.client.get<any>('/api/v3/search/sheets/', {
+                query,
+                time_range: timeRange,
+                index_name: indexName,
+                size: sampleSize,
+                fields: true,
+                timeline: 'false',
+                highlight: 'false',
+                statsevents: 'false',
+                terminated_after_size: terminatedAfterSize
+            });
+
+            if (result.error) {
+                return result;
+            }
+
+            const raw = result.data ?? {};
+            const rows = Array.isArray(raw?.results?.sheets?.rows) ? raw.results.sheets.rows : [];
+            const availableFields = this.extractAvailableFields(raw);
+            const projectedRows = Array.isArray(sampleFields) && sampleFields.length > 0
+                ? rows.map((row: Record<string, any>) => {
+                    const projected: Record<string, any> = {};
+                    for (const field of sampleFields) {
+                        if (Object.prototype.hasOwnProperty.call(row, field)) {
+                            projected[field] = row[field];
+                        }
+                    }
+                    return projected;
+                })
+                : rows;
+
+            return {
+                status: result.status,
+                data: {
+                    checked: true,
+                    has_data: rows.length > 0,
+                    total_hits: Number(raw?.results?.total_hits ?? raw?.total_hits ?? rows.length ?? 0),
+                    sample_hit_count: rows.length,
+                    available_fields: availableFields,
+                    sample_rows: projectedRows,
+                    terminated_after_size: terminatedAfterSize
+                },
+                message: rows.length > 0 ? '查询有数预检通过' : '查询无数据'
+            };
+        } catch (error: any) {
+            return {
+                error: error.message,
+                message: `执行查询有数预检出错: ${error.message}`
+            };
+        }
+    }
+
+    async executeQueryPrecheck(params: {
+        query: string;
+        time_range?: string;
+        index_name?: string;
+        mode?: QueryPrecheckMode;
+        expected_fields?: string[];
+        field_mapping?: Record<string, any>;
+        sample_size?: number;
+        terminated_after_size?: number;
+        sample_fields?: string[];
+    }): Promise<ApiResponse<QueryPrecheckResponse>> {
+        const {
+            query,
+            time_range: timeRange = 'now-15m,now',
+            index_name: indexName = 'yotta',
+            mode = 'full',
+            expected_fields: expectedFields,
+            field_mapping: fieldMapping,
+            sample_size: sampleSize = 20,
+            terminated_after_size: terminatedAfterSize = 100,
+            sample_fields: sampleFields
+        } = params;
+
+        const flattenedExpectedFields = this.flattenExpectedFields(expectedFields, fieldMapping);
+        const syntaxCheck: QueryPrecheckSyntaxResult = { checked: false, passed: true };
+        const dataCheck: QueryPrecheckDataResult = { checked: false };
+        const fieldCheck: QueryPrecheckFieldResult = { checked: false };
+
+        if (mode === 'syntax_only' || mode === 'full') {
+            const syntaxResult = await this.executeQuerySyntaxPrecheck(query, timeRange);
+            if (syntaxResult.error || !syntaxResult.data) {
+                return {
+                    status: syntaxResult.status,
+                    error: syntaxResult.error || '查询语法预检失败',
+                    error_code: syntaxResult.error_code,
+                    suggestion: syntaxResult.suggestion,
+                    retryable: syntaxResult.retryable,
+                    details: syntaxResult.details,
+                    message: syntaxResult.message
+                };
+            }
+            Object.assign(syntaxCheck, syntaxResult.data);
+        }
+
+        if ((mode === 'data_only' || mode === 'full') && syntaxCheck.passed !== false) {
+            const mergedSampleFields = Array.from(new Set([...(sampleFields || []), ...flattenedExpectedFields]));
+            const dataResult = await this.executeQueryDataPrecheck(
+                query,
+                timeRange,
+                indexName,
+                sampleSize,
+                terminatedAfterSize,
+                mergedSampleFields.length > 0 ? mergedSampleFields : undefined
+            );
+            if (dataResult.error || !dataResult.data) {
+                return {
+                    status: dataResult.status,
+                    error: dataResult.error || '查询有数预检失败',
+                    error_code: dataResult.error_code,
+                    suggestion: dataResult.suggestion,
+                    retryable: dataResult.retryable,
+                    details: dataResult.details,
+                    message: dataResult.message
+                };
+            }
+            Object.assign(dataCheck, dataResult.data);
+        }
+
+        if (dataCheck.checked && flattenedExpectedFields.length > 0) {
+            const availableFields = dataCheck.available_fields || [];
+            const availableFieldSet = new Set(availableFields.map((field) => field.toLowerCase()));
+            const missingFields = flattenedExpectedFields.filter((field) => !availableFieldSet.has(field.toLowerCase()));
+            const fieldSuggestions = this.buildFieldSuggestions(missingFields, availableFields);
+
+            Object.assign(fieldCheck, {
+                checked: true,
+                field_match: missingFields.length === 0,
+                expected_fields: flattenedExpectedFields,
+                missing_fields: missingFields,
+                field_suggestions: fieldSuggestions
+            });
+        }
+
+        const availableFields = dataCheck.available_fields || [];
+        const missingFields = fieldCheck.missing_fields || [];
+        const fieldSuggestions = fieldCheck.field_suggestions || {};
+
+        let recommendedNextAction: QueryPrecheckResponse['recommended_next_action'] = 'proceed';
+        let recommendationReason = '查询通过预检，可以继续后续分析或创图。';
+
+        if (syntaxCheck.checked && !syntaxCheck.passed) {
+            recommendedNextAction = 'fix_query_syntax';
+            recommendationReason = syntaxCheck.error_message || '查询语法预检失败，请先修正 SPL 语句。';
+        } else if (dataCheck.checked && dataCheck.has_data === false) {
+            recommendedNextAction = 'fix_query_or_time_range';
+            recommendationReason = '语法通过但当前时间范围内无数据，请调整 query 或 time_range。';
+        } else if (fieldCheck.checked && fieldCheck.field_match === false) {
+            recommendedNextAction = 'fix_field_mapping';
+            recommendationReason = '查询有数据，但字段映射不匹配当前图表配置。';
+        } else if (mode === 'syntax_only') {
+            recommendationReason = '当前只完成语法预检；如果要创图，建议继续执行 data_only 或 full。';
+        }
+
+        return {
+            status: 200,
+            data: {
+                query,
+                mode,
+                syntax_check: syntaxCheck,
+                data_check: dataCheck,
+                field_check: fieldCheck,
+                has_data: typeof dataCheck.has_data === 'boolean' ? dataCheck.has_data : null,
+                available_fields: availableFields,
+                missing_fields: missingFields,
+                field_suggestions: fieldSuggestions,
+                recommended_next_action: recommendedNextAction,
+                recommendation_reason: recommendationReason
+            },
+            message: '查询预检完成'
+        };
     }
 
     /**

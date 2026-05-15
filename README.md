@@ -12,6 +12,7 @@
 - **`log-tools_server` (日志分析工具服务器 / rizhiyi_search)**：专门为日志分析场景设计的 MCP 服务器，仅包含日志搜索、统计、趋势预测和异常检测等功能，使 AI 智能体能够深入分析和监控日志数据。
   当前提供的高层能力包括：
   - `log_search_sheet`
+  - `query_precheck`
   - `log_reduce_pattern`
   - `log_reduce_preview`
   - `list_fields`
@@ -27,10 +28,11 @@
   所有工具通用输出控制参数：
   - `output_format`: auto|yaml|csv|json（默认 auto）
   - `include_raw_json`: 是否附带原始 JSON（默认 false）
-- **`dashboard-server` (仪表盘专用服务器)**：专门处理 Dashboard 这类复杂 JSON body 配置，通过语义化输入创建和校验仪表盘，避免 LLM 直接拼接底层 API body。
-  说明：根据真实 dashboard 数据，绝大多数图表面板的 `type` 为 `trend`，而 `pie`、`single`、`table`、`sunburst` 等通常属于 `chartType`；事件列表则使用独立的 `eventsTable` 类型。
+- **`dashboard-server` (仪表盘专用服务器)**：专门处理 Dashboard 这类复杂 JSON body 配置，通过语义化输入创建和校验仪表盘，避免 LLM 直接拼接底层 API body。此外还提供了布局和配色美观度评分规则，可以辅助智能体设计出更美观的仪表盘。
   当前提供的高层能力包括：
   - `list_dashboard_tabs`
+  - `get_dashboard_tab_content`
+  - `evaluate_dashboard_aesthetics`
   - `list_dashboard_panels`
   - `create_dashboard_from_template`
   - `create_dashboard_from_spec`

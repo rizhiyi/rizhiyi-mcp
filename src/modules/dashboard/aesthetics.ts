@@ -4,7 +4,8 @@ import {
     getWidgetColor,
     getWidgetId,
     getWidgetTitle,
-    normalizeDashboardScheme
+    normalizeDashboardScheme,
+    normalizePanelKind
 } from './panel-utils.js';
 
 type Severity = 'high' | 'medium' | 'low';
@@ -18,6 +19,11 @@ const SECONDARY_HUE_OFFSETS = [120, 135, 150, -120, -135, -150];
 const ACCENT_HUE_OFFSETS = [60, -60];
 const MIN_DARK_CONTRAST = 4.5;
 const DARK_BACKGROUND_COLOR = '#0B1220';
+const DEFAULT_SINGLE_GRID_PX_PER_H = 105;
+const DEFAULT_SINGLE_HEADER_CHROME_PX = 38;
+const DEFAULT_SINGLE_FONT_SIZE_PX = 60;
+const SINGLE_HEIGHT_RATIO_COMFORT_MIN = 0.22;
+const SINGLE_HEIGHT_RATIO_ACCEPTABLE_MAX = 0.48;
 
 export function buildAestheticsAnalysis(widgets: any[], options: { scheme?: string } = {}) {
     const items = extractAestheticItems(widgets);
@@ -84,6 +90,18 @@ function extractAestheticItems(widgets: any[]) {
         const w = Number.isFinite(widget?.w) && Number(widget.w) > 0 ? Number(widget.w) : 6;
         const h = Number.isFinite(widget?.h) && Number(widget.h) > 0 ? Number(widget.h) : 5;
         const area = w * h;
+        const normalized = normalizePanelKind(
+            widget?.type || widget?.panel_type || 'trend',
+            widget?.searchData?.chartType || widget?.chart?.chartType || widget?.chart?.showType
+        );
+        const chartType = normalized.chartType;
+        const singleValueFontSize = chartType === 'single' ? getSingleValueFontSize(widget) : null;
+        const singleValueHeightRatio = chartType === 'single'
+            ? estimateSingleValueHeightRatio(h, singleValueFontSize || DEFAULT_SINGLE_FONT_SIZE_PX)
+            : null;
+        const effectiveAreaFactor = chartType === 'single' && singleValueHeightRatio !== null
+            ? clamp01(singleValueHeightRatio)
+            : 1;
 
         return {
             index,
@@ -98,6 +116,11 @@ function extractAestheticItems(widgets: any[]) {
             cx: x + w / 2,
             cy: y + h / 2,
             area,
+            effectiveArea: area * effectiveAreaFactor,
+            effectiveAreaFactor,
+            chartType,
+            singleValueFontSize,
+            singleValueHeightRatio,
             color: getWidgetColor(widget)
         };
     });
@@ -733,7 +756,7 @@ function calculateCanvas(items: any[]) {
 }
 
 function computeDensityScore(items: any[], canvas: any): number {
-    const totalArea = items.reduce((sum: number, item: any) => sum + item.area, 0);
+    const totalArea = items.reduce((sum: number, item: any) => sum + getVisualArea(item), 0);
     const ratio = totalArea / Math.max(canvas.area, 1);
     if (ratio < 0.25) {
         return clamp01(ratio / 0.25);
@@ -800,10 +823,11 @@ function computeBalanceScore(items: any[], canvas: any): number {
     let rightMoment = 0;
 
     for (const item of items) {
+        const visualArea = getVisualArea(item);
         if (item.cx < centerX) {
-            leftMoment += item.area * (centerX - item.cx);
+            leftMoment += visualArea * (centerX - item.cx);
         } else if (item.cx > centerX) {
-            rightMoment += item.area * (item.cx - centerX);
+            rightMoment += visualArea * (item.cx - centerX);
         }
     }
 
@@ -926,8 +950,9 @@ function findOverlappingPairs(items: any[]) {
 
 function buildAestheticIssues(items: any[], canvas: any, rawScores: any, overlapPairs: Array<{ left: string; right: string }>) {
     const issues: any[] = [];
-    const totalArea = items.reduce((sum: number, item: any) => sum + item.area, 0);
+    const totalArea = items.reduce((sum: number, item: any) => sum + getVisualArea(item), 0);
     const fillRatio = totalArea / Math.max(canvas.area, 1);
+    const singleValueAnalysis = analyzeSingleValuePanels(items);
 
     if (overlapPairs.length > 0) {
         issues.push({
@@ -997,11 +1022,28 @@ function buildAestheticIssues(items: any[], canvas: any, rawScores: any, overlap
         });
     }
 
+    if (singleValueAnalysis.tooSparse.length > 0) {
+        issues.push({
+            metric: 'content_fit',
+            severity: scoreToSeverity(singleValueAnalysis.sparseScore),
+            reason: `单值图 ${formatItemTitleList(singleValueAnalysis.tooSparse)} 的字号相对 panel 高度偏小，当前估算占比约为 ${roundNumber(singleValueAnalysis.minSparseRatio * 100)}%~${roundNumber(singleValueAnalysis.maxSparseRatio * 100)}%，大面积留白会稀释重点数值。`
+        });
+    }
+
+    if (singleValueAnalysis.tooDense.length > 0) {
+        issues.push({
+            metric: 'content_fit',
+            severity: scoreToSeverity(singleValueAnalysis.denseScore),
+            reason: `单值图 ${formatItemTitleList(singleValueAnalysis.tooDense)} 的字号相对 panel 高度偏满，当前估算占比约为 ${roundNumber(singleValueAnalysis.minDenseRatio * 100)}%~${roundNumber(singleValueAnalysis.maxDenseRatio * 100)}%，容易挤占标题和工具栏的呼吸空间。`
+        });
+    }
+
     return issues;
 }
 
 function buildAestheticSuggestions(items: any[], rawScores: any, overlapPairs: Array<{ left: string; right: string }>) {
     const suggestions: any[] = [];
+    const singleValueAnalysis = analyzeSingleValuePanels(items);
 
     if (overlapPairs.length > 0) {
         suggestions.push({
@@ -1063,6 +1105,22 @@ function buildAestheticSuggestions(items: any[], rawScores: any, overlapPairs: A
         });
     }
 
+    if (singleValueAnalysis.tooSparse.length > 0) {
+        suggestions.push({
+            category: 'layout',
+            priority: scoreToPriority(singleValueAnalysis.sparseScore),
+            message: '单值图优先让字号占可用高度的约 22%~38%；若明显偏空，优先放大字号，或把 panel 高度从当前 h 适当收紧。'
+        });
+    }
+
+    if (singleValueAnalysis.tooDense.length > 0) {
+        suggestions.push({
+            category: 'layout',
+            priority: scoreToPriority(singleValueAnalysis.denseScore),
+            message: '单值图若字号占可用高度超过约 48%，建议降低字号或增大 panel 高度，避免数值与标题、工具栏争抢空间。'
+        });
+    }
+
     if (suggestions.length === 0) {
         suggestions.push({
             category: 'layout',
@@ -1094,6 +1152,107 @@ function computeStandardDeviation(values: number[]): number {
     const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
     const variance = values.reduce((sum, value) => sum + ((value - mean) ** 2), 0) / (values.length - 1);
     return Math.sqrt(variance);
+}
+
+function getSingleValueFontSize(widget: any): number {
+    const candidates = [
+        widget?.chart?.singleChartFontSize,
+        widget?.chart?.singleUnitFontSize,
+        widget?.chart?.fontSize,
+        widget?.chart?.size,
+        widget?.searchData?.fontSize,
+        widget?.searchData?.singleFontSize,
+        widget?.searchData?.singleValueFontSize,
+        widget?.searchData?.valueFontSize,
+        widget?.searchData?.numberFontSize,
+        widget?.searchData?.chartFontSize,
+        widget?.searchData?.textStyle?.fontSize,
+        widget?.searchData?.style?.fontSize,
+        widget?.fontSize
+    ];
+
+    for (const candidate of candidates) {
+        const parsed = parsePositiveNumber(candidate);
+        if (parsed !== null) {
+            return parsed;
+        }
+    }
+
+    return DEFAULT_SINGLE_FONT_SIZE_PX;
+}
+
+function parsePositiveNumber(value: any): number | null {
+    if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+        return value;
+    }
+    if (typeof value === 'string') {
+        const match = value.trim().match(/^(\d+(?:\.\d+)?)/);
+        if (match) {
+            const parsed = Number(match[1]);
+            if (Number.isFinite(parsed) && parsed > 0) {
+                return parsed;
+            }
+        }
+    }
+    return null;
+}
+
+function estimateSingleValueHeightRatio(gridHeight: number, fontSizePx: number): number {
+    const contentHeightPx = (DEFAULT_SINGLE_GRID_PX_PER_H * Math.max(gridHeight, 1)) - DEFAULT_SINGLE_HEADER_CHROME_PX;
+    if (contentHeightPx <= 0) {
+        return 1;
+    }
+    return clamp01(fontSizePx / contentHeightPx);
+}
+
+function getVisualArea(item: any): number {
+    const effectiveArea = Number(item?.effectiveArea);
+    if (Number.isFinite(effectiveArea) && effectiveArea > 0) {
+        return effectiveArea;
+    }
+    return Number(item?.area) || 0;
+}
+
+function analyzeSingleValuePanels(items: any[]) {
+    const singleItems = items.filter((item: any) => item.chartType === 'single' && Number.isFinite(item.singleValueHeightRatio));
+    const tooSparse = singleItems.filter((item: any) => item.singleValueHeightRatio < SINGLE_HEIGHT_RATIO_COMFORT_MIN);
+    const tooDense = singleItems.filter((item: any) => item.singleValueHeightRatio > SINGLE_HEIGHT_RATIO_ACCEPTABLE_MAX);
+
+    return {
+        tooSparse,
+        tooDense,
+        sparseScore: tooSparse.length > 0
+            ? average(tooSparse.map((item: any) => clamp01(item.singleValueHeightRatio / SINGLE_HEIGHT_RATIO_COMFORT_MIN)))
+            : 1,
+        denseScore: tooDense.length > 0
+            ? average(tooDense.map((item: any) => clamp01(1 - ((item.singleValueHeightRatio - SINGLE_HEIGHT_RATIO_ACCEPTABLE_MAX) / Math.max(1 - SINGLE_HEIGHT_RATIO_ACCEPTABLE_MAX, 1e-6)))))
+            : 1,
+        minSparseRatio: tooSparse.length > 0 ? Math.min(...tooSparse.map((item: any) => item.singleValueHeightRatio)) : 0,
+        maxSparseRatio: tooSparse.length > 0 ? Math.max(...tooSparse.map((item: any) => item.singleValueHeightRatio)) : 0,
+        minDenseRatio: tooDense.length > 0 ? Math.min(...tooDense.map((item: any) => item.singleValueHeightRatio)) : 0,
+        maxDenseRatio: tooDense.length > 0 ? Math.max(...tooDense.map((item: any) => item.singleValueHeightRatio)) : 0
+    };
+}
+
+function average(values: number[]): number {
+    if (!Array.isArray(values) || values.length === 0) {
+        return 0;
+    }
+    return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function formatItemTitleList(items: any[]): string {
+    const titles = items
+        .map((item: any) => item.title)
+        .filter((title: string) => typeof title === 'string' && title.trim().length > 0)
+        .slice(0, 3);
+    if (titles.length === 0) {
+        return '部分单值图';
+    }
+    if (items.length > 3) {
+        return `${titles.join('、')} 等 ${items.length} 个 panel`;
+    }
+    return titles.join('、');
 }
 
 function scoreToSeverity(score: number): Severity {

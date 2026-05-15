@@ -3,19 +3,137 @@ export const supportedPanelTypes = new Set(['trend', 'eventsTable']);
 export const trendChartTypes = new Set([
     'line',
     'pie',
+    'rose',
     'single',
+    'liquidfill',
     'table',
     'sunburst',
     'multiaxis',
     'bar',
     'column',
+    'rangeline',
     'scatter',
     'area',
+    'heatmap',
+    'wordcloud',
+    'chord',
+    'sankey',
+    'force',
+    'attackmap',
     'networkflow',
     'tracing'
 ]);
 
 export const DEFAULT_DASHBOARD_SCHEME = 'schemecat1';
+const DEFAULT_SINGLE_CHART_FONT_SIZE = 60;
+const DEFAULT_TREND_COLOR_TYPE = 'scheme';
+const DEFAULT_SINGLE_TREND_COLOR_TYPE = 'redUp';
+const DEFAULT_SINGLE_CHART_DISPLAY_MODE = 'default';
+const DEFAULT_SINGLE_CHART_COMPARSION_MODE = 'percent';
+const DEFAULT_PIE_LABEL_FORMATTER = 'name';
+const DEFAULT_PIE_SHOW_TYPE = 'all';
+const DEFAULT_PIE_PERCENT_N = 2;
+const DEFAULT_PIE_RADIUS_RATIO = 0.72;
+const DEFAULT_PIE_OUTER_RADIUS_RATIO = 1;
+const DEFAULT_PIE_CORNER_RADIUS = 0;
+const DEFAULT_PIE_LAYOUT_COLUMNS = 1;
+type WidgetChartCategory = 'sequence' | 'dimension' | 'relationship';
+
+type WidgetConfigBlock = Record<string, any>;
+
+type PanelFieldHints = {
+    xField: string;
+    yField: string;
+    yFields: string[];
+    ySmooths: boolean[];
+    yRanges: Array<Record<string, any>>;
+    byFields: string[];
+    valueField: string;
+    categoryField: string;
+};
+
+// 当前首批按类别抽象的图表映射。
+// sequence: line/area/scatter/column/rangeline/multiaxis
+// dimension: pie/rose/single/liquidfill/bar/sunburst/heatmap/wordcloud
+// relationship: chord/sankey/force/attackmap/networkflow/tracing
+const CHART_CATEGORY_BY_TYPE: Record<string, WidgetChartCategory> = {
+    line: 'sequence',
+    area: 'sequence',
+    scatter: 'sequence',
+    column: 'sequence',
+    rangeline: 'sequence',
+    multiaxis: 'sequence',
+    pie: 'dimension',
+    rose: 'dimension',
+    single: 'dimension',
+    liquidfill: 'dimension',
+    bar: 'dimension',
+    sunburst: 'dimension',
+    heatmap: 'dimension',
+    wordcloud: 'dimension',
+    chord: 'relationship',
+    sankey: 'relationship',
+    force: 'relationship',
+    attackmap: 'relationship',
+    networkflow: 'relationship',
+    tracing: 'relationship'
+};
+
+const CHART_SPECIFIC_SEARCH_DATA_KEYS = [
+    'config',
+    'valueField',
+    'metricField',
+    'singleValueField',
+    'singleChartFontSize',
+    'singleValueFontSize',
+    'singleChartDisplayMode',
+    'singleChartComparsionMode',
+    'singleDisplayMode',
+    'showSparkline',
+    'showComparison',
+    'compareTime',
+    'colorValues',
+    'trendColorType',
+    'scheme',
+    'market_day',
+    'categoryField',
+    'dimensionField',
+    'pieCategoryField',
+    'pieValueField',
+    'showLegend',
+    'legendPosition',
+    'donut',
+    'innerRadius',
+    'labelDisplay',
+    'labelFormatter',
+    'showType',
+    'percentN',
+    'radiusRatio',
+    'outerRadiusRatio',
+    'cornerRadius',
+    'layoutColumns',
+    'trellisField',
+    'yFields',
+    'ySmooths',
+    'yRanges',
+    'yAxisAttrs',
+    'xAxisRotate',
+    'xAxisSort',
+    'byStacks',
+    'columnWidth',
+    'columnBorderRadius',
+    'fromField',
+    'toField',
+    'weightField',
+    'outlierField',
+    'upperField',
+    'lowerField',
+    'fromLongitudeField',
+    'fromLatitudeField',
+    'toLongitudeField',
+    'toLatitudeField',
+    'mapType'
+];
 
 export const dashboardSchemeColors: Record<string, string[][]> = {
     schemecat1: [
@@ -145,7 +263,21 @@ export function normalizePanelSpec(panel: any, index: number, options: { applyDe
         chartType: normalized.chartType,
         xField: panel?.xField || '',
         yField: panel?.yField || '',
+        yFields: splitFieldList(panel?.yFields),
+        ySmooths: normalizeBooleanList(panel?.ySmooths),
+        yRanges: normalizeRangeList(panel?.yRanges),
         byFields: Array.isArray(panel?.byFields) ? panel.byFields : [],
+        outlierField: sanitizeFieldName(panel?.outlierField || ''),
+        upperField: sanitizeFieldName(panel?.upperField || ''),
+        lowerField: sanitizeFieldName(panel?.lowerField || ''),
+        fromField: sanitizeFieldName(panel?.fromField || ''),
+        toField: sanitizeFieldName(panel?.toField || ''),
+        weightField: sanitizeFieldName(panel?.weightField || ''),
+        fromLongitudeField: sanitizeFieldName(panel?.fromLongitudeField || ''),
+        fromLatitudeField: sanitizeFieldName(panel?.fromLatitudeField || ''),
+        toLongitudeField: sanitizeFieldName(panel?.toLongitudeField || ''),
+        toLatitudeField: sanitizeFieldName(panel?.toLatitudeField || ''),
+        mapType: typeof panel?.mapType === 'string' && panel.mapType.trim() ? panel.mapType.trim() : 'world',
         description: panel?.description || '',
         color: normalizedColor || undefined,
         grid: applyDefaultGrid ? (explicitGrid || defaultGrid) : explicitGrid
@@ -213,13 +345,812 @@ export function getWidgetId(widget: any): string {
 }
 
 export function getWidgetColor(widget: any): string {
-    return normalizeHexColor(widget?.searchData?.chartStartingColor);
+    return normalizeHexColor(widget?.searchData?.chartStartingColor || widget?.chart?.chartStartingColor);
+}
+
+function sanitizeFieldName(rawField: unknown): string {
+    if (typeof rawField !== 'string') {
+        return '';
+    }
+
+    return rawField
+        .trim()
+        .replace(/^[`'"]+/, '')
+        .replace(/[`'"]+$/, '')
+        .replace(/[,)]+$/, '');
+}
+
+function inferStatsSegment(query: unknown): string {
+    if (typeof query !== 'string') {
+        return '';
+    }
+
+    const segments = [...query.matchAll(/\b(?:stats|chart|timechart)\b([^|]*)/gi)];
+    return (segments[segments.length - 1]?.[1] || '').trim();
+}
+
+function inferMetricFieldFromQuery(query: unknown): string {
+    const statsSegment = inferStatsSegment(query);
+    if (!statsSegment) {
+        return '';
+    }
+
+    const metricSegment = statsSegment.split(/\bby\b/i)[0] || '';
+    const aliasMatches = [...metricSegment.matchAll(/\bas\s+([^\s,|]+)/gi)];
+    const alias = sanitizeFieldName(aliasMatches[aliasMatches.length - 1]?.[1] || '');
+    if (alias) {
+        return alias;
+    }
+
+    if (/\bcount\s*\(\s*\)/i.test(metricSegment)) {
+        return 'count';
+    }
+
+    return '';
+}
+
+function inferByFieldsFromQuery(query: unknown): string[] {
+    const statsSegment = inferStatsSegment(query);
+    if (!statsSegment) {
+        return [];
+    }
+
+    const byMatch = statsSegment.match(/\bby\b\s+(.+)$/i);
+    if (!byMatch?.[1]) {
+        return [];
+    }
+
+    return byMatch[1]
+        .split(',')
+        .map((field) => sanitizeFieldName(field))
+        .filter(Boolean);
+}
+
+function splitFieldList(rawValue: unknown): string[] {
+    if (Array.isArray(rawValue)) {
+        return rawValue
+            .map((field: unknown) => sanitizeFieldName(field))
+            .filter(Boolean);
+    }
+
+    if (typeof rawValue === 'string') {
+        return rawValue
+            .split(',')
+            .map((field) => sanitizeFieldName(field))
+            .filter(Boolean);
+    }
+
+    return [];
+}
+
+function omitChartSpecificSearchData(searchData: any): any {
+    const nextSearchData = searchData && typeof searchData === 'object'
+        ? { ...searchData }
+        : {};
+
+    CHART_SPECIFIC_SEARCH_DATA_KEYS.forEach((key) => {
+        delete nextSearchData[key];
+    });
+
+    return nextSearchData;
+}
+
+function resolveChartCategory(chartType: string): WidgetChartCategory | undefined {
+    return CHART_CATEGORY_BY_TYPE[chartType];
+}
+
+function normalizeBooleanList(rawValue: unknown): boolean[] {
+    if (Array.isArray(rawValue)) {
+        return rawValue.map((item) => Boolean(item));
+    }
+
+    if (typeof rawValue === 'string' && rawValue.trim()) {
+        return rawValue
+            .split(',')
+            .map((item) => ['true', '1', 'yes'].includes(item.trim().toLowerCase()));
+    }
+
+    return [];
+}
+
+function normalizeRangeList(rawValue: unknown): Array<Record<string, any>> {
+    if (!Array.isArray(rawValue)) {
+        return [];
+    }
+
+    return rawValue.map((item) => (
+        item && typeof item === 'object' && !Array.isArray(item)
+            ? { ...(item as Record<string, any>) }
+            : {}
+    ));
+}
+
+function createConfigBlock(_key: string, values: Record<string, any>): WidgetConfigBlock {
+    return { ...values };
+}
+
+function buildSequenceChartConfig(chartType: string, searchData: Record<string, any>): WidgetConfigBlock[] {
+    if (chartType === 'multiaxis') {
+        return [];
+    }
+
+    if (chartType === 'rangeline') {
+        return [
+            {
+                xField: searchData?.xField || ''
+            },
+            {
+                yField: searchData?.yField || '',
+                outlierField: searchData?.outlierField || ''
+            },
+            {
+                upperField: searchData?.upperField || '',
+                lowerField: searchData?.lowerField || ''
+            }
+        ];
+    }
+
+    const yFields = splitFieldList(searchData?.yFields);
+    const ySmooths = normalizeBooleanList(searchData?.ySmooths);
+    const yRanges = normalizeRangeList(searchData?.yRanges);
+    const blocks: WidgetConfigBlock[] = [
+        {
+            xField: searchData?.xField || '',
+            xAxisFontSize: searchData?.xAxisFontSize ?? 12,
+            xAxisBold: Boolean(searchData?.xAxisBold),
+            xAxisRotate: searchData?.xAxisRotate || 'left',
+            xAxisSort: searchData?.xAxisSort || 'default',
+            labelInterval: searchData?.labelInterval || '',
+            customLabel: searchData?.customLabel || '',
+            showAllXAxisLabels: Boolean(searchData?.showAllXAxisLabels)
+        },
+        {
+            yField: searchData?.yField || '',
+            yAxisFontSize: searchData?.yAxisFontSize ?? 12,
+            yAxisBold: Boolean(searchData?.yAxisBold),
+            yUnit: searchData?.yUnit || '',
+            yRange: yRanges[0] || searchData?.yRange || { min: '', max: '' }
+        },
+        {
+            byFields: Array.isArray(searchData?.byFields) ? searchData.byFields : [],
+            byStacks: Array.isArray(searchData?.byStacks) && searchData.byStacks.length > 0
+                ? searchData.byStacks.some(Boolean)
+                : Boolean(searchData?.byStacks)
+        },
+        {
+            trellisField: searchData?.trellisField || '',
+            layout: {
+                layoutColumns: typeof searchData?.layoutColumns === 'number' ? searchData.layoutColumns : 1
+            }
+        },
+        {
+            legendPosition: searchData?.legendPosition || 'bottom',
+            legendLayout: searchData?.legendLayout || 'page'
+        }
+    ];
+
+    if (chartType === 'column') {
+        blocks.push({
+            chartStartingColor: normalizeHexColor(searchData?.chartStartingColor) || '#5C9DF5',
+            labelFormatter: searchData?.labelFormatter || 'noLabel',
+            dataPrecision: searchData?.dataPrecision || '',
+            cornerRadius: typeof searchData?.cornerRadius === 'number' ? searchData.cornerRadius : 4,
+            maxColumnSize: typeof searchData?.maxColumnSize === 'number' ? searchData.maxColumnSize : 32
+        });
+        blocks.push({
+            promptSpl: searchData?.promptSpl || '',
+            promptTimeField: searchData?.promptTimeField || '',
+            promptInfoField: searchData?.promptInfoField || '',
+            promptColor: searchData?.promptColor || '#FDE360'
+        });
+    }
+
+    return blocks;
+}
+
+function buildDimensionChartConfig(chartType: string, searchData: Record<string, any>): WidgetConfigBlock[] {
+    if (chartType === 'single') {
+        return [
+            {
+                xField: searchData?.xField || '',
+                singleDisplayField: searchData?.singleDisplayField || '',
+                useSparkline: Boolean(searchData?.useSparkline),
+                sparklineXAxisField: searchData?.sparklineXAxisField || ''
+            },
+            {
+                trellisField: searchData?.trellisField || '',
+                layout: {
+                    layoutRows: typeof searchData?.layoutRows === 'number' ? searchData.layoutRows : 1,
+                    layoutColumns: typeof searchData?.layoutColumns === 'number' ? searchData.layoutColumns : 1
+                }
+            },
+            {
+                singleChartDisplayMode: searchData?.singleChartDisplayMode || DEFAULT_SINGLE_CHART_DISPLAY_MODE,
+                alignment: searchData?.alignment || 'center',
+                singleChartFontSize: typeof searchData?.singleChartFontSize === 'number' ? searchData.singleChartFontSize : DEFAULT_SINGLE_CHART_FONT_SIZE,
+                singleChartFontColor: searchData?.singleChartFontColor || '#4A4A4A',
+                singleChartBackgroundColor: searchData?.singleChartBackgroundColor || '#FFFFFF',
+                singleChartIconColor: searchData?.singleChartIconColor || '#3661EB',
+                liveRefresh: Boolean(searchData?.liveRefresh),
+                dataPrecision: searchData?.dataPrecision || '',
+                useThousandSeparators: Boolean(searchData?.useThousandSeparators),
+                singleUnit: searchData?.singleUnit || '',
+                singleUnitFontSize: typeof searchData?.singleUnitFontSize === 'number' ? searchData.singleUnitFontSize : DEFAULT_SINGLE_CHART_FONT_SIZE,
+                singleUnitPosition: searchData?.singleUnitPosition || 'after'
+            },
+            {
+                singleChartIcon: searchData?.singleChartIcon || 'none'
+            },
+            {
+                singleSubtitle: searchData?.singleSubtitle || ''
+            }
+        ];
+    }
+
+    if (chartType === 'pie' || chartType === 'rose') {
+        return [
+            {
+                xField: searchData?.categoryField
+                    || searchData?.dimensionField
+                    || searchData?.pieCategoryField
+                    || (Array.isArray(searchData?.byFields) ? searchData.byFields[0] : '')
+                    || ''
+            },
+            {
+                byFields: Array.isArray(searchData?.byFields) ? searchData.byFields : []
+            },
+            {
+                trellisField: searchData?.trellisField || '',
+                layout: {
+                    layoutColumns: typeof searchData?.layoutColumns === 'number' ? searchData.layoutColumns : 1
+                }
+            },
+            {
+                chartStartingColor: normalizeHexColor(searchData?.chartStartingColor) || '#3661EB',
+                labelFormatter: searchData?.labelFormatter || 'onlyName',
+                dataPrecision: searchData?.dataPrecision || '',
+                showType: searchData?.showType || 'topN',
+                topN: searchData?.topN || '',
+                radiusRatio: typeof searchData?.radiusRatio === 'number' ? searchData.radiusRatio : 0.35,
+                outerRadiusRatio: typeof searchData?.outerRadiusRatio === 'number' ? searchData.outerRadiusRatio : 0.8,
+                cornerRadius: typeof searchData?.cornerRadius === 'number' ? searchData.cornerRadius : 0
+            }
+        ];
+    }
+
+    if (chartType === 'liquidfill') {
+        return [
+            {
+                xField: searchData?.xField || ''
+            }
+        ];
+    }
+
+    if (chartType === 'bar' || chartType === 'sunburst' || chartType === 'heatmap' || chartType === 'wordcloud') {
+        return [
+            {
+                xField: searchData?.xField || ''
+            },
+            {
+                byFields: Array.isArray(searchData?.byFields) ? searchData.byFields : []
+            }
+        ];
+    }
+
+    return [
+        createConfigBlock('display', {
+            xField: searchData?.xField || ''
+        }),
+        createConfigBlock('group', {
+            byFields: Array.isArray(searchData?.byFields) ? searchData.byFields : []
+        }),
+        createConfigBlock('style', {
+            trendColorType: searchData?.trendColorType || DEFAULT_TREND_COLOR_TYPE,
+            scheme: normalizeDashboardScheme(searchData?.scheme)
+        }),
+        createConfigBlock('other', {
+            market_day: resolveMarketDay(searchData?.market_day) ? 1 : 0
+        })
+    ];
+}
+
+function buildRelationshipChartConfig(chartType: string, searchData: Record<string, any>): WidgetConfigBlock[] {
+    if (chartType === 'attackmap') {
+        return [
+            {
+                fromField: searchData?.fromField || '',
+                fromLongitudeField: searchData?.fromLongitudeField || '',
+                fromLatitudeField: searchData?.fromLatitudeField || ''
+            },
+            {
+                toField: searchData?.toField || '',
+                toLongitudeField: searchData?.toLongitudeField || '',
+                toLatitudeField: searchData?.toLatitudeField || ''
+            },
+            {
+                weightField: searchData?.weightField || '',
+                mapType: searchData?.mapType || 'world'
+            }
+        ];
+    }
+
+    return [
+        createConfigBlock('source', {
+            fromField: searchData?.fromField || ''
+        }),
+        createConfigBlock('target', {
+            toField: searchData?.toField || ''
+        }),
+        createConfigBlock('weight', {
+            weightField: searchData?.weightField || ''
+        })
+    ];
+}
+
+function buildChartConfig(chartType: string, searchData: Record<string, any>): WidgetConfigBlock[] {
+    const category = resolveChartCategory(chartType);
+    if (category === 'sequence') {
+        return buildSequenceChartConfig(chartType, searchData);
+    }
+    if (category === 'dimension') {
+        return buildDimensionChartConfig(chartType, searchData);
+    }
+    if (category === 'relationship') {
+        return buildRelationshipChartConfig(chartType, searchData);
+    }
+    return [];
+}
+
+function resolveTrendColorType(rawValue: unknown): string {
+    return typeof rawValue === 'string' && rawValue.trim()
+        ? rawValue.trim()
+        : DEFAULT_TREND_COLOR_TYPE;
+}
+
+function resolveMarketDay(rawValue: unknown): boolean {
+    if (typeof rawValue === 'number') {
+        return rawValue !== 0;
+    }
+
+    if (typeof rawValue === 'string' && rawValue.trim()) {
+        return !['0', 'false', 'no'].includes(rawValue.trim().toLowerCase());
+    }
+
+    return typeof rawValue === 'boolean' ? rawValue : false;
+}
+
+function resolvePanelFieldHints(panel: any, chartType: string): PanelFieldHints {
+    const explicitXField = sanitizeFieldName(panel?.xField || '');
+    const explicitYField = sanitizeFieldName(panel?.yField || '');
+    const explicitYFields = splitFieldList(panel?.yFields);
+    const explicitYSmooths = normalizeBooleanList(panel?.ySmooths);
+    const explicitYRanges = normalizeRangeList(panel?.yRanges);
+    const explicitByFields = splitFieldList(panel?.byFields);
+    const allowInferredByFields = chartType !== 'multiaxis';
+    const inferredByFields = explicitByFields.length > 0 || !allowInferredByFields ? [] : inferByFieldsFromQuery(panel?.query);
+    const byFields = explicitByFields.length > 0 ? explicitByFields : inferredByFields;
+    const inferredMetricField = inferMetricFieldFromQuery(panel?.query);
+
+    if (chartType === 'single') {
+        const valueField = explicitYField || explicitXField || inferredMetricField || 'count';
+        return {
+            xField: explicitXField || valueField,
+            yField: explicitYField || valueField,
+            yFields: [valueField],
+            ySmooths: [],
+            yRanges: [],
+            byFields,
+            valueField,
+            categoryField: ''
+        };
+    }
+
+    if (chartType === 'pie' || chartType === 'rose' || chartType === 'bar' || chartType === 'sunburst' || chartType === 'heatmap' || chartType === 'wordcloud') {
+        const legacyCategoryField = explicitByFields.length > 0 ? explicitByFields[0] : explicitXField;
+        const categoryField = legacyCategoryField || byFields[0] || '';
+        const valueField = explicitYField || (categoryField ? inferredMetricField : explicitXField) || inferredMetricField || 'count';
+        return {
+            xField: categoryField,
+            yField: explicitYField || valueField,
+            yFields: [valueField],
+            ySmooths: [],
+            yRanges: [],
+            byFields: byFields.length > 0 ? byFields : (categoryField ? [categoryField] : []),
+            valueField,
+            categoryField
+        };
+    }
+
+    if (chartType === 'liquidfill') {
+        const valueField = explicitXField || explicitYField || inferredMetricField || 'count';
+        return {
+            xField: valueField,
+            yField: valueField,
+            yFields: [valueField],
+            ySmooths: [],
+            yRanges: [],
+            byFields,
+            valueField,
+            categoryField: ''
+        };
+    }
+
+    if (chartType === 'multiaxis') {
+        const yFields = explicitYFields.length > 0
+            ? explicitYFields
+            : [explicitYField || inferredMetricField || 'count'].filter(Boolean);
+        const primaryYField = yFields[0] || explicitYField || inferredMetricField || 'count';
+        return {
+            xField: explicitXField,
+            yField: primaryYField,
+            yFields,
+            ySmooths: explicitYSmooths,
+            yRanges: explicitYRanges,
+            byFields,
+            valueField: primaryYField,
+            categoryField: explicitXField || byFields[0] || ''
+        };
+    }
+
+    const yFields = explicitYFields.length > 0
+        ? explicitYFields
+        : [explicitYField || inferredMetricField].filter(Boolean);
+    const primaryYField = explicitYField || yFields[0] || inferredMetricField || '';
+
+    return {
+        xField: explicitXField,
+        yField: primaryYField,
+        yFields,
+        ySmooths: explicitYSmooths,
+        yRanges: explicitYRanges,
+        byFields,
+        valueField: primaryYField,
+        categoryField: explicitXField || byFields[0] || ''
+    };
+}
+
+function buildCommonChartSearchData(panel: any, existing?: any): Record<string, any> {
+    return {
+        trendColorType: resolveTrendColorType(existing?.trendColorType ?? panel?.trendColorType),
+        scheme: normalizeDashboardScheme(existing?.scheme ?? panel?.scheme),
+        market_day: resolveMarketDay(existing?.market_day ?? panel?.market_day) ? 1 : 0
+    };
+}
+
+function buildChartCategorySearchData(chartType: string): Record<string, any> {
+    const category = resolveChartCategory(chartType);
+    if (category === 'sequence') {
+        return {
+            showLegend: true,
+            legendPosition: 'bottom',
+            xAxisRotate: 'left',
+            xAxisSort: 'default'
+        };
+    }
+
+    if (category === 'dimension') {
+        return {};
+    }
+
+    if (category === 'relationship') {
+        return {};
+    }
+
+    return {};
+}
+
+function buildChartSpecificSearchData(
+    chartType: string,
+    fieldHints: PanelFieldHints,
+    panel: any,
+    existing?: any
+): Record<string, any> {
+    if (chartType === 'single') {
+        return {
+            xField: fieldHints.xField,
+            cur_XField: fieldHints.xField,
+            showType: 'single',
+            visType: 'STATS_NEW',
+            isTimechart: false,
+            sourcegroup: existing?.sourcegroup || 'all',
+            sourcegroupCn: existing?.sourcegroupCn || 'all',
+            singleDisplayField: existing?.singleDisplayField || '',
+            singleFieldDisplayType: existing?.singleFieldDisplayType || 'default',
+            useSparkline: Boolean(existing?.useSparkline),
+            sparklineXAxisField: existing?.sparklineXAxisField || '',
+            trellisField: existing?.trellisField || '',
+            layoutColumns: typeof existing?.layoutColumns === 'number' ? existing.layoutColumns : 1,
+            layoutRows: typeof existing?.layoutRows === 'number' ? existing.layoutRows : 1,
+            singleChartDisplayMode: existing?.singleChartDisplayMode || DEFAULT_SINGLE_CHART_DISPLAY_MODE,
+            alignment: existing?.alignment || 'center',
+            singleChartFontSize: typeof existing?.singleChartFontSize === 'number' ? existing.singleChartFontSize : DEFAULT_SINGLE_CHART_FONT_SIZE,
+            singleChartFontColor: existing?.singleChartFontColor || '#4A4A4A',
+            singleChartBackgroundColor: existing?.singleChartBackgroundColor || '#FFFFFF',
+            singleChartIconColor: existing?.singleChartIconColor || '#3661EB',
+            singleChartColorFillingMode: existing?.singleChartColorFillingMode || 'font',
+            liveRefresh: Boolean(existing?.liveRefresh),
+            compareTime: existing?.compareTime || 'none',
+            comparedField: existing?.comparedField || '-1h',
+            cur_ComparedField: existing?.cur_ComparedField || '-1h',
+            singleChartComparsionMode: existing?.singleChartComparsionMode || DEFAULT_SINGLE_CHART_COMPARSION_MODE,
+            trendColorType: existing?.trendColorType || panel?.trendColorType || DEFAULT_SINGLE_TREND_COLOR_TYPE,
+            singleChartFontRangeColors: Array.isArray(existing?.singleChartFontRangeColors) ? existing.singleChartFontRangeColors : [],
+            singleChartBackgroundRangeColors: Array.isArray(existing?.singleChartBackgroundRangeColors) ? existing.singleChartBackgroundRangeColors : [],
+            dataPrecision: existing?.dataPrecision || '',
+            useThousandSeparators: Boolean(existing?.useThousandSeparators),
+            singleUnit: existing?.singleUnit || '',
+            singleUnitFontSize: typeof existing?.singleUnitFontSize === 'number' ? existing.singleUnitFontSize : DEFAULT_SINGLE_CHART_FONT_SIZE,
+            singleUnitPosition: existing?.singleUnitPosition || 'after',
+            singleChartIcon: existing?.singleChartIcon || 'none',
+            iconField: existing?.iconField || '',
+            fixedSetting: existing?.fixedSetting || '',
+            singleSubtitle: existing?.singleSubtitle || '',
+            market_day: resolveMarketDay(existing?.market_day ?? panel?.market_day) ? 1 : 0
+        };
+    }
+
+    if (chartType === 'pie' || chartType === 'rose') {
+        return {
+            xField: fieldHints.valueField,
+            ...(fieldHints.categoryField ? {
+                categoryField: fieldHints.categoryField,
+                dimensionField: fieldHints.categoryField,
+                pieCategoryField: fieldHints.categoryField
+            } : {}),
+            byFields: fieldHints.byFields,
+            trellisField: existing?.trellisField || '',
+            layoutColumns: typeof existing?.layoutColumns === 'number' ? existing.layoutColumns : 1,
+            chartStartingColor: normalizeHexColor(existing?.chartStartingColor || panel?.color) || '#3661EB',
+            labelFormatter: existing?.labelFormatter || 'onlyName',
+            dataPrecision: existing?.dataPrecision || '',
+            showType: existing?.showType || 'topN',
+            topN: existing?.topN || '',
+            percentN: typeof existing?.percentN === 'number' ? existing.percentN : 1,
+            radiusRatio: typeof existing?.radiusRatio === 'number' ? existing.radiusRatio : 0.35,
+            outerRadiusRatio: typeof existing?.outerRadiusRatio === 'number' ? existing.outerRadiusRatio : 0.8,
+            cornerRadius: typeof existing?.cornerRadius === 'number' ? existing.cornerRadius : 0,
+            valueField: fieldHints.valueField,
+            metricField: fieldHints.valueField,
+            pieValueField: fieldHints.valueField,
+            market_day: resolveMarketDay(existing?.market_day ?? panel?.market_day) ? 1 : 0
+        };
+    }
+
+    if (chartType === 'bar' || chartType === 'sunburst' || chartType === 'heatmap' || chartType === 'wordcloud') {
+        return {
+            xField: fieldHints.valueField,
+            byFields: fieldHints.byFields,
+            market_day: resolveMarketDay(existing?.market_day ?? panel?.market_day) ? 1 : 0
+        };
+    }
+
+    if (chartType === 'liquidfill') {
+        return {
+            xField: fieldHints.valueField,
+            market_day: resolveMarketDay(existing?.market_day ?? panel?.market_day) ? 1 : 0
+        };
+    }
+
+    if (chartType === 'multiaxis') {
+        const yFields = fieldHints.yFields.length > 0 ? fieldHints.yFields : [fieldHints.yField].filter(Boolean);
+        const ySmooths = fieldHints.ySmooths.length > 0
+            ? yFields.map((_, index) => fieldHints.ySmooths[index] ?? false)
+            : Array.isArray(existing?.ySmooths)
+                ? yFields.map((_, index) => Boolean(existing.ySmooths[index]))
+                : yFields.map(() => false);
+        const yRanges = fieldHints.yRanges.length > 0
+            ? yFields.map((_, index) => fieldHints.yRanges[index] || {})
+            : Array.isArray(existing?.yRanges)
+                ? yFields.map((_, index) => existing.yRanges[index] || {})
+                : yFields.map(() => ({}));
+        return {
+            page: existing?.page ?? 0,
+            order: existing?.order || 'desc',
+            now: existing?.now || '',
+            timeline: existing?.timeline ?? true,
+            statsevents: existing?.statsevents ?? false,
+            fields: existing?.fields ?? true,
+            fromSearch: existing?.fromSearch ?? true,
+            app_id: existing?.app_id ?? 1,
+            highlight: existing?.highlight ?? false,
+            onlySortByTimestamp: existing?.onlySortByTimestamp ?? false,
+            use_spark: existing?.use_spark ?? false,
+            xField: fieldHints.xField,
+            xAxisRotate: existing?.xAxisRotate || 'left',
+            xAxisSort: existing?.xAxisSort || 'default',
+            labelInterval: existing?.labelInterval || '',
+            customLabel: existing?.customLabel || '',
+            showAllXAxisLabels: existing?.showAllXAxisLabels ?? false,
+            yAxisAttrs: yFields.map((field, index) => {
+                const rawRange = yRanges[index];
+                const normalizedRange = rawRange && typeof rawRange === 'object' && !Array.isArray(rawRange)
+                    ? {
+                        min: rawRange.min ?? '',
+                        max: rawRange.max ?? ''
+                    }
+                    : { min: '', max: '' };
+                return {
+                    unit: '',
+                    range: normalizedRange,
+                    fields: [{
+                        name: field,
+                        type: index === 0 ? 'line' : 'scatter',
+                        color: index === 0 ? '#E30202' : '#51E1C4',
+                        opacity: 0.6,
+                        smooth: ySmooths[index] ?? false,
+                        connectNull: index === 0
+                    }]
+                };
+            }),
+            byFields: fieldHints.byFields,
+            legendPosition: existing?.legendPosition || 'bottom',
+            legendEllipsis: existing?.legendEllipsis || 'right',
+            dataPrecision: existing?.dataPrecision || '',
+            scheme: normalizeDashboardScheme(existing?.scheme ?? panel?.scheme),
+            chartType: 'multiaxis',
+            isNew: existing?.isNew || 'true',
+            dataset_ids: existing?.dataset_ids || '[]',
+            trendDescription: existing?.trendDescription || '',
+            ids: existing?.ids || '',
+            legendLayout: existing?.legendLayout || 'page'
+        };
+    }
+
+    if (chartType === 'column') {
+        return {
+            now: existing?.now || '',
+            highlight: existing?.highlight ?? false,
+            onlySortByTimestamp: existing?.onlySortByTimestamp ?? false,
+            use_spark: existing?.use_spark ?? false,
+            xField: fieldHints.xField,
+            xAxisFontSize: existing?.xAxisFontSize ?? 12,
+            xAxisBold: Boolean(existing?.xAxisBold),
+            xAxisRotate: existing?.xAxisRotate || 'left',
+            xAxisSort: existing?.xAxisSort || 'default',
+            labelInterval: existing?.labelInterval || '',
+            customLabel: existing?.customLabel || '',
+            showAllXAxisLabels: existing?.showAllXAxisLabels ?? false,
+            yField: fieldHints.yField,
+            yAxisFontSize: existing?.yAxisFontSize ?? 12,
+            yAxisBold: Boolean(existing?.yAxisBold),
+            yUnit: existing?.yUnit || '',
+            ySmooth: existing?.ySmooth ?? false,
+            yConnectNull: existing?.yConnectNull ?? false,
+            yRange: fieldHints.yRanges[0] || existing?.yRange || { min: '', max: '' },
+            byFields: fieldHints.byFields,
+            byStacks: Array.isArray(existing?.byStacks) && existing.byStacks.length > 0 ? existing.byStacks : true,
+            trellisField: existing?.trellisField || '',
+            layoutColumns: typeof existing?.layoutColumns === 'number' ? existing.layoutColumns : 1,
+            legendPosition: existing?.legendPosition || 'bottom',
+            legendEllipsis: existing?.legendEllipsis || 'right',
+            legendLayout: existing?.legendLayout || 'page',
+            chartStartingColor: normalizeHexColor(existing?.chartStartingColor || panel?.color) || '#5C9DF5',
+            labelPosition: existing?.labelPosition || 'top',
+            labelFormatter: existing?.labelFormatter || 'noLabel',
+            dataPrecision: existing?.dataPrecision || '',
+            cornerRadius: typeof existing?.cornerRadius === 'number' ? existing.cornerRadius : 4,
+            maxColumnSize: typeof existing?.maxColumnSize === 'number' ? existing.maxColumnSize : 32,
+            promptColor: existing?.promptColor || '#FDE360',
+            promptInfoField: existing?.promptInfoField || '',
+            promptTimeField: existing?.promptTimeField || '',
+            promptSpl: existing?.promptSpl || '',
+            market_day: resolveMarketDay(existing?.market_day ?? panel?.market_day) ? 1 : 0
+        };
+    }
+
+    if (chartType === 'rangeline') {
+        return {
+            xField: fieldHints.xField,
+            yField: fieldHints.yField,
+            outlierField: sanitizeFieldName(panel?.outlierField || existing?.outlierField || ''),
+            upperField: sanitizeFieldName(panel?.upperField || existing?.upperField || ''),
+            lowerField: sanitizeFieldName(panel?.lowerField || existing?.lowerField || ''),
+            legendPosition: existing?.legendPosition || 'bottom',
+            xAxisRotate: existing?.xAxisRotate || 'left',
+            xAxisSort: existing?.xAxisSort || 'default',
+            market_day: resolveMarketDay(existing?.market_day ?? panel?.market_day) ? 1 : 0
+        };
+    }
+
+    if (chartType === 'chord' || chartType === 'sankey' || chartType === 'force' || chartType === 'networkflow' || chartType === 'tracing') {
+        return {
+            fromField: sanitizeFieldName(panel?.fromField || existing?.fromField || ''),
+            toField: sanitizeFieldName(panel?.toField || existing?.toField || ''),
+            weightField: sanitizeFieldName(panel?.weightField || existing?.weightField || ''),
+            market_day: resolveMarketDay(existing?.market_day ?? panel?.market_day) ? 1 : 0
+        };
+    }
+
+    if (chartType === 'attackmap') {
+        return {
+            fromField: sanitizeFieldName(panel?.fromField || existing?.fromField || ''),
+            fromLongitudeField: sanitizeFieldName(panel?.fromLongitudeField || existing?.fromLongitudeField || ''),
+            fromLatitudeField: sanitizeFieldName(panel?.fromLatitudeField || existing?.fromLatitudeField || ''),
+            toField: sanitizeFieldName(panel?.toField || existing?.toField || ''),
+            toLongitudeField: sanitizeFieldName(panel?.toLongitudeField || existing?.toLongitudeField || ''),
+            toLatitudeField: sanitizeFieldName(panel?.toLatitudeField || existing?.toLatitudeField || ''),
+            weightField: sanitizeFieldName(panel?.weightField || existing?.weightField || ''),
+            mapType: existing?.mapType || panel?.mapType || 'world',
+            market_day: resolveMarketDay(existing?.market_day ?? panel?.market_day) ? 1 : 0
+        };
+    }
+
+    return {};
+}
+
+function buildWidgetSearchData(panel: any, options: { existing?: any; panelIndex: number } ): any {
+    const normalized = normalizePanelKind(panel?.type || 'trend', panel?.chartType);
+    const normalizedColor = normalizeHexColor(panel?.color);
+    const fieldHints = resolvePanelFieldHints(panel, normalized.chartType);
+    const nextSearchData = {
+        ...(options.existing && typeof options.existing === 'object' ? options.existing : {}),
+        trendName: panel.title || `Panel ${options.panelIndex + 1}`,
+        query: panel.query || '*',
+        time_range: panel.time_range || '-1h,now',
+        chartType: normalized.chartType,
+        xField: fieldHints.xField,
+        yField: fieldHints.yField,
+        byFields: fieldHints.byFields,
+        description: panel.description || '',
+        ...buildCommonChartSearchData(panel, options.existing),
+        ...buildChartCategorySearchData(normalized.chartType),
+        ...buildChartSpecificSearchData(normalized.chartType, fieldHints, panel, options.existing)
+    };
+
+    if (normalizedColor) {
+        nextSearchData.chartStartingColor = normalizedColor;
+    }
+
+    if (normalized.chartType === 'single' || normalized.chartType === 'pie' || normalized.chartType === 'rose' || normalized.chartType === 'multiaxis') {
+        delete nextSearchData.yField;
+    }
+
+    if (normalized.chartType === 'single') {
+        delete nextSearchData.byFields;
+        delete nextSearchData.valueField;
+        delete nextSearchData.metricField;
+        delete nextSearchData.singleValueField;
+    }
+
+    if (normalized.chartType === 'pie' || normalized.chartType === 'rose') {
+        delete nextSearchData.trendColorType;
+        delete nextSearchData.showLegend;
+        delete nextSearchData.legendPosition;
+        delete nextSearchData.donut;
+        delete nextSearchData.innerRadius;
+        delete nextSearchData.labelDisplay;
+        delete nextSearchData.valueField;
+        delete nextSearchData.metricField;
+        delete nextSearchData.pieValueField;
+        delete nextSearchData.categoryField;
+        delete nextSearchData.dimensionField;
+        delete nextSearchData.pieCategoryField;
+    }
+
+    if (normalized.chartType === 'multiaxis') {
+        delete nextSearchData.showLegend;
+        delete nextSearchData.trendColorType;
+        delete nextSearchData.config;
+    }
+
+    if (normalized.chartType === 'column') {
+        delete nextSearchData.showLegend;
+        delete nextSearchData.trendColorType;
+    }
+
+    const nextConfig = buildChartConfig(normalized.chartType, nextSearchData);
+    if (nextConfig.length > 0) {
+        nextSearchData.config = nextConfig;
+    } else {
+        delete nextSearchData.config;
+    }
+
+    return nextSearchData;
 }
 
 export function panelToWidget(panel: any, index: number, widgetId?: string): any {
     const grid = panel.grid || buildLegacyDefaultGrid(index);
     const normalized = normalizePanelKind(panel?.type || 'trend', panel?.chartType);
-    const normalizedColor = normalizeHexColor(panel?.color);
 
     return {
         y: grid.y,
@@ -229,32 +1160,37 @@ export function panelToWidget(panel: any, index: number, widgetId?: string): any
         type: normalized.type,
         importType: 'clone',
         id: widgetId || `panel_${Date.now()}_${index}`,
-        searchData: {
-            trendName: panel.title || `Panel ${index + 1}`,
-            query: panel.query || '*',
-            time_range: panel.time_range || '-1h,now',
-            chartType: normalized.chartType,
-            xField: panel.xField || '',
-            yField: panel.yField || '',
-            byFields: panel.byFields || [],
-            description: panel.description || '',
-            ...(normalizedColor ? { chartStartingColor: normalizedColor } : {})
-        }
+        searchData: buildWidgetSearchData(panel, { panelIndex: index })
     };
 }
 
 export function widgetToPanel(widget: any): any {
     const normalized = normalizePanelKind(widget?.type || 'trend', widget?.searchData?.chartType);
+    const searchData = widget?.searchData || {};
     return {
         title: getWidgetTitle(widget),
         type: normalized.type,
-        query: widget?.searchData?.query || '*',
-        time_range: widget?.searchData?.time_range || '-1h,now',
+        query: searchData?.query || '*',
+        time_range: searchData?.time_range || '-1h,now',
         chartType: normalized.chartType,
-        xField: widget?.searchData?.xField || '',
-        yField: widget?.searchData?.yField || '',
-        byFields: Array.isArray(widget?.searchData?.byFields) ? widget.searchData.byFields : [],
-        description: widget?.searchData?.description || '',
+        xField: searchData?.xField || '',
+        yField: searchData?.yField || '',
+        yFields: splitFieldList(searchData?.yFields),
+        ySmooths: normalizeBooleanList(searchData?.ySmooths),
+        yRanges: normalizeRangeList(searchData?.yRanges),
+        byFields: Array.isArray(searchData?.byFields) ? searchData.byFields : [],
+        outlierField: sanitizeFieldName(searchData?.outlierField || ''),
+        upperField: sanitizeFieldName(searchData?.upperField || ''),
+        lowerField: sanitizeFieldName(searchData?.lowerField || ''),
+        fromField: sanitizeFieldName(searchData?.fromField || ''),
+        toField: sanitizeFieldName(searchData?.toField || ''),
+        weightField: sanitizeFieldName(searchData?.weightField || ''),
+        fromLongitudeField: sanitizeFieldName(searchData?.fromLongitudeField || ''),
+        fromLatitudeField: sanitizeFieldName(searchData?.fromLatitudeField || ''),
+        toLongitudeField: sanitizeFieldName(searchData?.toLongitudeField || ''),
+        toLatitudeField: sanitizeFieldName(searchData?.toLatitudeField || ''),
+        mapType: typeof searchData?.mapType === 'string' && searchData.mapType.trim() ? searchData.mapType.trim() : 'world',
+        description: searchData?.description || '',
         color: getWidgetColor(widget) || undefined,
         grid: {
             x: widget?.x ?? 0,
@@ -271,9 +1207,14 @@ export function patchWidgetWithChanges(widget: any, mergedPanel: any, changes: a
         ? rawWidget.searchData
         : {};
     const gridChanges = changes?.grid && typeof changes.grid === 'object' ? changes.grid : {};
+    const chartTypeChanged = Object.prototype.hasOwnProperty.call(changes, 'chartType');
     const nextWidget = {
         ...rawWidget,
-        searchData: { ...rawSearchData }
+        type: mergedPanel.type,
+        searchData: buildWidgetSearchData(mergedPanel, {
+            panelIndex: 0,
+            existing: chartTypeChanged ? omitChartSpecificSearchData(rawSearchData) : rawSearchData
+        })
     };
 
     if (Object.prototype.hasOwnProperty.call(gridChanges, 'x')) {
@@ -291,32 +1232,6 @@ export function patchWidgetWithChanges(widget: any, mergedPanel: any, changes: a
 
     if (Object.prototype.hasOwnProperty.call(changes, 'title')) {
         nextWidget.title = mergedPanel.title;
-        nextWidget.searchData.trendName = mergedPanel.title;
-    }
-    if (Object.prototype.hasOwnProperty.call(changes, 'query')) {
-        nextWidget.searchData.query = mergedPanel.query;
-    }
-    if (Object.prototype.hasOwnProperty.call(changes, 'time_range')) {
-        nextWidget.searchData.time_range = mergedPanel.time_range;
-    }
-    if (Object.prototype.hasOwnProperty.call(changes, 'chartType')) {
-        nextWidget.type = mergedPanel.type;
-        nextWidget.searchData.chartType = mergedPanel.chartType;
-    }
-    if (Object.prototype.hasOwnProperty.call(changes, 'xField')) {
-        nextWidget.searchData.xField = mergedPanel.xField;
-    }
-    if (Object.prototype.hasOwnProperty.call(changes, 'yField')) {
-        nextWidget.searchData.yField = mergedPanel.yField;
-    }
-    if (Object.prototype.hasOwnProperty.call(changes, 'byFields')) {
-        nextWidget.searchData.byFields = mergedPanel.byFields;
-    }
-    if (Object.prototype.hasOwnProperty.call(changes, 'description')) {
-        nextWidget.searchData.description = mergedPanel.description;
-    }
-    if (Object.prototype.hasOwnProperty.call(changes, 'color')) {
-        nextWidget.searchData.chartStartingColor = normalizeHexColor(changes.color);
     }
 
     return nextWidget;

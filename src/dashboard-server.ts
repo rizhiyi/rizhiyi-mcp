@@ -44,7 +44,14 @@ const SERVER_LEVEL_INSTRUCTIONS = `使用说明:
 3. 若布局(grid)未提供，服务端会根据 panel 数量、图表类型和阅读顺序自动补齐更合理的默认布局；若无法命中细粒度规则，会回退到稳定的两列布局。
 4. 当前写入优先支持 trend 和 eventsTable；pie、single、table 等属于 trend 的 chartType，而不是独立 panel 类型。
 5. 输出默认使用 output_format=auto，以减少上下文消耗。
-6. 遇到错误时，优先根据 suggestion 字段修正参数后重试一次。`;
+6. 推荐创图流程：
+   - 先通过 \`log-tools\` 获取数据概要，确认时间范围内是否有数据、有哪些可用字段。
+   - 再编写最小可运行的 query，不要直接假设字段名一定正确。
+   - 在创建或更新图表前，先调用 \`log-tools\` 的 \`query_precheck\`，检查语法、是否有数据、字段映射是否匹配。
+   - 只有 query 预检通过后，才调用 \`create_dashboard_from_spec\`、\`add_dashboard_panel\` 或 \`update_dashboard_panel\`。
+7. 若页面无图，优先排查 query 无数据、时间范围不合适、字段名错误，再排查 chartType 模板。
+8. 对 \`networkflow\`、\`tracing\`、\`chord\`、\`sankey\`、\`force\`、\`attackmap\` 这类依赖显式字段映射的图表，不要跳过数据概要和 query 预检步骤。
+9. 遇到错误时，优先根据 suggestion 字段修正参数后重试一次。`;
 
 const server = new Server(
     {

@@ -23,6 +23,8 @@ import {
 } from './dashboard/panel-utils.js';
 import { buildDashboardTemplateSpec } from './dashboard/templates/index.js';
 
+const DEFAULT_DASHBOARD_APP_ID = 1;
+
 export class DashboardModule {
     private client: LogEaseClient;
 
@@ -36,6 +38,7 @@ export class DashboardModule {
 
     async createDashboardFromTemplate(params: any): Promise<any> {
         const { template, name, context = {}, app_id, data_user = 'viewer', export: exportType = 'local' } = params || {};
+        const resolvedAppId = Number.isInteger(app_id) ? app_id : DEFAULT_DASHBOARD_APP_ID;
 
         if (!template || !name) {
             return this.buildError(
@@ -45,7 +48,7 @@ export class DashboardModule {
             );
         }
 
-        const spec = this.buildTemplateSpec(template, name, context, { app_id, data_user, export: exportType });
+        const spec = this.buildTemplateSpec(template, name, context, { app_id: resolvedAppId, data_user, export: exportType });
         if (!spec) {
             return this.buildError(
                 'UNKNOWN_DASHBOARD_TEMPLATE',
@@ -801,7 +804,7 @@ export class DashboardModule {
 
         return {
             name: spec?.name,
-            app_id: spec?.app_id,
+            app_id: Number.isInteger(spec?.app_id) ? spec.app_id : DEFAULT_DASHBOARD_APP_ID,
             data_user: spec?.data_user || 'viewer',
             export: spec?.export || 'local',
             tabs

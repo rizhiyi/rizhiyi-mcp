@@ -219,6 +219,63 @@ export const basicLogTools: ToolDefinition[] = [
             },
             required: ['field', 'time_range']
         }
+    },
+    {
+        name: 'query_precheck',
+        description: '统一 query 预检工具：在创图或分析前先检查 SPL 语法、快速确认是否有数据，并按预期字段映射检查字段是否齐全。推荐 dashboard 创图前优先使用 mode=full。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                query: {
+                    type: 'string',
+                    description: '要预检的 SPL 查询语句'
+                },
+                mode: {
+                    type: 'string',
+                    description: '预检模式：仅语法、仅有数、或完整预检',
+                    default: 'full',
+                    enum: ['syntax_only', 'data_only', 'full']
+                },
+                time_range: {
+                    type: 'string',
+                    description: '时间范围。syntax_only 可省略；data_only/full 建议显式传入，例如 "now-15m,now"',
+                    default: 'now-15m,now'
+                },
+                index_name: {
+                    type: 'string',
+                    description: '索引名称',
+                    default: 'yotta'
+                },
+                expected_fields: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: '可选，预期必须存在的字段列表，例如 ["hostname","cnt"]',
+                    default: []
+                },
+                field_mapping: {
+                    type: 'object',
+                    description: '可选，语义化字段映射，例如 {"xField":"hostname","yField":"cnt"} 或 {"fromField":"src_ip","toField":"dst_ip","weightField":"count"}',
+                    additionalProperties: true
+                },
+                sample_fields: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: '可选，返回样例行时优先保留的字段列表；若同时传了 expected_fields/field_mapping，会自动合并',
+                    default: []
+                },
+                sample_size: {
+                    type: 'integer',
+                    description: '快速有数预检时返回的样例行数量，默认 20',
+                    default: 20
+                },
+                terminated_after_size: {
+                    type: 'integer',
+                    description: '快速有数预检的分片取样数量，默认 100',
+                    default: 100
+                }
+            },
+            required: ['query']
+        }
     }
 ];
 
@@ -746,7 +803,7 @@ export const dashboardTools: ToolDefinition[] = [
                 },
                 app_id: {
                     type: 'integer',
-                    description: '所属应用ID。可选；不传时由服务端按当前用户默认应用处理'
+                    description: '所属应用ID。可选；默认使用 1。'
                 },
                 context: {
                     type: 'object',
@@ -771,7 +828,7 @@ export const dashboardTools: ToolDefinition[] = [
     },
     {
         name: 'create_dashboard_from_spec',
-        description: '根据完整的 dashboard 说明创建仪表盘。适合已经明确 tabs 和 panels 结构的场景。注意：同一个 tab 内所有 chart 必须使用同一套 scheme 主题色，不同 tab 之间可以不同。',
+        description: '根据完整的 dashboard 说明创建仪表盘。适合已经明确 tabs 和 panels 结构的场景。注意：同一个 tab 内所有 chart 必须使用同一套 scheme 主题色，不同 tab 之间可以不同；服务端会按图表类别补齐默认 searchData，并按文档顺序逐步扩展更多 chartType。提交 panel 前，请先调用 `log-tools` 的 `query_precheck`，推荐使用 `mode=full`，并通过 `field_mapping` 或 `expected_fields` 校验 query 有数据且字段名与 `xField`、`yField`、`byFields`、`fromField`、`toField`、`weightField` 等配置一致；若页面无图，先排查 `query_precheck` 返回的语法/无数/字段映射问题，再排查 chartType 模板。当前已通过真实创建/回读验证，并结合页面观察确认可用的类型包括 `line`、`area`、`scatter`、`single`、`pie`、`rose`、`bar`、`sunburst`、`heatmap`、`wordcloud`、`liquidfill`、`multiaxis`、`column`、`rangeline`、`chord`、`sankey`、`force`、`attackmap`；`table`、`networkflow`、`tracing` 已纳入枚举，但仍建议继续按“先创建、再回读、再页面确认”的方式验证。',
         inputSchema: {
             type: 'object',
             properties: {
@@ -781,7 +838,7 @@ export const dashboardTools: ToolDefinition[] = [
                 },
                 app_id: {
                     type: 'integer',
-                    description: '所属应用ID。可选；不传时由服务端按当前用户默认应用处理'
+                    description: '所属应用ID。可选；默认使用 1。'
                 },
                 data_user: {
                     type: 'string',
@@ -823,13 +880,27 @@ export const dashboardTools: ToolDefinition[] = [
                                     type: 'object',
                                     properties: {
                                         title: { type: 'string', description: '图表标题' },
-                                        type: { type: 'string', description: 'panel 类型。当前写入优先支持 "trend" 和 "eventsTable"；若误传 "pie"/"single"/"table" 等旧写法，服务端会自动归一到 trend + chartType。', enum: ['trend', 'eventsTable', 'pie', 'single', 'table', 'line', 'bar', 'column', 'sunburst'] },
+                                        type: { type: 'string', description: 'panel 类型。当前写入优先支持 "trend" 和 "eventsTable"；若误传旧写法，服务端会自动归一到 trend + chartType。', enum: ['trend', 'eventsTable', 'pie', 'rose', 'single', 'liquidfill', 'table', 'line', 'bar', 'column', 'sunburst', 'heatmap', 'wordcloud', 'attackmap'] },
                                         query: { type: 'string', description: 'SPL 查询语句，例如: * | stats count() by hostname' },
                                         time_range: { type: 'string', description: '时间范围，例如: -1h,now' },
-                                        chartType: { type: 'string', description: '图表展示类型。trend 常见值包括 "line"、"pie"、"single"、"table"、"sunburst"、"multiaxis"、"bar"、"column"；eventsTable 固定为 "eventsTable"。', enum: ['line', 'pie', 'single', 'table', 'sunburst', 'multiaxis', 'bar', 'column', 'scatter', 'area', 'networkflow', 'tracing', 'eventsTable'] },
-                                        xField: { type: 'string', description: 'X轴字段名' },
-                                        yField: { type: 'string', description: 'Y轴字段名' },
-                                        byFields: { type: 'array', items: { type: 'string' }, description: '分组字段名列表' },
+                                        chartType: { type: 'string', description: '图表展示类型。trend 常见值包括 "line"、"area"、"scatter"、"column"、"rangeline"、"multiaxis"、"pie"、"rose"、"bar"、"sunburst"、"single"、"liquidfill"、"heatmap"、"wordcloud"、"chord"、"sankey"、"force"、"attackmap"；eventsTable 固定为 "eventsTable"。', enum: ['line', 'area', 'scatter', 'column', 'rangeline', 'multiaxis', 'pie', 'rose', 'bar', 'sunburst', 'single', 'liquidfill', 'heatmap', 'wordcloud', 'chord', 'sankey', 'force', 'attackmap', 'table', 'networkflow', 'tracing', 'eventsTable'] },
+                                        xField: { type: 'string', description: '字段映射。对序列类通常表示 X 轴；对 `single` 表示展示字段；对 `pie` 若未提供 `byFields`，也兼容旧写法把它当作切分字段候选。' },
+                                        yField: { type: 'string', description: '字段映射。对序列类通常表示 Y 轴；对 `single/pie` 可作为展示值字段。未传时会优先从聚合别名（如 `stats count() as cnt` 中的 `cnt`）推断。' },
+                                        yFields: { type: 'array', items: { type: 'string' }, description: '多指标字段列表。主要用于 `multiaxis`，也兼容 `column`。若传入，则会优先于单个 `yField` 写入 searchData.yFields。' },
+                                        ySmooths: { type: 'array', items: { type: 'boolean' }, description: '与 `yFields` 一一对应的平滑开关列表。主要用于 `multiaxis`，未传时默认按 false 补齐。' },
+                                        yRanges: { type: 'array', items: { type: 'object', additionalProperties: true }, description: '与 `yFields` 一一对应的 Y 轴范围列表，例如 [{"min":0,"max":100}]。主要用于 `multiaxis`。' },
+                                        byFields: { type: 'array', items: { type: 'string' }, description: '分组/切分字段列表。对 `pie`、`column`、`multiaxis` 会写入类别模板；对 `pie` 未传时会尝试从查询中的 `by` 子句推断。' },
+                                        fromField: { type: 'string', description: '关系类图表来源字段，例如 `chord/sankey/force/attackmap`。' },
+                                        toField: { type: 'string', description: '关系类图表目标字段，例如 `chord/sankey/force/attackmap`。' },
+                                        weightField: { type: 'string', description: '关系类图表权重字段。' },
+                                        outlierField: { type: 'string', description: '区间图 `rangeline` 的预测值字段。' },
+                                        upperField: { type: 'string', description: '区间图 `rangeline` 的上限字段。' },
+                                        lowerField: { type: 'string', description: '区间图 `rangeline` 的下限字段。' },
+                                        fromLongitudeField: { type: 'string', description: '攻击地图来源经度字段。' },
+                                        fromLatitudeField: { type: 'string', description: '攻击地图来源纬度字段。' },
+                                        toLongitudeField: { type: 'string', description: '攻击地图目标经度字段。' },
+                                        toLatitudeField: { type: 'string', description: '攻击地图目标纬度字段。' },
+                                        mapType: { type: 'string', description: '攻击地图区域，可选 world/china。', enum: ['world', 'china'] },
                                         color: { type: 'string', description: '图表主色，映射到 searchData.chartStartingColor。必须从当前 tab 的 scheme 色卡中选择，例如 #F6903D。' },
                                         grid: {
                                             type: 'object',
@@ -894,7 +965,7 @@ export const dashboardTools: ToolDefinition[] = [
     },
     {
         name: 'add_dashboard_panel',
-        description: '向指定 dashboard/tab 新增一个 panel。请注意：panel 类型(type) 与图表展示类型(chartType) 是两回事。当前写入优先支持 type=trend 或 type=eventsTable；pie/single/table/sunburst/bar/column 等应放在 chartType 中，而不是 type 中。若传 color，必须属于该 tab 当前 scheme。',
+        description: '向指定 dashboard/tab 新增一个 panel。请注意：panel 类型(type) 与图表展示类型(chartType) 是两回事。当前写入优先支持 type=trend 或 type=eventsTable；具体展示样式应放在 chartType 中。若传 color，必须属于该 tab 当前 scheme；服务端会按图表类别补齐默认 searchData，并继续按文档顺序扩展更多 chartType。提交前请先调用 `log-tools` 的 `query_precheck`，推荐 `mode=full`，并通过 `field_mapping` 或 `expected_fields` 验证 query 有数据且字段名与图表配置一致；尤其是 `networkflow`、`tracing`、关系图和攻击地图这类依赖显式字段名的图表，不要跳过这一步。若页面无图，先排查 `query_precheck` 返回的语法/无数/字段映射问题，再排查 chartType 模板。当前已完成真实闭环验证的类型包括 `line`、`area`、`scatter`、`single`、`pie`、`rose`、`bar`、`sunburst`、`heatmap`、`wordcloud`、`liquidfill`、`multiaxis`、`column`、`rangeline`、`chord`、`sankey`、`force`、`attackmap`。',
         inputSchema: {
             type: 'object',
             properties: {
@@ -911,13 +982,27 @@ export const dashboardTools: ToolDefinition[] = [
                     description: '要新增的 panel 配置。建议优先使用 type=trend，再通过 chartType 指定具体展示样式。',
                     properties: {
                         title: { type: 'string', description: '图表标题' },
-                        type: { type: 'string', description: 'panel 类型。当前写入优先支持 trend / eventsTable。不要把 pie/single/table 这类展示样式填在这里；若误传旧写法，服务端会自动归一到 trend + chartType。', enum: ['trend', 'eventsTable', 'pie', 'single', 'table', 'line', 'bar', 'column', 'sunburst'] },
+                        type: { type: 'string', description: 'panel 类型。当前写入优先支持 trend / eventsTable。不要把展示样式直接填在这里；若误传旧写法，服务端会自动归一到 trend + chartType。', enum: ['trend', 'eventsTable', 'pie', 'rose', 'single', 'liquidfill', 'table', 'line', 'bar', 'column', 'sunburst', 'heatmap', 'wordcloud', 'attackmap'] },
                         query: { type: 'string', description: 'SPL 查询语句' },
                         time_range: { type: 'string', description: '时间范围，例如 -1h,now' },
-                        chartType: { type: 'string', description: '图表展示类型。对于 type=trend，可选 line/pie/single/table/sunburst/multiaxis/bar/column/scatter/area/networkflow/tracing；对于 type=eventsTable，固定为 eventsTable。', enum: ['line', 'pie', 'single', 'table', 'sunburst', 'multiaxis', 'bar', 'column', 'scatter', 'area', 'networkflow', 'tracing', 'eventsTable'] },
-                        xField: { type: 'string', description: 'X 轴字段' },
-                        yField: { type: 'string', description: 'Y 轴字段' },
-                        byFields: { type: 'array', items: { type: 'string' }, description: '分组字段列表' },
+                        chartType: { type: 'string', description: '图表展示类型。对于 type=trend，可选 line/area/scatter/column/rangeline/multiaxis/pie/rose/bar/sunburst/single/liquidfill/heatmap/wordcloud/chord/sankey/force/attackmap/table/networkflow/tracing；对于 type=eventsTable，固定为 eventsTable。', enum: ['line', 'area', 'scatter', 'column', 'rangeline', 'multiaxis', 'pie', 'rose', 'bar', 'sunburst', 'single', 'liquidfill', 'heatmap', 'wordcloud', 'chord', 'sankey', 'force', 'attackmap', 'table', 'networkflow', 'tracing', 'eventsTable'] },
+                        xField: { type: 'string', description: '字段映射。对序列类通常表示 X 轴；对 `single` 表示展示字段；对 `pie` 若未提供 `byFields`，也兼容旧写法把它当作切分字段候选。' },
+                        yField: { type: 'string', description: '字段映射。对序列类通常表示 Y 轴；对 `single/pie` 可作为展示值字段。未传时会优先从聚合别名（如 `cnt`）推断。' },
+                        yFields: { type: 'array', items: { type: 'string' }, description: '多指标字段列表。主要用于 `multiaxis`，也兼容 `column`。若传入，则会优先于单个 `yField` 写入 searchData.yFields。' },
+                        ySmooths: { type: 'array', items: { type: 'boolean' }, description: '与 `yFields` 一一对应的平滑开关列表。主要用于 `multiaxis`，未传时默认按 false 补齐。' },
+                        yRanges: { type: 'array', items: { type: 'object', additionalProperties: true }, description: '与 `yFields` 一一对应的 Y 轴范围列表，例如 [{"min":0,"max":100}]。主要用于 `multiaxis`。' },
+                        byFields: { type: 'array', items: { type: 'string' }, description: '分组/切分字段列表。对 `pie`、`column`、`multiaxis` 会写入类别模板；对 `pie` 未传时会尝试从查询中的 `by` 子句推断。' },
+                        fromField: { type: 'string', description: '关系类图表来源字段，例如 `chord/sankey/force/attackmap`。' },
+                        toField: { type: 'string', description: '关系类图表目标字段，例如 `chord/sankey/force/attackmap`。' },
+                        weightField: { type: 'string', description: '关系类图表权重字段。' },
+                        outlierField: { type: 'string', description: '区间图 `rangeline` 的预测值字段。' },
+                        upperField: { type: 'string', description: '区间图 `rangeline` 的上限字段。' },
+                        lowerField: { type: 'string', description: '区间图 `rangeline` 的下限字段。' },
+                        fromLongitudeField: { type: 'string', description: '攻击地图来源经度字段。' },
+                        fromLatitudeField: { type: 'string', description: '攻击地图来源纬度字段。' },
+                        toLongitudeField: { type: 'string', description: '攻击地图目标经度字段。' },
+                        toLatitudeField: { type: 'string', description: '攻击地图目标纬度字段。' },
+                        mapType: { type: 'string', description: '攻击地图区域，可选 world/china。', enum: ['world', 'china'] },
                         color: { type: 'string', description: '图表主色，映射到 searchData.chartStartingColor。必须从当前 tab 的 scheme 色卡中选择，例如 #F6903D。' },
                         description: { type: 'string', description: '图表说明' },
                         grid: {
@@ -939,7 +1024,7 @@ export const dashboardTools: ToolDefinition[] = [
     },
     {
         name: 'update_dashboard_panel',
-        description: '更新指定 dashboard/tab 下某个 panel 的内容，例如标题、query、时间范围、chartType、主题色或局部布局。注意：同一个 tab 内所有 chart 必须使用同一套 scheme，不同 tab 之间可以不同。',
+        description: '更新指定 dashboard/tab 下某个 panel 的内容，例如标题、query、时间范围、chartType、主题色或局部布局。注意：同一个 tab 内所有 chart 必须使用同一套 scheme，不同 tab 之间可以不同；若切换图表类型，服务端会按类别重新补齐对应的默认 searchData，并继续按文档顺序扩展更多 chartType。若修改了 query 或字段映射，请先调用 `log-tools` 的 `query_precheck`，推荐 `mode=full`，并通过 `field_mapping` 或 `expected_fields` 验证 query 仍然有数据且字段名可用，再提交更新。对于尚未做过真实闭环验证的类型，仍建议在更新后执行“创建/更新 -> 回读 content -> 页面确认”的最小验证流程；若页面无图，先排查 `query_precheck` 返回的语法/无数/字段映射问题，再排查 chartType 模板。',
         inputSchema: {
             type: 'object',
             properties: {
@@ -966,12 +1051,26 @@ export const dashboardTools: ToolDefinition[] = [
                         title: { type: 'string', description: '新的标题' },
                         query: { type: 'string', description: '新的查询语句' },
                         time_range: { type: 'string', description: '新的时间范围' },
-                        chartType: { type: 'string', description: '新的图表展示类型。trend 常见值为 line/pie/single/table/sunburst/multiaxis/bar/column，eventsTable 固定为 eventsTable', enum: ['line', 'pie', 'single', 'table', 'sunburst', 'multiaxis', 'bar', 'column', 'scatter', 'area', 'networkflow', 'tracing', 'eventsTable'] },
+                        chartType: { type: 'string', description: '新的图表展示类型。trend 常见值为 line/area/scatter/column/rangeline/multiaxis/pie/rose/bar/sunburst/single/liquidfill/heatmap/wordcloud/chord/sankey/force/attackmap/table，eventsTable 固定为 eventsTable', enum: ['line', 'area', 'scatter', 'column', 'rangeline', 'multiaxis', 'pie', 'rose', 'bar', 'sunburst', 'single', 'liquidfill', 'heatmap', 'wordcloud', 'chord', 'sankey', 'force', 'attackmap', 'table', 'networkflow', 'tracing', 'eventsTable'] },
                         scheme: { type: 'string', description: '新的当前 tab 主题色方案。传入后只会更新当前 tab 的 scheme，并校验当前 tab 内现有 panel 颜色是否都属于该主题。', enum: ['schemecat1', 'schemecat2', 'schemecat3', 'schemecat4'] },
                         color: { type: 'string', description: '新的图表主色，映射到 searchData.chartStartingColor，例如 #F6903D。必须属于当前 tab 的 scheme；若同时传 scheme，则必须属于目标 scheme。' },
                         xField: { type: 'string', description: '新的 X 轴字段' },
                         yField: { type: 'string', description: '新的 Y 轴字段' },
+                        yFields: { type: 'array', items: { type: 'string' }, description: '新的多指标字段列表。主要用于 `multiaxis`，也兼容 `column`。若传入，则会优先于单个 `yField` 写入 searchData.yFields。' },
+                        ySmooths: { type: 'array', items: { type: 'boolean' }, description: '新的平滑开关列表，与 `yFields` 一一对应。主要用于 `multiaxis`。' },
+                        yRanges: { type: 'array', items: { type: 'object', additionalProperties: true }, description: '新的 Y 轴范围列表，与 `yFields` 一一对应，例如 [{"min":0,"max":100}]。主要用于 `multiaxis`。' },
                         byFields: { type: 'array', items: { type: 'string' }, description: '新的分组字段列表' },
+                        fromField: { type: 'string', description: '新的关系来源字段。' },
+                        toField: { type: 'string', description: '新的关系目标字段。' },
+                        weightField: { type: 'string', description: '新的关系权重字段。' },
+                        outlierField: { type: 'string', description: '新的区间图预测值字段。' },
+                        upperField: { type: 'string', description: '新的区间图上限字段。' },
+                        lowerField: { type: 'string', description: '新的区间图下限字段。' },
+                        fromLongitudeField: { type: 'string', description: '新的攻击地图来源经度字段。' },
+                        fromLatitudeField: { type: 'string', description: '新的攻击地图来源纬度字段。' },
+                        toLongitudeField: { type: 'string', description: '新的攻击地图目标经度字段。' },
+                        toLatitudeField: { type: 'string', description: '新的攻击地图目标纬度字段。' },
+                        mapType: { type: 'string', description: '新的攻击地图区域。', enum: ['world', 'china'] },
                         description: { type: 'string', description: '新的图表说明' },
                         grid: {
                             type: 'object',
