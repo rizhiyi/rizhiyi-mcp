@@ -18,6 +18,7 @@ import {
     normalizePanelSpec as normalizePanelDefinition,
     panelToWidget as mapPanelToWidget,
     patchWidgetWithChanges as patchWidget,
+    validateSingleWidgetColorSafety,
     validatePanelSpec as validatePanelDefinition,
     widgetToPanel as mapWidgetToPanel
 } from './dashboard/panel-utils.js';
@@ -294,6 +295,71 @@ export class DashboardModule {
                 tab_name: tab.name,
                 content,
                 message: 'Dashboard tab content fetched successfully'
+            }
+        };
+    }
+
+    async cloneDashboardTab(params: any): Promise<any> {
+        const { dashboard_id, source_tab_name, new_tab_name } = params || {};
+        const nextTabName = typeof new_tab_name === 'string' ? new_tab_name.trim() : '';
+        if (!dashboard_id || !source_tab_name || !nextTabName) {
+            return this.buildError(
+                'MISSING_REQUIRED_PARAM',
+                'clone_dashboard_tab 需要 dashboard_id、source_tab_name 和 new_tab_name。',
+                '请提供目标仪表盘 ID、源标签页名称以及新标签页名称。'
+            );
+        }
+
+        const dashboardResult = await this.getDashboard(dashboard_id);
+        if (dashboardResult.error) {
+            return dashboardResult;
+        }
+
+        const dashboard = dashboardResult.data;
+        const tabs = Array.isArray(dashboard?.tabs) ? dashboard.tabs : [];
+        const sourceTab = tabs.find((item: any) => item?.name === source_tab_name);
+        if (!sourceTab) {
+            return this.buildError(
+                'TAB_NOT_FOUND',
+                `未找到标签页: ${source_tab_name}`,
+                '请先通过 list_dashboard_tabs 确认 source_tab_name 是否正确。'
+            );
+        }
+
+        if (tabs.some((item: any) => item?.name === nextTabName)) {
+            return this.buildError(
+                'TAB_ALREADY_EXISTS',
+                `标签页 ${nextTabName} 已存在。`,
+                '请修改 new_tab_name，避免与现有标签页重名。'
+            );
+        }
+
+        const contentResult = this.parseTabContent(sourceTab?.content);
+        if (contentResult.error) {
+            return contentResult;
+        }
+
+        const sourceContent = contentResult.data;
+        const createResult = await this.createDashboardTab(dashboard_id, nextTabName, sourceContent);
+        if (createResult.error) {
+            return createResult;
+        }
+
+        const createdTab = createResult.data;
+        const widgets = Array.isArray(sourceContent?.widgets) ? sourceContent.widgets : [];
+
+        return {
+            status: 200,
+            data: {
+                dashboard_id,
+                dashboard_name: dashboard?.name,
+                app_id: dashboard?.app_id,
+                source_tab_id: sourceTab?.id,
+                source_tab_name,
+                new_tab_id: createdTab?.id,
+                new_tab_name: createdTab?.name || nextTabName,
+                panel_count: widgets.length,
+                message: 'Dashboard tab cloned successfully'
             }
         };
     }
@@ -758,7 +824,79 @@ export class DashboardModule {
         );
     }
 
+    private validateTabContentBeforeSave(tabName: string, content: Record<string, unknown>): any | null {
+        const widgets = Array.isArray(content?.widgets) ? content.widgets : [];
+        const singleWidgetIssues = widgets
+            .map((widget: any) => validateSingleWidgetColorSafety(widget))
+            .filter(Boolean);
+        if (singleWidgetIssues.length > 0) {
+            return this.buildError(
+                'INVALID_SINGLE_WIDGET_STYLE',
+                `标签页 ${tabName} 存在不安全的 single 图颜色配置。`,
+                '请确保 single 图在 background 模式下字色与背景色不同，且 searchData/config/originWidgetConfData 的关键颜色字段保持一致。',
+                { issues: singleWidgetIssues }
+            );
+        }
+
+        const overlaps = this.collectWidgetOverlaps(widgets);
+        if (overlaps.length > 0) {
+            return this.buildError(
+                'PANEL_LAYOUT_OVERLAP',
+                `标签页 ${tabName} 存在 panel 重叠。`,
+                '请调整 panel 的 x、y、w、h，确保任意两个 panel 不发生重叠。',
+                { overlaps }
+            );
+        }
+
+        return null;
+    }
+
+    private collectWidgetOverlaps(widgets: any[]): Array<{ first_panel: string; second_panel: string; first_grid: any; second_grid: any }> {
+        const overlaps: Array<{ first_panel: string; second_panel: string; first_grid: any; second_grid: any }> = [];
+        for (let i = 0; i < widgets.length; i++) {
+            const first = widgets[i];
+            const firstRect = {
+                x: Number(first?.x ?? 0),
+                y: Number(first?.y ?? 0),
+                w: Number(first?.w ?? 6),
+                h: Number(first?.h ?? 5)
+            };
+
+            for (let j = i + 1; j < widgets.length; j++) {
+                const second = widgets[j];
+                const secondRect = {
+                    x: Number(second?.x ?? 0),
+                    y: Number(second?.y ?? 0),
+                    w: Number(second?.w ?? 6),
+                    h: Number(second?.h ?? 5)
+                };
+
+                const intersects = firstRect.x < secondRect.x + secondRect.w
+                    && firstRect.x + firstRect.w > secondRect.x
+                    && firstRect.y < secondRect.y + secondRect.h
+                    && firstRect.y + firstRect.h > secondRect.y;
+                if (!intersects) {
+                    continue;
+                }
+
+                overlaps.push({
+                    first_panel: this.getWidgetTitle(first) || `Panel ${i + 1}`,
+                    second_panel: this.getWidgetTitle(second) || `Panel ${j + 1}`,
+                    first_grid: firstRect,
+                    second_grid: secondRect
+                });
+            }
+        }
+
+        return overlaps;
+    }
+
     private async saveTabContent(dashboardId: string | number, tab: any, content: Record<string, unknown>): Promise<any> {
+        const validationError = this.validateTabContentBeforeSave(tab?.name || '未命名标签页', content);
+        if (validationError) {
+            return validationError;
+        }
+
         const payload = {
             name: tab.name,
             content: JSON.stringify(content)
@@ -781,6 +919,38 @@ export class DashboardModule {
                 'DASHBOARD_SAVE_FAILED',
                 `更新 dashboard tab 失败: ${JSON.stringify(data.error)}`,
                 '请检查 tab 内容是否符合日志易要求。'
+            );
+        }
+
+        return {
+            status: 200,
+            data: data?.object || data
+        };
+    }
+
+    private async createDashboardTab(dashboardId: string | number, tabName: string, content: Record<string, unknown>): Promise<any> {
+        const payload = {
+            name: tabName,
+            content: JSON.stringify(content)
+        };
+
+        const response = await this.client.post(`/api/v3/dashboards/${dashboardId}/tabs/`, payload);
+        const data = response.data as any;
+
+        if (response.error) {
+            return this.buildError(
+                response.error_code || 'UPSTREAM_REQUEST_FAILED',
+                response.message || response.error,
+                response.suggestion || '创建 dashboard tab 失败，请检查参数和上游服务状态。',
+                response.details
+            );
+        }
+
+        if (data?.result === false && data?.error) {
+            return this.buildError(
+                'DASHBOARD_TAB_CREATE_FAILED',
+                `创建 dashboard tab 失败: ${JSON.stringify(data.error)}`,
+                '请检查 tab 名称是否重复，以及 tab content 是否符合日志易要求。'
             );
         }
 

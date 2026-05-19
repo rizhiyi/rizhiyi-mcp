@@ -751,6 +751,28 @@ export const dashboardTools: ToolDefinition[] = [
         }
     },
     {
+        name: 'clone_dashboard_tab',
+        description: '在同一个 dashboard 内原样复制指定 tab 为新 tab。适合“先复制，再在副本上做布局和配色优化”的场景；会尽量保留原 tab 的 widgets、filters、theme 和扩展字段，不做语义化重建。推荐顺序是“先 clone -> 再串行执行 remove/update/layout -> 每步后回读 content 校验”，不要把 clone 后的副本再按 panel 语义重建。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                dashboard_id: {
+                    type: 'string',
+                    description: '仪表盘 ID'
+                },
+                source_tab_name: {
+                    type: 'string',
+                    description: '要复制的源标签页名称'
+                },
+                new_tab_name: {
+                    type: 'string',
+                    description: '新标签页名称'
+                }
+            },
+            required: ['dashboard_id', 'source_tab_name', 'new_tab_name']
+        }
+    },
+    {
         name: 'evaluate_dashboard_aesthetics',
         description: '评估指定 dashboard/tab 的布局美学质量，返回 7 个指标评分、综合分、问题解释和布局建议。',
         inputSchema: {
@@ -828,7 +850,7 @@ export const dashboardTools: ToolDefinition[] = [
     },
     {
         name: 'create_dashboard_from_spec',
-        description: '根据完整的 dashboard 说明创建仪表盘。适合已经明确 tabs 和 panels 结构的场景。注意：同一个 tab 内所有 chart 必须使用同一套 scheme 主题色，不同 tab 之间可以不同；服务端会按图表类别补齐默认 searchData，并按文档顺序逐步扩展更多 chartType。提交 panel 前，请先调用 `log-tools` 的 `query_precheck`，推荐使用 `mode=full`，并通过 `field_mapping` 或 `expected_fields` 校验 query 有数据且字段名与 `xField`、`yField`、`byFields`、`fromField`、`toField`、`weightField` 等配置一致；若页面无图，先排查 `query_precheck` 返回的语法/无数/字段映射问题，再排查 chartType 模板。当前已通过真实创建/回读验证，并结合页面观察确认可用的类型包括 `line`、`area`、`scatter`、`single`、`pie`、`rose`、`bar`、`sunburst`、`heatmap`、`wordcloud`、`liquidfill`、`multiaxis`、`column`、`rangeline`、`chord`、`sankey`、`force`、`attackmap`；`table`、`networkflow`、`tracing` 已纳入枚举，但仍建议继续按“先创建、再回读、再页面确认”的方式验证。',
+        description: '根据完整的 dashboard 说明创建仪表盘。适合已经明确 tabs 和 panels 结构的场景。注意：同一个 tab 内所有 chart 必须使用同一套 scheme 主题色，不同 tab 之间可以不同；服务端会按图表类别补齐默认 searchData，并按文档顺序逐步扩展更多 chartType。提交 panel 前，请先调用 `log-tools` 的 `query_precheck`，推荐使用 `mode=full`，并通过 `field_mapping` 或 `expected_fields` 校验 query 有数据且字段名与 `xField`、`yField`、`byFields`、`fromField`、`toField`、`weightField` 等配置一致；若页面无图，先排查 `query_precheck` 返回的语法/无数/字段映射问题，再排查 chartType 模板。对 `single` 图，若采用背景填充样式，务必在创建后回读 content，确认 `singleChartFontColor` 与 `singleChartBackgroundColor` 不同，且 `searchData/config/originWidgetConfData` 三层没有颜色冲突。当前已通过真实创建/回读验证，并结合页面观察确认可用的类型包括 `line`、`area`、`scatter`、`single`、`pie`、`rose`、`bar`、`sunburst`、`heatmap`、`wordcloud`、`liquidfill`、`multiaxis`、`column`、`rangeline`、`chord`、`sankey`、`force`、`attackmap`；`table`、`networkflow`、`tracing` 已纳入枚举，但仍建议继续按“先创建、再回读、再页面确认”的方式验证。',
         inputSchema: {
             type: 'object',
             properties: {
@@ -926,7 +948,7 @@ export const dashboardTools: ToolDefinition[] = [
     },
     {
         name: 'update_dashboard_layout',
-        description: '调整指定 dashboard 某个 tab 下 panel 的布局，不修改 query 内容。',
+        description: '调整指定 dashboard 某个 tab 下 panel 的布局，不修改 query 内容。该工具应与 remove/update panel 串行使用，不建议并发混用；手动传入 `panel_positions` 时请确保任意两个 panel 不重叠，保存后建议立刻回读 content 或重新评估美观度确认布局结果。',
         inputSchema: {
             type: 'object',
             properties: {
@@ -965,7 +987,7 @@ export const dashboardTools: ToolDefinition[] = [
     },
     {
         name: 'add_dashboard_panel',
-        description: '向指定 dashboard/tab 新增一个 panel。请注意：panel 类型(type) 与图表展示类型(chartType) 是两回事。当前写入优先支持 type=trend 或 type=eventsTable；具体展示样式应放在 chartType 中。若传 color，必须属于该 tab 当前 scheme；服务端会按图表类别补齐默认 searchData，并继续按文档顺序扩展更多 chartType。提交前请先调用 `log-tools` 的 `query_precheck`，推荐 `mode=full`，并通过 `field_mapping` 或 `expected_fields` 验证 query 有数据且字段名与图表配置一致；尤其是 `networkflow`、`tracing`、关系图和攻击地图这类依赖显式字段名的图表，不要跳过这一步。若页面无图，先排查 `query_precheck` 返回的语法/无数/字段映射问题，再排查 chartType 模板。当前已完成真实闭环验证的类型包括 `line`、`area`、`scatter`、`single`、`pie`、`rose`、`bar`、`sunburst`、`heatmap`、`wordcloud`、`liquidfill`、`multiaxis`、`column`、`rangeline`、`chord`、`sankey`、`force`、`attackmap`。',
+        description: '向指定 dashboard/tab 新增一个 panel。请注意：panel 类型(type) 与图表展示类型(chartType) 是两回事。当前写入优先支持 type=trend 或 type=eventsTable；具体展示样式应放在 chartType 中。若传 color，必须属于该 tab 当前 scheme；服务端会按图表类别补齐默认 searchData，并继续按文档顺序扩展更多 chartType。提交前请先调用 `log-tools` 的 `query_precheck`，推荐 `mode=full`，并通过 `field_mapping` 或 `expected_fields` 验证 query 有数据且字段名与图表配置一致；尤其是 `networkflow`、`tracing`、关系图和攻击地图这类依赖显式字段名的图表，不要跳过这一步。若页面无图，先排查 `query_precheck` 返回的语法/无数/字段映射问题，再排查 chartType 模板。若新增的是 `single` 图且使用背景填充样式，请在写入后回读 content，检查 `singleChartFontColor` 与 `singleChartBackgroundColor` 不同，且 `searchData/config/originWidgetConfData` 多层颜色字段没有互相打架。当前已完成真实闭环验证的类型包括 `line`、`area`、`scatter`、`single`、`pie`、`rose`、`bar`、`sunburst`、`heatmap`、`wordcloud`、`liquidfill`、`multiaxis`、`column`、`rangeline`、`chord`、`sankey`、`force`、`attackmap`。',
         inputSchema: {
             type: 'object',
             properties: {
@@ -1024,7 +1046,7 @@ export const dashboardTools: ToolDefinition[] = [
     },
     {
         name: 'update_dashboard_panel',
-        description: '更新指定 dashboard/tab 下某个 panel 的内容，例如标题、query、时间范围、chartType、主题色或局部布局。注意：同一个 tab 内所有 chart 必须使用同一套 scheme，不同 tab 之间可以不同；若切换图表类型，服务端会按类别重新补齐对应的默认 searchData，并继续按文档顺序扩展更多 chartType。若修改了 query 或字段映射，请先调用 `log-tools` 的 `query_precheck`，推荐 `mode=full`，并通过 `field_mapping` 或 `expected_fields` 验证 query 仍然有数据且字段名可用，再提交更新。对于尚未做过真实闭环验证的类型，仍建议在更新后执行“创建/更新 -> 回读 content -> 页面确认”的最小验证流程；若页面无图，先排查 `query_precheck` 返回的语法/无数/字段映射问题，再排查 chartType 模板。',
+        description: '更新指定 dashboard/tab 下某个 panel 的内容，例如标题、query、时间范围、chartType、主题色或局部布局。注意：同一个 tab 内所有 chart 必须使用同一套 scheme，不同 tab 之间可以不同；若切换图表类型，服务端会按类别重新补齐对应的默认 searchData，并继续按文档顺序扩展更多 chartType。若修改了 query 或字段映射，请先调用 `log-tools` 的 `query_precheck`，推荐 `mode=full`，并通过 `field_mapping` 或 `expected_fields` 验证 query 仍然有数据且字段名可用，再提交更新。若修改的是 `single` 图颜色，请把它当成高风险更新：写入后必须回读 content，确认 `singleChartFontColor`、`singleChartBackgroundColor`、`singleChartDefaultColor` 与 `chartStartingColor` 的结果符合预期；若是背景填充样式，字色与背景色不能相同。对于尚未做过真实闭环验证的类型，仍建议在更新后执行“创建/更新 -> 回读 content -> 页面确认”的最小验证流程；若页面无图，先排查 `query_precheck` 返回的语法/无数/字段映射问题，再排查 chartType 模板。不要把 `update_dashboard_panel` 与 `update_dashboard_layout`、`remove_dashboard_panel` 并发混用，建议按“增删/更新 panel -> 调布局 -> 回读验证”的顺序串行执行。',
         inputSchema: {
             type: 'object',
             properties: {

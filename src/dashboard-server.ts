@@ -75,6 +75,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 return await handleToolExecution(() => dashboardModule.listDashboardTabs(parameters), parameters);
             case 'get_dashboard_tab_content':
                 return await handleToolExecution(() => dashboardModule.getDashboardTabContent(parameters), parameters);
+            case 'clone_dashboard_tab':
+                return await handleToolExecution(() => dashboardModule.cloneDashboardTab(parameters), parameters);
             case 'evaluate_dashboard_aesthetics':
                 return await handleToolExecution(() => dashboardModule.evaluateDashboardAesthetics(parameters), parameters);
             case 'list_dashboard_panels':

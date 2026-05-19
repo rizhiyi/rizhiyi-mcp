@@ -344,7 +344,143 @@ export function getWidgetId(widget: any): string {
     return widget?.id || '';
 }
 
+function isSingleWidget(widget: any): boolean {
+    return widget?.searchData?.chartType === 'single' || widget?.chart?.chartType === 'single';
+}
+
+function getSingleWidgetStyleConfig(widget: any): Record<string, any> {
+    const config = widget?.searchData?.config;
+    if (!Array.isArray(config)) {
+        return {};
+    }
+    const displayConfig = config[2];
+    return displayConfig && typeof displayConfig === 'object' ? displayConfig : {};
+}
+
+function collectExplicitSingleWidgetColors(widget: any) {
+    const searchData = widget?.searchData && typeof widget.searchData === 'object' ? widget.searchData : {};
+    const origin = widget?.originWidgetConfData && typeof widget.originWidgetConfData === 'object'
+        ? widget.originWidgetConfData
+        : {};
+    const chart = widget?.chart && typeof widget.chart === 'object' ? widget.chart : {};
+    const config = getSingleWidgetStyleConfig(widget);
+
+    const fontSources = {
+        searchData: normalizeHexColor(searchData?.singleChartFontColor),
+        config: normalizeHexColor(config?.singleChartFontColor),
+        originWidgetConfData: normalizeHexColor(origin?.singleChartFontColor),
+        chart: normalizeHexColor(chart?.singleChartFontColor)
+    };
+    const backgroundSources = {
+        searchData: normalizeHexColor(searchData?.singleChartBackgroundColor),
+        config: normalizeHexColor(config?.singleChartBackgroundColor),
+        originWidgetConfData: normalizeHexColor(origin?.singleChartBackgroundColor),
+        chart: normalizeHexColor(chart?.singleChartBackgroundColor)
+    };
+
+    return {
+        searchData,
+        origin,
+        chart,
+        config,
+        fontSources,
+        backgroundSources
+    };
+}
+
+function distinctDefinedColors(colorSources: Record<string, string>): string[] {
+    return [...new Set(Object.values(colorSources).filter(Boolean))];
+}
+
+export function getSingleWidgetStyleSnapshot(widget: any): {
+    fillMode: string;
+    fontColor: string;
+    backgroundColor: string;
+    fontSources: Record<string, string>;
+    backgroundSources: Record<string, string>;
+} {
+    const { searchData, origin, chart, config, fontSources, backgroundSources } = collectExplicitSingleWidgetColors(widget);
+    return {
+        fillMode: String(
+            searchData?.singleChartColorFillingMode
+            || config?.singleChartColorFillingMode
+            || origin?.singleChartColorFillingMode
+            || chart?.singleChartColorFillingMode
+            || 'font'
+        ).trim(),
+        fontColor: normalizeHexColor(
+            fontSources.searchData
+            || fontSources.config
+            || fontSources.originWidgetConfData
+            || fontSources.chart
+            || searchData?.singleChartDefaultColor
+            || origin?.singleChartDefaultColor
+            || chart?.singleChartDefaultColor
+            || searchData?.chartStartingColor
+            || chart?.chartStartingColor
+            || origin?.chartStartingColor
+        ),
+        backgroundColor: normalizeHexColor(
+            backgroundSources.searchData
+            || backgroundSources.config
+            || backgroundSources.originWidgetConfData
+            || backgroundSources.chart
+            || '#FFFFFF'
+        ),
+        fontSources,
+        backgroundSources
+    };
+}
+
+export function validateSingleWidgetColorSafety(widget: any): {
+    code: string;
+    panelTitle: string;
+    message: string;
+    details: Record<string, any>;
+} | null {
+    if (!isSingleWidget(widget)) {
+        return null;
+    }
+
+    const panelTitle = getWidgetTitle(widget) || getWidgetId(widget) || '未命名 single panel';
+    const style = getSingleWidgetStyleSnapshot(widget);
+    const fontVariants = distinctDefinedColors(style.fontSources);
+    const backgroundVariants = distinctDefinedColors(style.backgroundSources);
+
+    if (fontVariants.length > 1 || backgroundVariants.length > 1) {
+        return {
+            code: 'SINGLE_WIDGET_STYLE_INCONSISTENT',
+            panelTitle,
+            message: `single 图 ${panelTitle} 的颜色字段在不同配置层级之间不一致。`,
+            details: {
+                fillMode: style.fillMode,
+                fontSources: style.fontSources,
+                backgroundSources: style.backgroundSources
+            }
+        };
+    }
+
+    if (style.fillMode === 'background' && style.fontColor && style.backgroundColor && style.fontColor === style.backgroundColor) {
+        return {
+            code: 'SINGLE_WIDGET_COLOR_CONFLICT',
+            panelTitle,
+            message: `single 图 ${panelTitle} 的字色与背景色相同，页面会不可读。`,
+            details: {
+                fillMode: style.fillMode,
+                fontColor: style.fontColor,
+                backgroundColor: style.backgroundColor
+            }
+        };
+    }
+
+    return null;
+}
+
 export function getWidgetColor(widget: any): string {
+    if (isSingleWidget(widget)) {
+        return getSingleWidgetStyleSnapshot(widget).fontColor;
+    }
+
     return normalizeHexColor(widget?.searchData?.chartStartingColor || widget?.chart?.chartStartingColor);
 }
 
@@ -1289,14 +1425,47 @@ export function patchWidgetWithChanges(widget: any, mergedPanel: any, changes: a
     };
 
     if (colorChanged && normalizedColor) {
+        const singleStyle = nextWidget.searchData?.chartType === 'single'
+            ? getSingleWidgetStyleSnapshot(rawWidget)
+            : null;
         nextWidget.chart = {
             ...(rawWidget?.chart && typeof rawWidget.chart === 'object' ? rawWidget.chart : {}),
             chartStartingColor: normalizedColor
         };
 
         if (nextWidget.searchData?.chartType === 'single') {
+            const existingConfig = Array.isArray(rawSearchData?.config) ? [...rawSearchData.config] : [];
+            while (existingConfig.length < 3) {
+                existingConfig.push({});
+            }
+            existingConfig[2] = {
+                ...(existingConfig[2] && typeof existingConfig[2] === 'object' ? existingConfig[2] : {}),
+                singleChartFontColor: normalizedColor,
+                singleChartBackgroundColor: singleStyle?.backgroundColor || '#FFFFFF'
+            };
+
+            nextWidget.searchData = {
+                ...nextWidget.searchData,
+                chartStartingColor: normalizedColor,
+                singleChartFontColor: normalizedColor,
+                singleChartDefaultColor: normalizedColor,
+                singleChartBackgroundColor: singleStyle?.backgroundColor || '#FFFFFF',
+                singleChartColorFillingMode: singleStyle?.fillMode || nextWidget.searchData?.singleChartColorFillingMode || 'font',
+                config: existingConfig
+            };
+            nextWidget.originWidgetConfData = {
+                ...(rawWidget?.originWidgetConfData && typeof rawWidget.originWidgetConfData === 'object'
+                    ? rawWidget.originWidgetConfData
+                    : {}),
+                chartStartingColor: normalizedColor,
+                singleChartFontColor: normalizedColor,
+                singleChartDefaultColor: normalizedColor,
+                singleChartBackgroundColor: singleStyle?.backgroundColor || '#FFFFFF',
+                singleChartColorFillingMode: singleStyle?.fillMode || rawWidget?.originWidgetConfData?.singleChartColorFillingMode || 'font'
+            };
             nextWidget.chart.singleChartFontColor = normalizedColor;
             nextWidget.chart.singleChartDefaultColor = normalizedColor;
+            nextWidget.chart.singleChartBackgroundColor = singleStyle?.backgroundColor || '#FFFFFF';
         }
     }
 
