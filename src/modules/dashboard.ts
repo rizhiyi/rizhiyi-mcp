@@ -251,6 +251,7 @@ export class DashboardModule {
             data: {
                 dashboard_id,
                 dashboard_name: dashboard?.name,
+                app_id: dashboard?.app_id,
                 tab_count: tabs.length,
                 tabs: tabs.map((tab: any) => {
                     const contentResult = this.parseTabContent(tab?.content);
@@ -288,6 +289,7 @@ export class DashboardModule {
             data: {
                 dashboard_id,
                 dashboard_name: dashboard?.name,
+                app_id: dashboard?.app_id,
                 tab_id: tab.id,
                 tab_name: tab.name,
                 content,

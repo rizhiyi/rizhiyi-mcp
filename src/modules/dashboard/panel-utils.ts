@@ -626,7 +626,36 @@ function buildDimensionChartConfig(chartType: string, searchData: Record<string,
         ];
     }
 
-    if (chartType === 'bar' || chartType === 'sunburst' || chartType === 'heatmap' || chartType === 'wordcloud') {
+    if (chartType === 'bar') {
+        return [
+            {
+                xField: searchData?.yField || (Array.isArray(searchData?.byFields) ? searchData.byFields[0] : '') || ''
+            },
+            {
+                yField: searchData?.yField || (Array.isArray(searchData?.byFields) ? searchData.byFields[0] : '') || ''
+            },
+            {
+                byFields: searchData?.yField ? [searchData.yField] : (Array.isArray(searchData?.byFields) ? searchData.byFields : []),
+                byStacks: Boolean(searchData?.byStacks)
+            },
+            {
+                trellisField: searchData?.trellisField || '',
+                layout: {
+                    layoutColumns: typeof searchData?.layoutColumns === 'number' ? searchData.layoutColumns : 1
+                }
+            },
+            {
+                chartStartingColor: normalizeHexColor(searchData?.chartStartingColor) || '#3661EB',
+                labelFormatter: searchData?.labelFormatter || 'onlyName',
+                labelPosition: searchData?.labelPosition || 'left',
+                dataPrecision: searchData?.dataPrecision || '',
+                cornerRadius: typeof searchData?.cornerRadius === 'number' ? searchData.cornerRadius : 4,
+                maxColumnSize: typeof searchData?.maxColumnSize === 'number' ? searchData.maxColumnSize : 32
+            }
+        ];
+    }
+
+    if (chartType === 'sunburst' || chartType === 'heatmap' || chartType === 'wordcloud') {
         return [
             {
                 xField: searchData?.xField || ''
@@ -745,7 +774,22 @@ function resolvePanelFieldHints(panel: any, chartType: string): PanelFieldHints 
         };
     }
 
-    if (chartType === 'pie' || chartType === 'rose' || chartType === 'bar' || chartType === 'sunburst' || chartType === 'heatmap' || chartType === 'wordcloud') {
+    if (chartType === 'bar') {
+        const categoryField = explicitByFields[0] || explicitYField || '';
+        const valueField = explicitXField || inferredMetricField || explicitYField || 'count';
+        return {
+            xField: explicitXField || valueField,
+            yField: explicitYField || categoryField,
+            yFields: [valueField],
+            ySmooths: [],
+            yRanges: [],
+            byFields: categoryField ? [categoryField] : [],
+            valueField,
+            categoryField
+        };
+    }
+
+    if (chartType === 'pie' || chartType === 'rose' || chartType === 'sunburst' || chartType === 'heatmap' || chartType === 'wordcloud') {
         const legacyCategoryField = explicitByFields.length > 0 ? explicitByFields[0] : explicitXField;
         const categoryField = legacyCategoryField || byFields[0] || '';
         const valueField = explicitYField || (categoryField ? inferredMetricField : explicitXField) || inferredMetricField || 'count';
@@ -846,6 +890,12 @@ function buildChartSpecificSearchData(
     existing?: any
 ): Record<string, any> {
     if (chartType === 'single') {
+        const singleColor = normalizeHexColor(
+            panel?.color
+            || existing?.singleChartFontColor
+            || existing?.singleChartDefaultColor
+            || existing?.chartStartingColor
+        ) || '#4A4A4A';
         return {
             xField: fieldHints.xField,
             cur_XField: fieldHints.xField,
@@ -864,9 +914,10 @@ function buildChartSpecificSearchData(
             singleChartDisplayMode: existing?.singleChartDisplayMode || DEFAULT_SINGLE_CHART_DISPLAY_MODE,
             alignment: existing?.alignment || 'center',
             singleChartFontSize: typeof existing?.singleChartFontSize === 'number' ? existing.singleChartFontSize : DEFAULT_SINGLE_CHART_FONT_SIZE,
-            singleChartFontColor: existing?.singleChartFontColor || '#4A4A4A',
+            singleChartFontColor: singleColor,
             singleChartBackgroundColor: existing?.singleChartBackgroundColor || '#FFFFFF',
             singleChartIconColor: existing?.singleChartIconColor || '#3661EB',
+            singleChartDefaultColor: singleColor,
             singleChartColorFillingMode: existing?.singleChartColorFillingMode || 'font',
             liveRefresh: Boolean(existing?.liveRefresh),
             compareTime: existing?.compareTime || 'none',
@@ -916,7 +967,25 @@ function buildChartSpecificSearchData(
         };
     }
 
-    if (chartType === 'bar' || chartType === 'sunburst' || chartType === 'heatmap' || chartType === 'wordcloud') {
+    if (chartType === 'bar') {
+        return {
+            xField: fieldHints.valueField,
+            yField: fieldHints.categoryField,
+            byFields: [],
+            byStacks: Boolean(existing?.byStacks),
+            trellisField: existing?.trellisField || '',
+            layoutColumns: typeof existing?.layoutColumns === 'number' ? existing.layoutColumns : 1,
+            chartStartingColor: normalizeHexColor(existing?.chartStartingColor || panel?.color) || '#3661EB',
+            labelFormatter: existing?.labelFormatter || 'onlyName',
+            labelPosition: existing?.labelPosition || 'left',
+            dataPrecision: existing?.dataPrecision || '',
+            cornerRadius: typeof existing?.cornerRadius === 'number' ? existing.cornerRadius : 4,
+            maxColumnSize: typeof existing?.maxColumnSize === 'number' ? existing.maxColumnSize : 32,
+            market_day: resolveMarketDay(existing?.market_day ?? panel?.market_day) ? 1 : 0
+        };
+    }
+
+    if (chartType === 'sunburst' || chartType === 'heatmap' || chartType === 'wordcloud') {
         return {
             xField: fieldHints.valueField,
             byFields: fieldHints.byFields,
@@ -1208,6 +1277,8 @@ export function patchWidgetWithChanges(widget: any, mergedPanel: any, changes: a
         : {};
     const gridChanges = changes?.grid && typeof changes.grid === 'object' ? changes.grid : {};
     const chartTypeChanged = Object.prototype.hasOwnProperty.call(changes, 'chartType');
+    const colorChanged = Object.prototype.hasOwnProperty.call(changes, 'color');
+    const normalizedColor = normalizeHexColor(mergedPanel?.color);
     const nextWidget = {
         ...rawWidget,
         type: mergedPanel.type,
@@ -1216,6 +1287,18 @@ export function patchWidgetWithChanges(widget: any, mergedPanel: any, changes: a
             existing: chartTypeChanged ? omitChartSpecificSearchData(rawSearchData) : rawSearchData
         })
     };
+
+    if (colorChanged && normalizedColor) {
+        nextWidget.chart = {
+            ...(rawWidget?.chart && typeof rawWidget.chart === 'object' ? rawWidget.chart : {}),
+            chartStartingColor: normalizedColor
+        };
+
+        if (nextWidget.searchData?.chartType === 'single') {
+            nextWidget.chart.singleChartFontColor = normalizedColor;
+            nextWidget.chart.singleChartDefaultColor = normalizedColor;
+        }
+    }
 
     if (Object.prototype.hasOwnProperty.call(gridChanges, 'x')) {
         nextWidget.x = mergedPanel.grid.x;
