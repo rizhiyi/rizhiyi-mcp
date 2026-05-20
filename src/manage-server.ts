@@ -33,13 +33,14 @@ const EXCLUDED_MODULE_SERVER_MAP: Record<string, string> = {
   agent: 'rizhiyi_agent_config',
   alerts: 'rizhiyi_alert',
   parserrules: 'rizhiyi_parserule',
+  fieldconfigs: 'rizhiyi_dynamic_field',
   dashboard: 'rizhiyi_dashboard',
   dashboards: 'rizhiyi_dashboard',
 };
 
 const MANAGE_SERVER_INSTRUCTIONS = `使用说明:
 1. 这是通用管理入口，只适合简单查询、列表、详情和低复杂度 CRUD。
-2. 遇到 agent、alerts、parserrules、dashboard 这类复杂 JSON body 配置类能力时，请改用专用 MCP 服务器。
+2. 遇到 agent、alerts、parserrules、fieldconfigs、dashboard 这类复杂 JSON body 配置类能力时，请改用专用 MCP 服务器。
 3. 推荐流程：先 select_module，再 select_api_from_module，最后 gencode_callapi。
 4. 输出默认使用 output_format=auto，避免把大段 JSON 直接塞给 Agent。
 5. 遇到错误时，优先根据 suggestion 字段修正参数后重试一次。`;

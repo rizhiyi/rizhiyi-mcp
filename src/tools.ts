@@ -1138,6 +1138,347 @@ export const dashboardTools: ToolDefinition[] = [
     }
 ];
 
+export const parserRuleTools: ToolDefinition[] = [
+    {
+        name: 'list_parserrules',
+        description: '列出解析规则列表，支持按名称、logtype、应用、启用状态等条件过滤。默认只返回 id、name、logtype、desc、enable、from_app、last_modified_time，不带 conf；如需自定义返回列，可显式传 fields。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                fields: { type: 'string', description: '可选，指定返回字段列表；未传时默认返回 id、name、logtype、desc、enable、from_app、last_modified_time，不包含 conf。' },
+                permits: { type: 'string', description: '可选，权限字段。' },
+                page: { type: 'integer', description: '页码。' },
+                size: { type: 'integer', description: '每页大小。' },
+                id: { type: 'integer', description: '按规则 ID 过滤。' },
+                uuid: { type: 'string', description: '按规则 UUID 过滤。' },
+                domain_id: { type: 'integer', description: '按 domain_id 过滤。' },
+                creator_id: { type: 'integer', description: '按创建人 ID 过滤。' },
+                name: { type: 'string', description: '按规则名称过滤。' },
+                from_app: { type: 'integer', description: '按关联应用 ID 过滤。' },
+                enable: { type: 'boolean', description: '按启用状态过滤。' },
+                desc: { type: 'string', description: '按描述过滤。' },
+                logtype: { type: 'string', description: '按 logtype 过滤。' },
+                rt_ids: { type: 'string', description: '按资源标签过滤，多个标签 ID 用逗号分隔。' },
+                sort: { type: 'string', description: '排序字段，例如 -id。' },
+                useAdvancedSearch: { type: 'string', description: '是否启用高级搜索。' },
+                appname: { type: 'string', description: '高级搜索时的 appname。' },
+                tag: { type: 'string', description: '高级搜索时的 tag。' }
+            }
+        }
+    },
+    {
+        name: 'get_parserrule_detail',
+        description: '读取单个解析规则详情，适合在 update/verify 前先查看当前 conf、logtype、分配和标签信息。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                id: { type: 'integer', description: '解析规则 ID。' },
+                fields: { type: 'string', description: '可选，指定返回字段列表。' },
+                permit: { type: 'string', description: '可选，权限字段。' }
+            },
+            required: ['id']
+        }
+    },
+    {
+        name: 'generate_parserrule_draft',
+        description: '基于样例日志生成 parserrule 初稿。注意：这是“初稿生成”而不是最终规则，后端自动抽出的字段名可能是 `field`、`field_1`、`field_N` 这类无业务语义的占位名；调用后应结合 sample_logs 自行重命名字段，再继续 create/update/verify。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                sample_logs: {
+                    oneOf: [
+                        { type: 'array', items: { oneOf: [{ type: 'string' }, { type: 'object', additionalProperties: true }] } },
+                        { type: 'object', additionalProperties: true },
+                        { type: 'string' }
+                    ],
+                    description: '样例日志。优先传字符串数组；也兼容对象数组、单个对象、单个字符串或合法 JSON 字符串。对象时会优先提取 raw_message、rawMessage、message、log、content。'
+                }
+            },
+            required: ['sample_logs']
+        }
+    },
+    {
+        name: 'create_parserrule',
+        description: '创建解析规则。推荐先调用 `generate_parserrule_draft` 生成初稿，再把人工确认后的结果放进 rule。rule 支持对象，也兼容合法 JSON 字符串；会在本地校验必填字段，以及 conf/sink_conf 是否为合法 JSON 字符串。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                rule: {
+                    oneOf: [
+                        {
+                            type: 'object',
+                            description: '解析规则主体。',
+                            properties: {
+                                name: { type: 'string', description: '规则名称。' },
+                                conf: { oneOf: [{ type: 'string' }, { type: 'object', additionalProperties: true }, { type: 'array', items: { type: 'object' } }], description: '规则 conf。传对象/数组时会自动序列化为 JSON 字符串。' },
+                                logtype: { type: 'string', description: '规则 logtype。' },
+                                desc: { type: 'string', description: '规则描述。' },
+                                category_id: { type: 'integer', description: '分类 ID。' },
+                                enable: { type: 'boolean', description: '是否启用。' },
+                                from_app: { type: 'integer', description: '关联应用 ID。' },
+                                notice_frequency: { type: 'string', description: '未解析日志通知频率。' },
+                                sink_conf: { oneOf: [{ type: 'string' }, { type: 'object', additionalProperties: true }, { type: 'array', items: { type: 'object' } }], description: '指标索引配置。传对象/数组时会自动序列化为 JSON 字符串。' },
+                                rt_names: { type: 'string', description: '关联资源标签名称，逗号分隔。' },
+                                assign_data: {
+                                    type: 'array',
+                                    description: '数据分配配置。',
+                                    items: {
+                                        type: 'object',
+                                        properties: {
+                                            appnames: { type: 'string' },
+                                            tags: { type: 'string' }
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            type: 'string',
+                            description: '解析规则主体的 JSON 对象字符串。'
+                        }
+                    ]
+                }
+            },
+            required: ['rule']
+        }
+    },
+    {
+        name: 'update_parserrule',
+        description: '更新解析规则。推荐先调用 `generate_parserrule_draft` 生成或重整初稿，再把人工确认后的字段放进 changes。changes 支持对象，也兼容合法 JSON 字符串；空 changes 和非法 JSON 会在本地直接拦截。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                id: { type: 'integer', description: '解析规则 ID。' },
+                changes: {
+                    oneOf: [
+                        {
+                            type: 'object',
+                            description: '待更新字段。',
+                            properties: {
+                                name: { type: 'string', description: '规则名称。' },
+                                conf: { oneOf: [{ type: 'string' }, { type: 'object', additionalProperties: true }, { type: 'array', items: { type: 'object' } }], description: '规则 conf。传对象/数组时会自动序列化为 JSON 字符串。' },
+                                logtype: { type: 'string', description: '规则 logtype。' },
+                                desc: { type: 'string', description: '规则描述。' },
+                                category_id: { type: 'integer', description: '分类 ID。' },
+                                enable: { type: 'boolean', description: '是否启用。' },
+                                from_app: { type: 'integer', description: '关联应用 ID。' },
+                                notice_frequency: { type: 'string', description: '未解析日志通知频率。' },
+                                sink_conf: { oneOf: [{ type: 'string' }, { type: 'object', additionalProperties: true }, { type: 'array', items: { type: 'object' } }], description: '指标索引配置。传对象/数组时会自动序列化为 JSON 字符串。' },
+                                rt_names: { type: 'string', description: '关联资源标签名称，逗号分隔。' },
+                                assign_data: {
+                                    type: 'array',
+                                    description: '数据分配配置。',
+                                    items: {
+                                        type: 'object',
+                                        properties: {
+                                            appnames: { type: 'string' },
+                                            tags: { type: 'string' }
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            type: 'string',
+                            description: '待更新字段的 JSON 对象字符串。'
+                        }
+                    ]
+                }
+            },
+            required: ['id', 'changes']
+        }
+    },
+    {
+        name: 'delete_parserrule',
+        description: '删除单个解析规则。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                id: { type: 'integer', description: '解析规则 ID。' }
+            },
+            required: ['id']
+        }
+    },
+    {
+        name: 'verify_parserrule',
+        description: '验证解析规则对样例日志的解析结果。推荐流程是先 `generate_parserrule_draft`，再 `create_parserrule` / `update_parserrule`，最后用本工具验证。底层调用 `parserrules/verify/logtype`，只用于字段提取 / schema on write。支持两种传参方式：1）传 payload 作为 verify 原始请求体；2）直接把 rawMessage、rule、sample_logs、conf、logtype、enable 平铺到顶层。rule/conf/logtype 支持原生数组对象或 JSON 字符串；工具会先在本地校验空规则、空样例、非法 JSON，再把返回结果整理成更适合 LLM 阅读的摘要。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                domain: { type: 'string', description: '可选，domain。' },
+                query_logtype: { type: 'string', description: '可选，verify 接口 query 参数 logtype。' },
+                logtype: {
+                    oneOf: [
+                        { type: 'string', description: '顶层直传模式下可作为 body.logtype 的 JSON 字符串；payload 模式下兼容旧行为，仍可作为 query 参数。' },
+                        { type: 'array', items: { type: 'object' }, description: '顶层直传模式下的 body.logtype 数组。' },
+                        { type: 'object', additionalProperties: true, description: '顶层直传模式下的单个 logtype 对象，会自动包装成数组。' }
+                    ]
+                },
+                rawMessage: { type: 'string', description: '顶层直传模式下的待解析原始日志。若缺失，会尝试从 sample_logs 第一条样例中兜底提取。' },
+                enable: { oneOf: [{ type: 'boolean' }, { type: 'string' }], description: '顶层直传模式下是否启用。字符串仅支持 "true"/"false"。' },
+                rule: {
+                    oneOf: [
+                        { type: 'array', items: { type: 'object' } },
+                        { type: 'object', additionalProperties: true },
+                        { type: 'string' }
+                    ],
+                    description: '顶层直传模式下的匹配规则；支持数组、对象或 JSON 字符串。'
+                },
+                sample_logs: {
+                    oneOf: [
+                        { type: 'array', items: { oneOf: [{ type: 'object' }, { type: 'string' }] } },
+                        { type: 'object', additionalProperties: true },
+                        { type: 'string' }
+                    ],
+                    description: '顶层直传模式下的样例日志；支持对象数组、字符串数组、单个对象或字符串。'
+                },
+                conf: {
+                    oneOf: [
+                        { type: 'array', items: { type: 'object' } },
+                        { type: 'object', additionalProperties: true },
+                        { type: 'string' }
+                    ],
+                    description: '顶层直传模式下的 conf；支持数组、对象或 JSON 字符串。'
+                },
+                appname: { type: 'string' },
+                grok: {
+                    oneOf: [
+                        { type: 'object', additionalProperties: true },
+                        { type: 'string' }
+                    ]
+                },
+                hostname: { type: 'string' },
+                source: { type: 'string' },
+                ip: { type: 'string' },
+                payload: {
+                    oneOf: [
+                        {
+                            type: 'object',
+                            description: 'verify 原始请求体。',
+                            properties: {
+                                appname: { type: 'string' },
+                                conf: {
+                                    oneOf: [
+                                        { type: 'array', items: { type: 'object' } },
+                                        { type: 'object', additionalProperties: true },
+                                        { type: 'string' }
+                                    ],
+                                    description: '解析规则 conf。支持数组、对象或 JSON 字符串。'
+                                },
+                                logtype: {
+                                    oneOf: [
+                                        { type: 'array', items: { type: 'object' } },
+                                        { type: 'object', additionalProperties: true },
+                                        { type: 'string' }
+                                    ],
+                                    description: '当前规则 logtype。支持数组、对象或 JSON 字符串。'
+                                },
+                                rawMessage: { type: 'string', description: '待解析原始日志。' },
+                                enable: { oneOf: [{ type: 'boolean' }, { type: 'string' }], description: '是否启用。' },
+                                rule: {
+                                    oneOf: [
+                                        { type: 'array', items: { type: 'object' } },
+                                        { type: 'object', additionalProperties: true },
+                                        { type: 'string' }
+                                    ],
+                                    description: '匹配规则。支持数组、对象或 JSON 字符串。'
+                                },
+                                sample_logs: {
+                                    oneOf: [
+                                        { type: 'array', items: { oneOf: [{ type: 'object' }, { type: 'string' }] } },
+                                        { type: 'object', additionalProperties: true },
+                                        { type: 'string' }
+                                    ],
+                                    description: '样例日志。支持对象数组、字符串数组、单个对象或字符串。'
+                                },
+                                grok: {
+                                    oneOf: [
+                                        { type: 'object', additionalProperties: true },
+                                        { type: 'string' }
+                                    ]
+                                },
+                                hostname: { type: 'string' },
+                                source: { type: 'string' },
+                                ip: { type: 'string' }
+                            }
+                        },
+                        {
+                            type: 'string',
+                            description: 'verify 原始请求体的 JSON 字符串。'
+                        }
+                    ]
+                }
+            }
+        }
+    },
+    {
+        name: 'list_parserrule_references',
+        description: '本地规则类型参考工具。数据来源于仓库内 docs/parserule.adoc，不依赖外部网络；不传 rule_type 时返回当前支持的主要算子类型列表，传入 rule_type 时返回对应类型的用途、关键字段、最小示例和注意事项。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                rule_type: {
+                    type: 'string',
+                    description: '可选，规则类型。支持传入类型 key 或常见别名，例如 regex、json、kv、dissect、metadata、正则解析、JSON解析。'
+                },
+                type: {
+                    type: 'string',
+                    description: '可选，rule_type 的兼容别名；新调用优先使用 rule_type。'
+                }
+            }
+        }
+    }
+];
+
+export const fieldConfigTools: ToolDefinition[] = [
+    {
+        name: 'list_fieldconfigs',
+        description: '列出动态字段配置列表，也就是 schema on read 能力的当前配置概览。会按应用整理 props/transform，并补充作用域、模板数量、transform 名称等摘要信息。',
+        inputSchema: {
+            type: 'object',
+            properties: {}
+        }
+    },
+    {
+        name: 'verify_fieldconfig',
+        description: '校验动态字段规则。底层调用 `fieldconfigs/verify`；需要传 rule 和 contents。contents 支持对象数组、字符串数组、单个对象、字符串，也兼容合法 JSON 字符串。返回结果会整理成更适合 LLM 阅读的字段提取摘要。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                rule: {
+                    type: 'string',
+                    description: '动态字段校验规则字符串，例如正则表达式。'
+                },
+                contents: {
+                    oneOf: [
+                        { type: 'array', items: { oneOf: [{ type: 'object' }, { type: 'string' }] } },
+                        { type: 'object', additionalProperties: true },
+                        { type: 'string' }
+                    ],
+                    description: '待校验内容；支持对象数组、字符串数组、单个对象、字符串，或可解析为这些结构的 JSON 字符串。'
+                }
+            },
+            required: ['rule', 'contents']
+        }
+    },
+    {
+        name: 'get_fieldconfig_props_reference',
+        description: '读取动态字段 props 参考配置，并整理成适合 LLM 阅读的“scope / config_type / template / key_fields / example”结构，供后续动态字段配置时参考 alias、lookup、dictionary 等模板。',
+        inputSchema: {
+            type: 'object',
+            properties: {}
+        }
+    },
+    {
+        name: 'get_fieldconfig_transform_reference',
+        description: '读取动态字段 transform 参考配置，并整理成适合 LLM 阅读的“transform_name / key_fields / example”结构，供后续动态字段配置时参考 lowercase、substring 等转换模板。',
+        inputSchema: {
+            type: 'object',
+            properties: {}
+        }
+    }
+];
+
 export const searchTools: ToolDefinition[] = [
     ...withOutputControls(basicLogTools),
     ...withOutputControls(statisticalAnalysisTools),
@@ -1149,8 +1490,18 @@ export const dashboardServerTools: ToolDefinition[] = [
     ...withOutputControls(dashboardTools)
 ];
 
+export const parserRuleServerTools: ToolDefinition[] = [
+    ...withOutputControls(parserRuleTools)
+];
+
+export const fieldConfigServerTools: ToolDefinition[] = [
+    ...withOutputControls(fieldConfigTools)
+];
+
 // 所有工具
 export const allTools: ToolDefinition[] = [
     ...searchTools,
-    ...dashboardServerTools
+    ...dashboardServerTools,
+    ...parserRuleServerTools,
+    ...fieldConfigServerTools
 ];

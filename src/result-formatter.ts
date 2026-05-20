@@ -5,6 +5,7 @@ export type OutputFormat = 'auto' | 'yaml' | 'csv' | 'json';
 export interface FormatOptions {
   outputFormat?: string;
   includeRawJson?: boolean;
+  rawJsonData?: unknown;
 }
 
 function isScalar(value: unknown): boolean {
@@ -61,7 +62,8 @@ function normalizeOutputFormat(format: string | undefined): OutputFormat {
 export function formatSuccessPayload(data: unknown, options: FormatOptions = {}): string {
   const outputFormat = normalizeOutputFormat(options.outputFormat);
   const includeRawJson = options.includeRawJson === true;
-  const actualData = includeRawJson ? { data, raw_json: data } : data;
+  const rawJsonData = typeof options.rawJsonData === 'undefined' ? data : options.rawJsonData;
+  const actualData = includeRawJson ? { data, raw_json: rawJsonData } : data;
 
   if (outputFormat === 'json') {
     return JSON.stringify(actualData, null, 2);
