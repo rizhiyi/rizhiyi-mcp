@@ -30,6 +30,10 @@ export interface LogSearchResponse {
         [key: string]: any;
     }>;
     total?: number;
+    page?: number;
+    size?: number;
+    returned?: number;
+    has_more?: boolean;
 }
 
 export interface LogReduceResponse {
@@ -244,7 +248,9 @@ export interface BaseQueryParams {
     query?: string;
     time_range: string;
     index_name?: string;
-    limit?: number;
+    page?: number;
+    size?: number;
+    limit?: number; // backward compatibility alias, do not pass directly to /search/sheets
 }
 
 // 时间序列查询参数

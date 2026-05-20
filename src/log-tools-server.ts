@@ -179,11 +179,13 @@ async function handleLogSearchSheet(params: any) {
             '请传入 time_range，例如 now-15m,now。'
         );
     }
+    const page = params.page ?? 0;
+    const size = params.size ?? params.limit ?? 20;
     const result = await logSearchModule.executeLogSearchSheet(
         params.query || "*",
         params.time_range,
         params.index_name || "yotta",
-        params.limit || 100,
+        { page, size, limit: params.limit },
         params.fields
     );
     return formatResult(result, params);

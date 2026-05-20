@@ -70,6 +70,19 @@ export class LogSearchModule {
         return links;
     }
 
+    private normalizeSearchSheetsPaging(
+        pagingOrLimit?: number | { page?: number; size?: number; limit?: number },
+        defaultSize: number = 20
+    ): { page: number; size: number } {
+        if (typeof pagingOrLimit === 'number') {
+            return { page: 0, size: pagingOrLimit };
+        }
+
+        const page = pagingOrLimit?.page ?? 0;
+        const size = pagingOrLimit?.size ?? pagingOrLimit?.limit ?? defaultSize;
+        return { page, size };
+    }
+
     /**
      * 提取数据行 - 从搜索结果中提取行数据
      */
@@ -245,16 +258,18 @@ export class LogSearchModule {
         query: string, 
         timeRange: string, 
         indexName: string = "yotta", 
-        limit: number = 100,
+        pagingOrLimit: number | { page?: number; size?: number; limit?: number } = 20,
         fields?: string[]
     ): Promise<ApiResponse<LogSearchResponse>> {
         try {
             const apiPath = '/api/v3/search/sheets/';
+            const { page, size } = this.normalizeSearchSheetsPaging(pagingOrLimit, 20);
             const params = {
                 query,
                 time_range: timeRange,
                 index_name: indexName,
-                limit
+                page,
+                size
             };
 
             const result = await this.client.get<any>(apiPath, params);
@@ -306,7 +321,11 @@ export class LogSearchModule {
                 status: result.status,
                 data: {
                     hits,
-                    total
+                    total,
+                    page,
+                    size,
+                    returned: hits.length,
+                    has_more: total > (page + 1) * size
                 },
                 message: '日志搜索成功'
             };
@@ -460,7 +479,8 @@ export class LogSearchModule {
                 query,
                 time_range: timeRange,
                 index_name: indexName,
-                limit: 0,  // 设置 limit=0 只获取字段信息，不返回数据行
+                page: 0,
+                size: 0,  // 设置 size=0 只获取字段信息，不返回数据行
                 fields: true  // 明确请求字段信息
             };
 
@@ -521,7 +541,8 @@ export class LogSearchModule {
                 query: fieldQuery,
                 time_range: timeRange,
                 index_name: indexName,
-                limit: limit,
+                page: 0,
+                size: limit,
                 fields: true  // 获取字段统计信息
             };
 
@@ -809,7 +830,8 @@ export class LogSearchModule {
                 query: tsQuery,
                 time_range: timeRange,
                 index_name: indexName,
-                limit: 100
+                page: 0,
+                size: 100
             });
             
             if (result.error) {

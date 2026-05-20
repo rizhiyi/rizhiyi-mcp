@@ -899,7 +899,8 @@ export class AnomalyDetectionModule {
             query,
             time_range: timeRange,
             index_name: indexName,
-            limit: 0
+            page: 0,
+            size: 0
         };
 
         const result = await this.client.get<any>(apiPath, params);

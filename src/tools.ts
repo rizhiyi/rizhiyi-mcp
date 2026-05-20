@@ -31,7 +31,7 @@ function withOutputControls(tools: ToolDefinition[]): ToolDefinition[] {
 export const basicLogTools: ToolDefinition[] = [
     {
         name: 'log_search_sheet',
-        description: '基础数据概览：返回总命中数、窗口时长、每秒事件数等。支持指定字段统计和百分位数计算。**注意：返回结果会自动包含 `_links` 字段，其中提供了用于在浏览器中打开的、针对关键字段（如 trace_id, context_id, appname 等）的精准跳转 URL。这些链接仅供用户点击查看，不可用于 API 调用。**',
+        description: '基础数据概览：按页返回日志明细，并附带总命中数与分页元数据。支持指定字段统计和百分位数计算。返回中会包含 `page`、`size`、`returned`、`has_more`，当 `has_more=true` 时可继续传入下一页 `page` 查看后续结果。**注意：返回结果会自动包含 `_links` 字段，其中提供了用于在浏览器中打开的、针对关键字段（如 trace_id, context_id, appname 等）的精准跳转 URL。这些链接仅供用户点击查看，不可用于 API 调用。**',
         inputSchema: {
             type: 'object',
             properties: {
@@ -50,9 +50,19 @@ export const basicLogTools: ToolDefinition[] = [
                     description: '索引名称', 
                     default: 'yotta' 
                 },
+                page: {
+                    type: 'integer',
+                    description: '页码，从 0 开始。默认 0，返回第一页。',
+                    default: 0
+                },
+                size: {
+                    type: 'integer',
+                    description: '每页返回条数。默认 20；若结果不够，可保持 size 不变并将 page 加 1 继续翻页。',
+                    default: 20
+                },
                 limit: {
                     type: 'integer',
-                    description: '返回结果数量限制',
+                    description: '兼容旧参数，等价于 size；若同时传 size，则以 size 为准。',
                     default: 20
                 },
                 fields: {

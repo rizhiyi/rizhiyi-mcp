@@ -262,7 +262,8 @@ export class StatisticsModule {
                 query: tsQuery,
                 time_range: timeRange,
                 index_name: indexName,
-                limit: 100
+                page: 0,
+                size: 100
             });
             
             if (result.error) {
@@ -350,7 +351,8 @@ export class StatisticsModule {
                 query: tsQuery,
                 time_range: timeRange,
                 index_name: indexName,
-                limit: 100
+                page: 0,
+                size: 100
             });
             
             if (result.error) {

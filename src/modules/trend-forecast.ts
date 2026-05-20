@@ -59,7 +59,8 @@ export class TrendForecastModule {
                 query: tsQuery,
                 time_range,
                 index_name,
-                limit: 100
+                page: 0,
+                size: 100
             });
             
             if (result.error) {
@@ -184,7 +185,8 @@ export class TrendForecastModule {
                 query: tsQuery,
                 time_range,
                 index_name,
-                limit: 100
+                page: 0,
+                size: 100
             });
             
             if (result.error) {
