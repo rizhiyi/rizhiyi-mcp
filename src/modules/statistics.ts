@@ -1,65 +1,39 @@
 import { LogEaseClient } from '../client.js';
-import { ApiResponse, TimeSeriesPoint, TrendAnalysisResult, AnomalyDetectionResult } from '../types.js';
+import { ApiResponse, TrendAnalysisResult, AnomalyDetectionResult, TimeSeriesPoint } from '../types.js';
+import { analyzeTimeline, detectStatisticalAnomalies } from './series-analysis.js';
+import { TimechartQueryModule } from './timechart-query.js';
+import {
+    chooseBucket as chooseTimeBucket,
+    parseDurationMs as parseTimeRangeDurationMs,
+    parseTimeString as parseTimeValue
+} from './time-utils.js';
 
 export class StatisticsModule {
-    constructor(private client: LogEaseClient) {}
+    private timechartQuery: TimechartQueryModule;
+
+    constructor(private client: LogEaseClient) {
+        this.timechartQuery = new TimechartQueryModule(client);
+    }
 
     /**
      * 解析时间范围字符串为毫秒
      */
     parseDurationMs(timeRange: string): number {
-        const parts = timeRange.split(',');
-        if (parts.length !== 2) return 15 * 60 * 1000; // 默认15分钟
-        
-        const start = this.parseTimeString(parts[0]);
-        const end = this.parseTimeString(parts[1]);
-        return end - start;
+        return parseTimeRangeDurationMs(timeRange);
     }
 
     /**
      * 解析时间字符串
      */
     parseTimeString(timeStr: string): number {
-        const now = Date.now();
-        
-        if (timeStr === 'now') return now;
-        
-        const match = timeStr.match(/now-(\d+)([smhd])/);
-        if (match) {
-            const value = parseInt(match[1]);
-            const unit = match[2];
-            
-            const multipliers = {
-                's': 1000,
-                'm': 60 * 1000,
-                'h': 60 * 60 * 1000,
-                'd': 24 * 60 * 60 * 1000
-            };
-            
-            return now - (value * multipliers[unit as keyof typeof multipliers]);
-        }
-        
-        return now;
+        return parseTimeValue(timeStr);
     }
 
     /**
      * 选择合适的时间桶
      */
     chooseBucket(durationMs: number): { bin: string; seconds: number } {
-        const seconds = Math.floor(durationMs / 1000);
-        
-        if (seconds <= 60) return { bin: '1s', seconds: 1 };
-        if (seconds <= 300) return { bin: '5s', seconds: 5 };
-        if (seconds <= 600) return { bin: '10s', seconds: 10 };
-        if (seconds <= 1800) return { bin: '30s', seconds: 30 };
-        if (seconds <= 3600) return { bin: '1m', seconds: 60 };
-        if (seconds <= 7200) return { bin: '2m', seconds: 120 };
-        if (seconds <= 18000) return { bin: '5m', seconds: 300 };
-        if (seconds <= 36000) return { bin: '10m', seconds: 600 };
-        if (seconds <= 86400) return { bin: '30m', seconds: 1800 };
-        if (seconds <= 172800) return { bin: '1h', seconds: 3600 };
-        if (seconds <= 604800) return { bin: '6h', seconds: 21600 };
-        return { bin: '1d', seconds: 86400 };
+        return chooseTimeBucket(durationMs);
     }
 
     /**
@@ -110,6 +84,30 @@ export class StatisticsModule {
         if (data?.data) return this.extractRows(data.data);
         if (data?.hits) return data.hits;
         return [];
+    }
+
+    buildTimelineFromSeries(series: TimeSeriesPoint[]) {
+        if (!Array.isArray(series) || series.length === 0) {
+            return undefined;
+        }
+
+        const timestamps = series.map((point) => Number(point.timestamp));
+        const fallbackInterval = timestamps.length > 1 ? Math.max(timestamps[1] - timestamps[0], 0) : 0;
+
+        return {
+            start_ts: Number.isFinite(timestamps[0]) ? timestamps[0] : undefined,
+            end_ts: Number.isFinite(timestamps[timestamps.length - 1]) ? timestamps[timestamps.length - 1] : undefined,
+            interval: fallbackInterval || undefined,
+            rows: series.map((point, index) => {
+                const startTs = Number(point.timestamp);
+                const nextTs = index < series.length - 1 ? Number(series[index + 1].timestamp) : startTs + fallbackInterval;
+                return {
+                    start_ts: Number.isFinite(startTs) ? startTs : index,
+                    end_ts: Number.isFinite(nextTs) ? nextTs : index + 1,
+                    count: point.value
+                };
+            })
+        };
     }
 
     /**
@@ -183,28 +181,12 @@ export class StatisticsModule {
      * 使用Z-score方法检测异常
      */
     detectAnomaliesZScore(series: number[], threshold: number = 3): Array<{index: number, value: number, threshold: number, reason: string}> {
-        const anomalies: Array<{index: number, value: number, threshold: number, reason: string}> = [];
-        
-        if (series.length === 0) return anomalies;
-        
-        const mean = this.mean(series);
-        const stddev = this.stddev(series);
-        
-        if (stddev === 0) return anomalies;
-        
-        series.forEach((value, index) => {
-            const zScore = Math.abs((value - mean) / stddev);
-            if (zScore > threshold) {
-                anomalies.push({
-                    index,
-                    value,
-                    threshold: zScore,
-                    reason: `Z-score ${zScore.toFixed(2)} 超过阈值 ${threshold}`
-                });
-            }
-        });
-        
-        return anomalies;
+        return detectStatisticalAnomalies(series, threshold).map((anomaly) => ({
+            index: anomaly.index,
+            value: anomaly.value,
+            threshold: anomaly.z_score,
+            reason: `Z-score ${anomaly.z_score.toFixed(2)} 超过阈值 ${threshold}`
+        }));
     }
 
     /**
@@ -246,44 +228,28 @@ export class StatisticsModule {
         limitPeaks: number = 3
     ): Promise<ApiResponse<TrendAnalysisResult>> {
         try {
-            // 获取时间序列数据 - 使用timechart管道命令
-            const durationMs = this.parseDurationMs(timeRange);
-            const autoBucket = bucket || this.chooseBucket(durationMs).bin;
-            
-            // 构建timechart查询
-            let tsQuery: string;
-            if (metricField) {
-                tsQuery = `${query || '*'} | timechart span=${autoBucket} avg(${metricField}) as value`;
-            } else {
-                tsQuery = `${query || '*'} | timechart span=${autoBucket} count() as cnt`;
-            }
-            
-            const result = await this.client.get<any>('/api/v3/search/sheets/', {
-                query: tsQuery,
+            const result = await this.timechartQuery.execute({
+                query,
                 time_range: timeRange,
                 index_name: indexName,
-                page: 0,
-                size: 100
+                bucket,
+                metric_field: metricField
             });
-            
+
             if (result.error) {
-                return result;
+                return {
+                    error: result.error,
+                    message: result.message
+                };
             }
 
-            const data = result.data;
-            if (!data?.results?.sheets?.rows || data.results.sheets.rows.length === 0) {
+            const series = result.data?.series || [];
+            if (series.length === 0) {
                 return {
                     error: '无数据',
                     message: '未找到符合条件的时间序列数据'
                 };
             }
-
-            // 提取时间序列数据
-            const rows = data.results.sheets.rows;
-            const series: TimeSeriesPoint[] = rows.map((item: any) => ({
-                timestamp: item.timestamp || item._time || item.ts,
-                value: item.cnt || item.value || 0
-            }));
 
             const values = series.map(point => point.value);
             
@@ -294,8 +260,14 @@ export class StatisticsModule {
             // 检测峰值
             const peaks = this.detectPeaks(values, limitPeaks);
             
-            // 检测异常
-            const anomalies = this.detectAnomaliesZScore(values);
+            const timeline = this.buildTimelineFromSeries(series);
+            const seriesAnalysis = analyzeTimeline(timeline);
+            const anomalies = seriesAnalysis.statistical_anomalies.map((anomaly) => ({
+                index: anomaly.index,
+                value: anomaly.value,
+                threshold: anomaly.z_score,
+                reason: `Z-score ${anomaly.z_score.toFixed(2)} 超过阈值 2`
+            }));
             
             // 生成总结
             const summary = this.generateTrendSummary(values, slope, changeRate);
@@ -335,45 +307,28 @@ export class StatisticsModule {
         minSupport: number = 0
     ): Promise<ApiResponse<AnomalyDetectionResult>> {
         try {
-            // 获取时间序列数据 - 使用timechart管道命令
-            const durationMs = this.parseDurationMs(timeRange);
-            const autoBucket = bucket || this.chooseBucket(durationMs).bin;
-            
-            // 构建timechart查询
-            let tsQuery: string;
-            if (metricField) {
-                tsQuery = `${query || '*'} | timechart span=${autoBucket} avg(${metricField}) as value`;
-            } else {
-                tsQuery = `${query || '*'} | timechart span=${autoBucket} count() as cnt`;
-            }
-            
-            const result = await this.client.get<any>('/api/v3/search/sheets/', {
-                query: tsQuery,
+            const result = await this.timechartQuery.execute({
+                query,
                 time_range: timeRange,
                 index_name: indexName,
-                page: 0,
-                size: 100
+                bucket,
+                metric_field: metricField
             });
-            
+
             if (result.error) {
-                return result;
+                return {
+                    error: result.error,
+                    message: result.message
+                };
             }
 
-            const data = result.data;
-            if (!data?.results?.sheets?.rows || data.results.sheets.rows.length === 0) {
+            const series = result.data?.series || [];
+            if (series.length === 0) {
                 return {
                     error: '无数据',
                     message: '未找到符合条件的时间序列数据'
                 };
             }
-
-            // 提取时间序列数据
-            const rows = data.results.sheets.rows;
-            const series: TimeSeriesPoint[] = rows.map((item: any) => ({
-                timestamp: item.timestamp || item.time || item._timestamp,
-                value: item.cnt || item.value || item.count || 0,
-                count: item.cnt || item.value || item.count || 0
-            }));
 
             const values = series.map(point => point.value);
             
@@ -383,7 +338,12 @@ export class StatisticsModule {
             if (method === 'iqr') {
                 anomalies = this.detectAnomaliesIQR(values, sensitivity);
             } else {
-                anomalies = this.detectAnomaliesZScore(values, sensitivity);
+                anomalies = detectStatisticalAnomalies(values, sensitivity).map((anomaly) => ({
+                    index: anomaly.index,
+                    value: anomaly.value,
+                    threshold: anomaly.z_score,
+                    reason: `Z-score ${anomaly.z_score.toFixed(2)} 超过阈值 ${sensitivity}`
+                }));
             }
 
             // 过滤最小支持度

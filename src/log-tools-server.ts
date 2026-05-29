@@ -126,9 +126,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 return await handleAnomalyPoints(parameters);
 
             // 智能分析工具
-            case 'pattern_classification':
-                return await handlePatternClassification(parameters);
-                
             case 'period_compare':
                 return await handlePeriodCompare(parameters);
                 
@@ -221,6 +218,31 @@ async function handleLogReducePreview(params: any) {
         params.max_retries || 10,
         params.retry_interval || 5000
     );
+
+    if (result.error || !params?.analyze_patterns) {
+        return formatResult(result, params);
+    }
+
+    const patterns = result.data?.result;
+    if (!Array.isArray(patterns)) {
+        return buildToolError(
+            'INVALID_PATTERN_RESULT',
+            '日志聚类结果不可用于模式分析。',
+            '请确认 sid 对应的聚类任务已完成且返回了有效的模式结果。'
+        );
+    }
+
+    const analysis = anomalyDetectionModule.analyzePatternResults(
+        patterns,
+        result.data?.total_hits || 0,
+        params.analysis_limit || 20
+    );
+
+    result.data = {
+        ...result.data,
+        pattern_analysis: analysis
+    };
+
     return formatResult(result, params);
 }
 
@@ -339,35 +361,6 @@ async function handleAnomalyPoints(params: any) {
     return formatResult(result, params);
 }
 
-async function handlePatternClassification(params: any) {
-    // 如果提供了前一个tool的结果数据，直接使用它进行分析
-    if (params.previous_result) {
-        const result = await anomalyDetectionModule.executePatternClassification(
-            params.previous_result,
-            params.limit || 20
-        );
-        return formatResult(result, params);
-    }
-    
-    // 否则执行完整的聚类分析流程
-    if (!params.query || !params.time_range) {
-        return buildToolError(
-            'INVALID_ARGUMENT',
-            '必须提供 previous_result 或者同时提供 query 和 time_range 参数。',
-            '若已有上一步结果，请传 previous_result；否则传 query 和 time_range。'
-        );
-    }
-    
-    const result = await anomalyDetectionModule.executePatternClassification({
-        query: params.query || "*",
-        time_range: params.time_range,
-        index_name: params.index_name || "yotta",
-        pattern_options: params.pattern_options || {},
-        limit: params.limit || 20
-    });
-    return formatResult(result, params);
-}
-
 async function handlePeriodCompare(params: any) {
     // 如果提供了之前的时间序列数据，直接构建数据对象进行分析
     if (params.previous_time_series_a || params.previous_time_series_b) {
@@ -379,16 +372,27 @@ async function handlePeriodCompare(params: any) {
             );
         }
         
+        const previousSeriesA = params.previous_time_series_a.series || params.previous_time_series_a.data?.series || [];
+        const previousPointsA = params.previous_time_series_a.points || params.previous_time_series_a.data?.points || [];
+        const previousSeriesB = params.previous_time_series_b.series || params.previous_time_series_b.data?.series || [];
+        const previousPointsB = params.previous_time_series_b.points || params.previous_time_series_b.data?.points || [];
+
         // 构建符合模块方法期望格式的数据对象
         const mockResultA = {
             status: 200,
-            data: { points: params.previous_time_series_a.points || [] },
+            data: {
+                series: previousSeriesA,
+                points: previousPointsA
+            },
             message: '时间段A数据（复用）'
         };
         
         const mockResultB = {
             status: 200,
-            data: { points: params.previous_time_series_b.points || [] },
+            data: {
+                series: previousSeriesB,
+                points: previousPointsB
+            },
             message: '时间段B数据（复用）'
         };
         
@@ -398,7 +402,11 @@ async function handlePeriodCompare(params: any) {
             mockResultB,
             {
                 compare_fields: params.compare_fields || [],
-                topk: params.topk || 10
+                topk: params.topk || 10,
+                query: params.query || "*",
+                time_range_a: params.time_range_a,
+                time_range_b: params.time_range_b,
+                index_name: params.index_name || "yotta"
             }
         );
         return formatResult(result, params);
@@ -418,7 +426,7 @@ async function handlePeriodCompare(params: any) {
         time_range_a: params.time_range_a,
         time_range_b: params.time_range_b,
         index_name: params.index_name || "yotta",
-        bucket: params.bucket || "5m",
+        bucket: params.bucket,
         compare_fields: params.compare_fields || [],
         topk: params.topk || 10,
         metric_field: params.metric_field
@@ -427,13 +435,26 @@ async function handlePeriodCompare(params: any) {
 }
 
 async function handleCorrelationAnalysis(params: any) {
+    if (!params?.time_range) {
+        return buildToolError(
+            'MISSING_REQUIRED_PARAM',
+            '缺少必填参数 time_range。',
+            '请传入 time_range，例如 now-15m,now。'
+        );
+    }
+
     const result = await anomalyDetectionModule.executeCorrelationAnalysis({
         query: params.query || "*",
         time_range: params.time_range,
         index_name: params.index_name || "yotta",
         fields: params.fields || [],
-        method: params.method || 'mixed',
-        limit: params.limit || 50
+        mode: params.mode || 'auto',
+        bucket: params.bucket,
+        max_lag: params.max_lag ?? 3,
+        min_support: params.min_support ?? 0.05,
+        min_confidence: params.min_confidence ?? 0.6,
+        sample_size: params.sample_size ?? 500,
+        limit: params.limit || 20
     });
     return formatResult(result, params);
 }
@@ -445,8 +466,13 @@ async function handleRootCauseSuggestions(params: any) {
         baseline_window: params.baseline_window,
         index_name: params.index_name || "yotta",
         candidate_fields: params.candidate_fields || [],
-        significance_threshold: params.significance_threshold || 0.1,
-        topk: params.topk || 5
+        significance_threshold: params.significance_threshold ?? 0.1,
+        topk: params.topk ?? 5,
+        field_value_limit: params.field_value_limit ?? 20,
+        sample_size: params.sample_size ?? 300,
+        slice_max_depth: params.slice_max_depth ?? 2,
+        min_slice_support: params.min_slice_support ?? 0.05,
+        min_slice_lift: params.min_slice_lift ?? 2
     });
     return formatResult(result, params);
 }

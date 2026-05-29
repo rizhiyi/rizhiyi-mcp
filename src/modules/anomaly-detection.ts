@@ -1,14 +1,22 @@
 import { LogEaseClient } from '../client.js';
 import { ApiResponse, PeriodComparisonResult, CorrelationResult, RootCauseAnalysisResult, TimeSeriesPoint } from '../types.js';
+import { analyzeTimeline } from './series-analysis.js';
 import { StatisticsModule } from './statistics.js';
+
+type DistributionValueChange = RootCauseAnalysisResult['distribution_drift'][number]['changed_values'][number];
+type DistributionDriftItem = RootCauseAnalysisResult['distribution_drift'][number];
+type SuspiciousSliceItem = RootCauseAnalysisResult['suspicious_slices'][number];
+type SliceTerm = { field: string; value: string };
 
 export class AnomalyDetectionModule {
     private statistics: StatisticsModule;
     private logSearch: LogSearchModule;
+    private timechartQuery: TimechartQueryModule;
 
     constructor(private client: LogEaseClient) {
         this.statistics = new StatisticsModule(client);
         this.logSearch = new LogSearchModule(client);
+        this.timechartQuery = new TimechartQueryModule(client);
     }
 
     /**
@@ -81,55 +89,23 @@ export class AnomalyDetectionModule {
             .slice(0, topk);
     }
 
-    /**
-     * 模式识别和分类 - 基于日志聚类结果进行高级分析
-     * 接收来自 executeLogReducePreview 的结果，对模式进行深度分析
-     */
-    async executePatternClassification(logReduceResult: any, limit: number = 20): Promise<ApiResponse<any>> {
-        try {
-            // 验证输入数据
-            if (!logReduceResult?.data?.result?.body) {
-                return {
-                    error: '无效数据',
-                    message: '缺少有效的日志聚类分析结果'
-                };
-            }
+    analyzePatternResults(patterns: any[], totalHits: number = 0, limit: number = 20): {
+        total_patterns: number;
+        total_hits: number;
+        patterns: Array<any>;
+        analysis_summary: any;
+    } {
+        const analysisResults = this.analyzePatterns(patterns, totalHits);
+        const analyzedPatterns = analysisResults.patterns
+            .sort((a, b) => b.significance_score - a.significance_score)
+            .slice(0, limit);
 
-            const patterns = logReduceResult.data.result.body;
-            const totalHits = logReduceResult.data.result.total_hits || 0;
-            
-            if (!Array.isArray(patterns) || patterns.length === 0) {
-                return {
-                    error: '无模式数据',
-                    message: '日志聚类分析结果中没有找到模式'
-                };
-            }
-
-            // 执行高级模式分析
-            const analysisResults = this.analyzePatterns(patterns, totalHits);
-            
-            // 提取并分类模式，应用限制
-            const classifiedPatterns = analysisResults.patterns
-                .sort((a, b) => b.significance_score - a.significance_score)
-                .slice(0, limit);
-
-            return {
-                status: 200,
-                data: {
-                    total_patterns: patterns.length,
-                    total_hits: totalHits,
-                    patterns: classifiedPatterns,
-                    analysis_summary: analysisResults.summary,
-                    raw_result: logReduceResult.data
-                },
-                message: '模式识别和高级分析完成'
-            };
-        } catch (error: any) {
-            return {
-                error: error.message,
-                message: `执行模式识别出错: ${error.message}`
-            };
-        }
+        return {
+            total_patterns: patterns.length,
+            total_hits: totalHits,
+            patterns: analyzedPatterns,
+            analysis_summary: analysisResults.summary
+        };
     }
 
     /**
@@ -141,9 +117,27 @@ export class AnomalyDetectionModule {
         summary: any;
     } {
         const analyzedPatterns = patterns.map(pattern => {
-            const timelineAnalysis = this.analyzePatternTimeline(pattern);
+            const seriesAnalysis = analyzeTimeline(pattern.timeline);
+            const timelineAnalysis = {
+                has_timeline: seriesAnalysis.has_timeline,
+                total_time_buckets: seriesAnalysis.total_time_buckets,
+                active_buckets: seriesAnalysis.active_buckets,
+                activity_ratio: seriesAnalysis.activity_ratio,
+                temporal_distribution: seriesAnalysis.temporal_distribution,
+                burstiness: seriesAnalysis.burstiness,
+                periodicity_score: seriesAnalysis.periodicity_score,
+                temporal_clustering: seriesAnalysis.temporal_clustering,
+                peak_activity: seriesAnalysis.peak_activity,
+                quiet_periods: seriesAnalysis.quiet_periods,
+                time_range: seriesAnalysis.time_range
+            };
             const frequencyAnalysis = this.analyzePatternFrequency(pattern, totalHits);
-            const anomalyAnalysis = this.detectPatternAnomalies(pattern);
+            const anomalyAnalysis = {
+                has_anomalies: seriesAnalysis.has_anomalies,
+                statistical_anomalies: seriesAnalysis.statistical_anomalies,
+                temporal_anomalies: seriesAnalysis.temporal_anomalies,
+                anomaly_score: seriesAnalysis.anomaly_score
+            };
             
             return {
                 id: pattern.id,
@@ -611,6 +605,40 @@ export class AnomalyDetectionModule {
     /**
      * 使用已有时间序列数据进行跨时间段对比分析 - 支持数据复用
      */
+    private normalizeReusedTimeSeries(input: any): TimeSeriesPoint[] {
+        const rawSeries = input?.data?.series || input?.series;
+        if (Array.isArray(rawSeries) && rawSeries.length > 0) {
+            return rawSeries.map((point: any) => {
+                const rawValue = point?.value ?? point?.count ?? point?.cnt ?? 0;
+                const value = typeof rawValue === 'number' ? rawValue : Number(rawValue) || 0;
+                const timestamp = point?.timestamp ?? point?.time ?? point?._time ?? point?.ts ?? '';
+
+                return {
+                    timestamp: String(timestamp),
+                    value,
+                    count: point?.count ?? value
+                };
+            });
+        }
+
+        const rawPoints = input?.data?.points || input?.points;
+        if (Array.isArray(rawPoints) && rawPoints.length > 0) {
+            return rawPoints.map((point: any) => {
+                const rawValue = point?.count ?? point?.value ?? point?.cnt ?? 0;
+                const value = typeof rawValue === 'number' ? rawValue : Number(rawValue) || 0;
+                const timestamp = point?.time ?? point?.timestamp ?? point?._time ?? point?.ts ?? '';
+
+                return {
+                    timestamp: String(timestamp),
+                    value,
+                    count: value
+                };
+            });
+        }
+
+        return [];
+    }
+
     async executePeriodCompareWithData(
         timeSeriesA: any,
         timeSeriesB: any,
@@ -625,11 +653,11 @@ export class AnomalyDetectionModule {
     ): Promise<ApiResponse<PeriodComparisonResult>> {
         try {
             const { compare_fields = [], topk = 10, query = '*' } = options;
-            
-            const pointsA = timeSeriesA.data?.points || [];
-            const pointsB = timeSeriesB.data?.points || [];
 
-            if (pointsA.length === 0 || pointsB.length === 0) {
+            const seriesA = this.normalizeReusedTimeSeries(timeSeriesA);
+            const seriesB = this.normalizeReusedTimeSeries(timeSeriesB);
+
+            if (seriesA.length === 0 || seriesB.length === 0) {
                 return {
                     error: '数据不完整',
                     message: '无法获取完整的时间段数据'
@@ -637,8 +665,8 @@ export class AnomalyDetectionModule {
             }
 
             // 提取数值用于统计分析
-            const valuesA = pointsA.map((point: any) => point.count || 0);
-            const valuesB = pointsB.map((point: any) => point.count || 0);
+            const valuesA = seriesA.map((point: TimeSeriesPoint) => point.value || point.count || 0);
+            const valuesB = seriesB.map((point: TimeSeriesPoint) => point.value || point.count || 0);
 
             // 计算基础统计信息
             const totalA = valuesA.reduce((sum: number, val: number) => sum + val, 0);
@@ -675,18 +703,6 @@ export class AnomalyDetectionModule {
                 );
             }
 
-            const seriesA: TimeSeriesPoint[] = pointsA.map((point: any) => ({
-                timestamp: String(point.time),
-                value: point.count || 0,
-                count: point.count || 0
-            }));
-
-            const seriesB: TimeSeriesPoint[] = pointsB.map((point: any) => ({
-                timestamp: String(point.time),
-                value: point.count || 0,
-                count: point.count || 0
-            }));
-
             return {
                 status: 200,
                 data: {
@@ -718,7 +734,7 @@ export class AnomalyDetectionModule {
     }
 
     /**
-     * 跨时间段对比分析 - 复用 log-search.ts 的时间序列数据获取功能
+     * 跨时间段对比分析 - 复用统一 timechart 查询层
      */
     async executePeriodCompare(params: {
         query?: string;
@@ -736,16 +752,27 @@ export class AnomalyDetectionModule {
                 time_range_a,
                 time_range_b,
                 index_name = 'yotta',
-                bucket = '5m',
+                bucket,
                 compare_fields = [],
                 topk = 10,
                 metric_field
             } = params;
 
-            // 使用 log-search 模块获取两个时间段的时间序列数据
             const [periodAResult, periodBResult] = await Promise.all([
-                this.logSearch.executeTimeSeriesCounts(query, time_range_a, index_name, bucket, metric_field),
-                this.logSearch.executeTimeSeriesCounts(query, time_range_b, index_name, bucket, metric_field)
+                this.timechartQuery.execute({
+                    query,
+                    time_range: time_range_a,
+                    index_name,
+                    bucket,
+                    metric_field
+                }),
+                this.timechartQuery.execute({
+                    query,
+                    time_range: time_range_b,
+                    index_name,
+                    bucket,
+                    metric_field
+                })
             ]);
 
             if (periodAResult.error) {
@@ -761,10 +788,10 @@ export class AnomalyDetectionModule {
                 };
             }
 
-            const pointsA = periodAResult.data?.points || [];
-            const pointsB = periodBResult.data?.points || [];
+            const seriesA: TimeSeriesPoint[] = periodAResult.data?.series || [];
+            const seriesB: TimeSeriesPoint[] = periodBResult.data?.series || [];
 
-            if (pointsA.length === 0 || pointsB.length === 0) {
+            if (seriesA.length === 0 || seriesB.length === 0) {
                 return {
                     error: '数据不完整',
                     message: '无法获取完整的时间段数据'
@@ -772,12 +799,12 @@ export class AnomalyDetectionModule {
             }
 
             // 提取数值用于统计分析
-            const valuesA = pointsA.map(point => point.count || 0);
-            const valuesB = pointsB.map(point => point.count || 0);
+            const valuesA = seriesA.map((point: TimeSeriesPoint) => point.value || point.count || 0);
+            const valuesB = seriesB.map((point: TimeSeriesPoint) => point.value || point.count || 0);
 
             // 计算基础统计信息
-            const totalA = valuesA.reduce((sum, val) => sum + val, 0);
-            const totalB = valuesB.reduce((sum, val) => sum + val, 0);
+            const totalA = valuesA.reduce((sum: number, val: number) => sum + val, 0);
+            const totalB = valuesB.reduce((sum: number, val: number) => sum + val, 0);
 
             const avgA = this.statistics.mean(valuesA);
             const avgB = this.statistics.mean(valuesB);
@@ -804,18 +831,6 @@ export class AnomalyDetectionModule {
                 );
             }
 
-            const seriesA: TimeSeriesPoint[] = pointsA.map(point => ({
-                timestamp: String(point.time),
-                value: point.count || 0,
-                count: point.count || 0
-            }));
-
-            const seriesB: TimeSeriesPoint[] = pointsB.map(point => ({
-                timestamp: String(point.time),
-                value: point.count || 0,
-                count: point.count || 0
-            }));
-
             return {
                 status: Math.max(periodAResult.status || 200, periodBResult.status || 200),
                 data: {
@@ -834,7 +849,9 @@ export class AnomalyDetectionModule {
                         series: seriesB
                     },
                     differences,
-                    field_differences: fieldDifferences
+                    field_differences: fieldDifferences,
+                    bucket_used: periodAResult.data?.bucket_used || periodBResult.data?.bucket_used,
+                    query_executed: periodAResult.data?.query_executed || periodBResult.data?.query_executed
                 },
                 message: '时间段对比分析完成'
             };
@@ -892,26 +909,28 @@ export class AnomalyDetectionModule {
         query: string,
         timeRange: string,
         indexName: string,
-        field: string
+        field: string,
+        limit: number = 20
     ): Promise<Record<string, number>> {
-        const apiPath = '/api/v3/search/sheets/';
-        const params = {
+        const result = await this.logSearch.executeListFieldValues(
+            field,
             query,
-            time_range: timeRange,
-            index_name: indexName,
-            page: 0,
-            size: 0
-        };
+            timeRange,
+            indexName,
+            limit
+        );
 
-        const result = await this.client.get<any>(apiPath, params);
-        
-        if (result.error || !result.data?.fields?.[field]?.top_values) {
+        if (result.error || !Array.isArray(result.data?.values)) {
             return {};
         }
 
         const distribution: Record<string, number> = {};
-        result.data.fields[field].top_values.forEach((item: any) => {
-            distribution[item.value] = item.count;
+        result.data.values.forEach((item: any) => {
+            const value = item?.value;
+            if (value === null || value === undefined || value === '') {
+                return;
+            }
+            distribution[String(value)] = Number(item?.count || 0);
         });
 
         return distribution;
@@ -925,7 +944,12 @@ export class AnomalyDetectionModule {
         time_range: string;
         index_name?: string;
         fields?: string[];
-        method?: string;
+        mode?: 'lagged_pearson' | 'fp_growth' | 'auto';
+        bucket?: string;
+        max_lag?: number;
+        min_support?: number;
+        min_confidence?: number;
+        sample_size?: number;
         limit?: number;
     }): Promise<ApiResponse<CorrelationResult>> {
         try {
@@ -934,8 +958,13 @@ export class AnomalyDetectionModule {
                 time_range,
                 index_name = 'yotta',
                 fields = [],
-                method = 'mixed',
-                limit = 50
+                mode = 'auto',
+                bucket,
+                max_lag = 3,
+                min_support = 0.05,
+                min_confidence = 0.6,
+                sample_size = 500,
+                limit = 20
             } = params;
 
             if (fields.length < 2) {
@@ -945,9 +974,14 @@ export class AnomalyDetectionModule {
                 };
             }
 
-            // 使用 log-search 模块获取日志数据
-            const searchResult = await this.logSearch.executeLogSearchSheet(query, time_range, index_name, 1000);
-            
+            const searchResult = await this.logSearch.executeLogSearchSheet(
+                query,
+                time_range,
+                index_name,
+                { page: 0, size: sample_size },
+                fields
+            );
+
             if (searchResult.error) {
                 return {
                     error: searchResult.error,
@@ -963,82 +997,48 @@ export class AnomalyDetectionModule {
                 };
             }
 
-            // 提取字段数据
-            const fieldData: Record<string, number[]> = {};
-            fields.forEach(field => {
-                fieldData[field] = hits
-                    .map((item: any) => {
-                        const value = item[field];
-                        if (typeof value === 'number') return value;
-                        if (typeof value === 'string' && !isNaN(Number(value))) return Number(value);
-                        return null;
-                    })
-                    .filter((val: number | null) => val !== null) as number[];
-            });
-
-            // 计算相关系数
-            const correlations: Array<{field1: string, field2: string, correlation: number, method: string, significance?: number}> = [];
-            
-            for (let i = 0; i < fields.length; i++) {
-                for (let j = i + 1; j < fields.length; j++) {
-                    const field1 = fields[i];
-                    const field2 = fields[j];
-                    
-                    const data1 = fieldData[field1];
-                    const data2 = fieldData[field2];
-                    
-                    if (data1.length === 0 || data2.length === 0) continue;
-                    
-                    // 确保数据长度一致
-                    const minLength = Math.min(data1.length, data2.length);
-                    const trimmed1 = data1.slice(0, minLength);
-                    const trimmed2 = data2.slice(0, minLength);
-                    
-                    let correlation = 0;
-                    let methodUsed = 'pearson';
-                    
-                    if (method === 'mixed') {
-                        // 简单的混合方法：数值字段用pearson，其他用spearman
-                        const isNumeric1 = this.isNumericField(trimmed1);
-                        const isNumeric2 = this.isNumericField(trimmed2);
-                        
-                        if (isNumeric1 && isNumeric2) {
-                            correlation = this.statistics.calculateCorrelation(trimmed1, trimmed2, false);
-                        } else {
-                            correlation = this.statistics.calculateCorrelation(trimmed1, trimmed2, true);
-                            methodUsed = 'spearman';
-                        }
-                    } else if (method === 'categorical') {
-                        // 对于分类数据，计算共现关系
-                        continue; // 单独处理
-                    } else {
-                        correlation = this.statistics.calculateCorrelation(trimmed1, trimmed2, method === 'spearman');
-                        methodUsed = method;
+            const fieldTypes = this.detectCorrelationFieldTypes(hits, fields);
+            const resolvedMode = this.resolveCorrelationMode(mode, fieldTypes);
+            if ('error' in resolvedMode) {
+                return {
+                    error: '字段类型不匹配',
+                    message: resolvedMode.error,
+                    details: {
+                        requested_mode: mode,
+                        field_types: fieldTypes
                     }
-                    
-                    correlations.push({
-                        field1,
-                        field2,
-                        correlation,
-                        method: methodUsed
-                    });
-                }
+                };
             }
 
-            // 计算分类字段的共现关系
-            let cooccurrence: Array<{field1: string, field2: string, cooccurrence: number, support: number}> = [];
-            if (method === 'categorical' || method === 'mixed') {
-                cooccurrence = await this.calculateCooccurrence(hits, fields, limit);
+            if (resolvedMode.mode === 'lagged_pearson') {
+                return await this.executeLaggedPearsonCorrelation({
+                    query,
+                    time_range,
+                    index_name,
+                    fields,
+                    fieldTypes,
+                    requested_mode: mode,
+                    bucket,
+                    max_lag,
+                    limit,
+                    sample_size
+                });
             }
 
-            return {
-                status: searchResult.status,
-                data: {
-                    correlations: correlations.slice(0, limit),
-                    cooccurrence
-                },
-                message: '关联性分析完成'
-            };
+            return this.executeFpGrowthCorrelation({
+                query,
+                time_range,
+                index_name,
+                fields,
+                fieldTypes,
+                hits,
+                requested_mode: mode,
+                min_support,
+                min_confidence,
+                limit,
+                sample_size,
+                status: searchResult.status
+            });
         } catch (error: any) {
             return {
                 error: error.message,
@@ -1050,78 +1050,724 @@ export class AnomalyDetectionModule {
     /**
      * 判断是否为数值字段
      */
-    private isNumericField(data: number[]): boolean {
-        // 简单的启发式判断：如果数据变化较大，认为是数值型
-        if (data.length < 2) return true;
-        
-        const uniqueValues = new Set(data).size;
-        const ratio = uniqueValues / data.length;
-        
-        return ratio > 0.7; // 如果唯一值比例较高，认为是数值型
+    private detectCorrelationFieldTypes(
+        hits: any[],
+        fields: string[]
+    ): Array<{
+        field: string;
+        detected_type: 'numeric' | 'categorical' | 'mixed' | 'unknown';
+        sample_count: number;
+        numeric_count: number;
+        categorical_count: number;
+    }> {
+        return fields.map((field) => {
+            let sampleCount = 0;
+            let numericCount = 0;
+            let categoricalCount = 0;
+
+            hits.forEach((item) => {
+                const rawValue = item?.[field];
+                const values = Array.isArray(rawValue) ? rawValue : [rawValue];
+
+                values.forEach((value) => {
+                    if (value === null || value === undefined || value === '') {
+                        return;
+                    }
+
+                    sampleCount += 1;
+                    if (this.isNumericLike(value)) {
+                        numericCount += 1;
+                    } else {
+                        categoricalCount += 1;
+                    }
+                });
+            });
+
+            let detectedType: 'numeric' | 'categorical' | 'mixed' | 'unknown' = 'unknown';
+            if (sampleCount > 0) {
+                if (numericCount > 0 && categoricalCount === 0) {
+                    detectedType = 'numeric';
+                } else if (categoricalCount > 0 && numericCount === 0) {
+                    detectedType = 'categorical';
+                } else if (numericCount > 0 && categoricalCount > 0) {
+                    detectedType = 'mixed';
+                }
+            }
+
+            return {
+                field,
+                detected_type: detectedType,
+                sample_count: sampleCount,
+                numeric_count: numericCount,
+                categorical_count: categoricalCount
+            };
+        });
     }
 
     /**
-     * 计算共现关系
+     * 自动选择关联分析模式
      */
-    private async calculateCooccurrence(
-        data: any[],
-        fields: string[],
-        limit: number
-    ): Promise<Array<{field1: string, field2: string, cooccurrence: number, support: number}>> {
-        const cooccurrenceMap: Map<string, number> = new Map();
-        
-        data.forEach(item => {
-            for (let i = 0; i < fields.length; i++) {
-                for (let j = i + 1; j < fields.length; j++) {
-                    const field1 = fields[i];
-                    const field2 = fields[j];
-                    const value1 = item[field1];
-                    const value2 = item[field2];
-                    
-                    if (value1 !== undefined && value2 !== undefined) {
-                        const key = `${field1}:${value1}||${field2}:${value2}`;
-                        cooccurrenceMap.set(key, (cooccurrenceMap.get(key) || 0) + 1);
-                    }
-                }
+    private resolveCorrelationMode(
+        requestedMode: 'lagged_pearson' | 'fp_growth' | 'auto',
+        fieldTypes: Array<{ field: string; detected_type: 'numeric' | 'categorical' | 'mixed' | 'unknown' }>
+    ): { mode: 'lagged_pearson' | 'fp_growth' } | { error: string } {
+        const numericFields = fieldTypes.filter((item) => item.detected_type === 'numeric');
+        const categoricalFields = fieldTypes.filter((item) => item.detected_type === 'categorical');
+        const problematicFields = fieldTypes.filter(
+            (item) => item.detected_type === 'mixed' || item.detected_type === 'unknown'
+        );
+
+        if (problematicFields.length > 0) {
+            return {
+                error: `字段类型判断不明确：${problematicFields
+                    .map((item) => `${item.field}=${item.detected_type}`)
+                    .join(', ')}。请改用纯数值字段或纯离散字段，避免混合输入。`
+            };
+        }
+
+        if (requestedMode === 'lagged_pearson') {
+            if (numericFields.length !== fieldTypes.length) {
+                return {
+                    error: `lagged_pearson 仅支持纯数值字段，当前检测到非数值字段：${fieldTypes
+                        .filter((item) => item.detected_type !== 'numeric')
+                        .map((item) => item.field)
+                        .join(', ')}。`
+                };
             }
+            return { mode: 'lagged_pearson' };
+        }
+
+        if (requestedMode === 'fp_growth') {
+            if (categoricalFields.length !== fieldTypes.length) {
+                return {
+                    error: `fp_growth 仅支持纯离散字段，当前检测到非离散字段：${fieldTypes
+                        .filter((item) => item.detected_type !== 'categorical')
+                        .map((item) => item.field)
+                        .join(', ')}。`
+                };
+            }
+            return { mode: 'fp_growth' };
+        }
+
+        if (numericFields.length === fieldTypes.length) {
+            return { mode: 'lagged_pearson' };
+        }
+
+        if (categoricalFields.length === fieldTypes.length) {
+            return { mode: 'fp_growth' };
+        }
+
+        return {
+            error: `auto 模式要求 fields 全部为数值字段或全部为离散字段，当前检测结果为：${fieldTypes
+                .map((item) => `${item.field}=${item.detected_type}`)
+                .join(', ')}。`
+        };
+    }
+
+    /**
+     * 数值字段的滞后 Pearson 关联分析
+     */
+    private async executeLaggedPearsonCorrelation(params: {
+        query: string;
+        time_range: string;
+        index_name: string;
+        fields: string[];
+        fieldTypes: Array<{
+            field: string;
+            detected_type: 'numeric' | 'categorical' | 'mixed' | 'unknown';
+            sample_count: number;
+            numeric_count: number;
+            categorical_count: number;
+        }>;
+        requested_mode: 'lagged_pearson' | 'fp_growth' | 'auto';
+        bucket?: string;
+        max_lag: number;
+        limit: number;
+        sample_size: number;
+    }): Promise<ApiResponse<CorrelationResult>> {
+        const { query, time_range, index_name, fields, fieldTypes, requested_mode, bucket, max_lag, limit, sample_size } = params;
+        const timechartResults = await Promise.all(
+            fields.map((field) =>
+                this.timechartQuery.execute({
+                    query,
+                    time_range,
+                    index_name,
+                    bucket,
+                    metric_field: field
+                })
+            )
+        );
+
+        const failedResult = timechartResults.find((result) => result.error);
+        if (failedResult) {
+            return {
+                error: failedResult.error,
+                message: failedResult.message || '获取数值时间序列失败'
+            };
+        }
+
+        const pairResults: Array<Record<string, any>> = [];
+        for (let i = 0; i < fields.length; i++) {
+            for (let j = i + 1; j < fields.length; j++) {
+                const leftField = fields[i];
+                const rightField = fields[j];
+                const leftSeries = timechartResults[i].data?.series || [];
+                const rightSeries = timechartResults[j].data?.series || [];
+                const lagScores = this.calculateLaggedPearsonScores(leftSeries, rightSeries, max_lag);
+
+                if (lagScores.length === 0) {
+                    continue;
+                }
+
+                const sortedLagScores = [...lagScores].sort(
+                    (a, b) => Math.abs(b.correlation) - Math.abs(a.correlation) || b.aligned_points - a.aligned_points
+                );
+                const best = sortedLagScores[0];
+
+                pairResults.push({
+                    kind: 'lagged_pearson',
+                    field1: leftField,
+                    field2: rightField,
+                    best_lag: best.lag,
+                    best_correlation: best.correlation,
+                    best_alignment_points: best.aligned_points,
+                    relationship: this.describeLagRelationship(leftField, rightField, best.lag),
+                    lag_scores: sortedLagScores
+                });
+            }
+        }
+
+        const results = pairResults
+            .sort(
+                (a, b) =>
+                    Math.abs(Number(b.best_correlation) || 0) - Math.abs(Number(a.best_correlation) || 0) ||
+                    (Number(b.best_alignment_points) || 0) - (Number(a.best_alignment_points) || 0)
+            )
+            .slice(0, limit);
+
+        if (results.length === 0) {
+            return {
+                error: '数据不足',
+                message: '未能从时间序列中构造足够的对齐数据来计算 lagged Pearson 相关。'
+            };
+        }
+
+        const queries = timechartResults
+            .map((result) => result.data?.query_executed)
+            .filter((item): item is string => Boolean(item));
+
+        return {
+            status: Math.max(...timechartResults.map((result) => result.status || 200)),
+            data: {
+                mode: 'lagged_pearson',
+                requested_mode,
+                results,
+                summary: this.buildLaggedPearsonSummary(results),
+                evidence: {
+                    field_types: fieldTypes,
+                    bucket_used: timechartResults[0].data?.bucket_used,
+                    query_executed: queries,
+                    sample_size,
+                    max_lag,
+                    warnings: []
+                }
+            },
+            message: '关联性分析完成'
+        };
+    }
+
+    /**
+     * 离散字段的 FP-Growth 关联分析
+     */
+    private executeFpGrowthCorrelation(params: {
+        query: string;
+        time_range: string;
+        index_name: string;
+        fields: string[];
+        fieldTypes: Array<{
+            field: string;
+            detected_type: 'numeric' | 'categorical' | 'mixed' | 'unknown';
+            sample_count: number;
+            numeric_count: number;
+            categorical_count: number;
+        }>;
+        hits: any[];
+        requested_mode: 'lagged_pearson' | 'fp_growth' | 'auto';
+        min_support: number;
+        min_confidence: number;
+        limit: number;
+        sample_size: number;
+        status?: number;
+    }): ApiResponse<CorrelationResult> {
+        const {
+            query,
+            fields,
+            fieldTypes,
+            hits,
+            requested_mode,
+            min_support,
+            min_confidence,
+            limit,
+            sample_size,
+            status = 200
+        } = params;
+
+        const transactions = this.buildTransactionsFromHits(hits, fields);
+        if (transactions.length === 0) {
+            return {
+                error: '无有效事务',
+                message: '样本中没有足够的离散字段值，无法进行 FP-Growth 分析。'
+            };
+        }
+
+        const minSupportCount = Math.max(1, Math.ceil(transactions.length * min_support));
+        const rawItemsets = this.mineFrequentItemsetsWithFPGrowth(
+            transactions,
+            minSupportCount,
+            Math.min(fields.length, 4)
+        );
+        const supportMap = new Map<string, number>();
+        rawItemsets.forEach((itemset) => {
+            supportMap.set(this.serializeItemset(itemset.items), itemset.support_count);
         });
 
-        const cooccurrence: Array<{field1: string, field2: string, cooccurrence: number, support: number}> = [];
-        
-        // 转换为所需格式
-        const fieldPairs = new Set<string>();
-        fields.forEach((field1, i) => {
-            fields.slice(i + 1).forEach(field2 => {
-                fieldPairs.add(`${field1}||${field2}`);
+        const frequentItemsets = rawItemsets
+            .map((itemset) => ({
+                kind: 'frequent_itemset',
+                items: itemset.items,
+                support_count: itemset.support_count,
+                support: itemset.support_count / transactions.length,
+                score: (itemset.support_count / transactions.length) * itemset.items.length
+            }))
+            .sort((a, b) => b.score - a.score || b.support_count - a.support_count);
+
+        const associationRules = this.generateAssociationRules(
+            rawItemsets,
+            transactions.length,
+            min_confidence,
+            supportMap
+        );
+
+        const results = [...associationRules, ...frequentItemsets]
+            .sort((a, b) => Number(b.score || 0) - Number(a.score || 0))
+            .slice(0, limit);
+
+        return {
+            status,
+            data: {
+                mode: 'fp_growth',
+                requested_mode,
+                results,
+                summary: this.buildFpGrowthSummary(results, query),
+                evidence: {
+                    field_types: fieldTypes,
+                    total_transactions: transactions.length,
+                    sample_size,
+                    warnings: frequentItemsets.length === 0
+                        ? ['当前支持度阈值下未发现频繁项集，可尝试降低 min_support。']
+                        : []
+                }
+            },
+            message: '关联性分析完成'
+        };
+    }
+
+    private calculateLaggedPearsonScores(
+        leftSeries: TimeSeriesPoint[],
+        rightSeries: TimeSeriesPoint[],
+        maxLag: number
+    ): Array<{ lag: number; correlation: number; aligned_points: number }> {
+        const timeline = this.mergeTimeline(leftSeries, rightSeries);
+        const leftMap = new Map(leftSeries.map((point) => [point.timestamp, point.value]));
+        const rightMap = new Map(rightSeries.map((point) => [point.timestamp, point.value]));
+        const leftValues = timeline.map((timestamp) => leftMap.get(timestamp) ?? null);
+        const rightValues = timeline.map((timestamp) => rightMap.get(timestamp) ?? null);
+
+        const scores: Array<{ lag: number; correlation: number; aligned_points: number }> = [];
+        for (let lag = -maxLag; lag <= maxLag; lag++) {
+            const alignedLeft: number[] = [];
+            const alignedRight: number[] = [];
+
+            for (let index = 0; index < timeline.length; index++) {
+                const shiftedIndex = index + lag;
+                if (shiftedIndex < 0 || shiftedIndex >= timeline.length) {
+                    continue;
+                }
+
+                const leftValue = leftValues[index];
+                const rightValue = rightValues[shiftedIndex];
+                if (leftValue === null || rightValue === null) {
+                    continue;
+                }
+
+                alignedLeft.push(leftValue);
+                alignedRight.push(rightValue);
+            }
+
+            if (alignedLeft.length < 2) {
+                continue;
+            }
+
+            scores.push({
+                lag,
+                correlation: this.statistics.calculateCorrelation(alignedLeft, alignedRight, false),
+                aligned_points: alignedLeft.length
             });
-        });
+        }
 
-        fieldPairs.forEach(pair => {
-            const [field1, field2] = pair.split('||');
-            const pairData = Array.from(cooccurrenceMap.entries())
-                .filter(([key]) => key.startsWith(`${field1}:`) && key.includes(`||${field2}:`))
-                .map(([key, count]) => ({ key, count }));
-            
-            const totalCooccurrence = pairData.reduce((sum, item) => sum + item.count, 0);
-            const support = totalCooccurrence / data.length;
-            
-            if (totalCooccurrence > 0) {
-                cooccurrence.push({
-                    field1,
-                    field2,
-                    cooccurrence: totalCooccurrence,
-                    support
+        return scores;
+    }
+
+    private mergeTimeline(leftSeries: TimeSeriesPoint[], rightSeries: TimeSeriesPoint[]): string[] {
+        return Array.from(new Set([
+            ...leftSeries.map((point) => point.timestamp),
+            ...rightSeries.map((point) => point.timestamp)
+        ])).sort((left, right) => this.compareTimestamps(left, right));
+    }
+
+    private compareTimestamps(left: string, right: string): number {
+        const leftNumber = Number(left);
+        const rightNumber = Number(right);
+
+        if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber)) {
+            return leftNumber - rightNumber;
+        }
+
+        return left.localeCompare(right);
+    }
+
+    private describeLagRelationship(field1: string, field2: string, lag: number): string {
+        if (lag === 0) {
+            return `${field1} 与 ${field2} 基本同步变化`;
+        }
+
+        if (lag > 0) {
+            return `${field1} 领先 ${field2} ${lag} 个桶`;
+        }
+
+        return `${field2} 领先 ${field1} ${Math.abs(lag)} 个桶`;
+    }
+
+    private buildLaggedPearsonSummary(results: Array<Record<string, any>>): string {
+        const topResult = results[0];
+        if (!topResult) {
+            return '未发现可解释的滞后相关关系。';
+        }
+
+        return `${topResult.field1} 与 ${topResult.field2} 的最佳相关系数为 ${Number(
+            topResult.best_correlation
+        ).toFixed(4)}，最佳 lag 为 ${topResult.best_lag}，说明 ${topResult.relationship}。`;
+    }
+
+    private buildTransactionsFromHits(hits: any[], fields: string[]): string[][] {
+        return hits
+            .map((item) => {
+                const transaction = new Set<string>();
+                fields.forEach((field) => {
+                    this.normalizeDiscreteValues(item?.[field]).forEach((value) => {
+                        transaction.add(`${field}=${value}`);
+                    });
+                });
+                return Array.from(transaction);
+            })
+            .filter((transaction) => transaction.length > 0);
+    }
+
+    private normalizeDiscreteValues(value: any): string[] {
+        if (value === null || value === undefined || value === '') {
+            return [];
+        }
+
+        if (Array.isArray(value)) {
+            return Array.from(
+                new Set(
+                    value
+                        .flatMap((item) => this.normalizeDiscreteValues(item))
+                        .filter((item) => item !== '')
+                )
+            );
+        }
+
+        if (typeof value === 'object') {
+            return [JSON.stringify(value)];
+        }
+
+        return [String(value)];
+    }
+
+    private isNumericLike(value: any): boolean {
+        if (typeof value === 'number') {
+            return Number.isFinite(value);
+        }
+
+        if (typeof value !== 'string') {
+            return false;
+        }
+
+        const trimmed = value.trim();
+        if (!trimmed) {
+            return false;
+        }
+
+        return Number.isFinite(Number(trimmed));
+    }
+
+    private mineFrequentItemsetsWithFPGrowth(
+        transactions: string[][],
+        minSupportCount: number,
+        maxPatternSize: number
+    ): Array<{ items: string[]; support_count: number }> {
+        const weightedTransactions = transactions.map((items) => ({ items, count: 1 }));
+        const { headerTable } = this.buildFPTree(weightedTransactions, minSupportCount);
+        const itemsets: Array<{ items: string[]; support_count: number }> = [];
+
+        this.mineFPTree(headerTable, [], itemsets, minSupportCount, maxPatternSize);
+
+        const uniqueItemsets = new Map<string, { items: string[]; support_count: number }>();
+        itemsets.forEach((itemset) => {
+            const key = this.serializeItemset(itemset.items);
+            const existing = uniqueItemsets.get(key);
+            if (!existing || existing.support_count < itemset.support_count) {
+                uniqueItemsets.set(key, {
+                    items: [...itemset.items].sort(),
+                    support_count: itemset.support_count
                 });
             }
         });
 
-        return cooccurrence
-            .sort((a, b) => b.support - a.support)
-            .slice(0, limit);
+        return Array.from(uniqueItemsets.values()).sort(
+            (a, b) => b.support_count - a.support_count || b.items.length - a.items.length
+        );
+    }
+
+    private buildFPTree(
+        transactions: Array<{ items: string[]; count: number }>,
+        minSupportCount: number
+    ): {
+        headerTable: Map<string, { count: number; nodes: Array<any> }>;
+        root: any;
+    } {
+        const itemCounts = new Map<string, number>();
+        transactions.forEach((transaction) => {
+            Array.from(new Set(transaction.items)).forEach((item) => {
+                itemCounts.set(item, (itemCounts.get(item) || 0) + transaction.count);
+            });
+        });
+
+        const frequentItems = new Set(
+            Array.from(itemCounts.entries())
+                .filter(([, count]) => count >= minSupportCount)
+                .map(([item]) => item)
+        );
+
+        const headerTable = new Map<string, { count: number; nodes: Array<any> }>();
+        frequentItems.forEach((item) => {
+            headerTable.set(item, {
+                count: itemCounts.get(item) || 0,
+                nodes: []
+            });
+        });
+
+        const root = {
+            item: null as string | null,
+            count: 0,
+            parent: null as any,
+            children: new Map<string, any>()
+        };
+
+        transactions.forEach((transaction) => {
+            const filteredItems = Array.from(new Set(transaction.items))
+                .filter((item) => frequentItems.has(item))
+                .sort((left, right) => {
+                    const countDiff = (itemCounts.get(right) || 0) - (itemCounts.get(left) || 0);
+                    return countDiff !== 0 ? countDiff : left.localeCompare(right);
+                });
+
+            if (filteredItems.length === 0) {
+                return;
+            }
+
+            this.insertFPTreeTransaction(root, filteredItems, transaction.count, headerTable);
+        });
+
+        return { headerTable, root };
+    }
+
+    private insertFPTreeTransaction(
+        root: any,
+        items: string[],
+        count: number,
+        headerTable: Map<string, { count: number; nodes: Array<any> }>
+    ): void {
+        let currentNode = root;
+
+        items.forEach((item) => {
+            let childNode = currentNode.children.get(item);
+            if (!childNode) {
+                childNode = {
+                    item,
+                    count: 0,
+                    parent: currentNode,
+                    children: new Map<string, any>()
+                };
+                currentNode.children.set(item, childNode);
+                headerTable.get(item)?.nodes.push(childNode);
+            }
+
+            childNode.count += count;
+            currentNode = childNode;
+        });
+    }
+
+    private mineFPTree(
+        headerTable: Map<string, { count: number; nodes: Array<any> }>,
+        suffix: string[],
+        results: Array<{ items: string[]; support_count: number }>,
+        minSupportCount: number,
+        maxPatternSize: number
+    ): void {
+        const items = Array.from(headerTable.entries()).sort(
+            (left, right) => left[1].count - right[1].count || left[0].localeCompare(right[0])
+        );
+
+        items.forEach(([item, metadata]) => {
+            const pattern = [...suffix, item].sort();
+            results.push({
+                items: pattern,
+                support_count: metadata.count
+            });
+
+            if (pattern.length >= maxPatternSize) {
+                return;
+            }
+
+            const conditionalPatternBase = metadata.nodes
+                .map((node) => {
+                    const path: string[] = [];
+                    let parent = node.parent;
+                    while (parent && parent.item) {
+                        path.unshift(parent.item);
+                        parent = parent.parent;
+                    }
+
+                    return {
+                        items: path,
+                        count: node.count
+                    };
+                })
+                .filter((patternBase) => patternBase.items.length > 0);
+
+            if (conditionalPatternBase.length === 0) {
+                return;
+            }
+
+            const conditionalTree = this.buildFPTree(conditionalPatternBase, minSupportCount);
+            if (conditionalTree.headerTable.size === 0) {
+                return;
+            }
+
+            this.mineFPTree(
+                conditionalTree.headerTable,
+                pattern,
+                results,
+                minSupportCount,
+                maxPatternSize
+            );
+        });
+    }
+
+    private generateAssociationRules(
+        itemsets: Array<{ items: string[]; support_count: number }>,
+        transactionCount: number,
+        minConfidence: number,
+        supportMap: Map<string, number>
+    ): Array<Record<string, any>> {
+        const rules: Array<Record<string, any>> = [];
+
+        itemsets
+            .filter((itemset) => itemset.items.length >= 2)
+            .forEach((itemset) => {
+                const subsets = this.generateNonEmptyProperSubsets(itemset.items);
+                subsets.forEach((antecedent) => {
+                    const consequent = itemset.items.filter((item) => !antecedent.includes(item));
+                    if (consequent.length === 0) {
+                        return;
+                    }
+
+                    const antecedentSupportCount = supportMap.get(this.serializeItemset(antecedent));
+                    const consequentSupportCount = supportMap.get(this.serializeItemset(consequent));
+                    if (!antecedentSupportCount || !consequentSupportCount) {
+                        return;
+                    }
+
+                    const support = itemset.support_count / transactionCount;
+                    const confidence = itemset.support_count / antecedentSupportCount;
+                    const consequentSupport = consequentSupportCount / transactionCount;
+                    const lift = consequentSupport > 0 ? confidence / consequentSupport : 0;
+
+                    if (confidence < minConfidence) {
+                        return;
+                    }
+
+                    rules.push({
+                        kind: 'association_rule',
+                        antecedent,
+                        consequent,
+                        support_count: itemset.support_count,
+                        support,
+                        confidence,
+                        lift,
+                        score: lift * confidence
+                    });
+                });
+            });
+
+        return rules.sort(
+            (a, b) => Number(b.score || 0) - Number(a.score || 0) || Number(b.support || 0) - Number(a.support || 0)
+        );
+    }
+
+    private generateNonEmptyProperSubsets(items: string[]): string[][] {
+        const subsets: string[][] = [];
+        const total = 1 << items.length;
+
+        for (let mask = 1; mask < total - 1; mask++) {
+            const subset: string[] = [];
+            for (let bit = 0; bit < items.length; bit++) {
+                if ((mask & (1 << bit)) !== 0) {
+                    subset.push(items[bit]);
+                }
+            }
+            subsets.push(subset);
+        }
+
+        return subsets;
+    }
+
+    private serializeItemset(items: string[]): string {
+        return [...items].sort().join(' || ');
+    }
+
+    private buildFpGrowthSummary(results: Array<Record<string, any>>, query: string): string {
+        const topRule = results.find((item) => item.kind === 'association_rule');
+        if (topRule) {
+            return `在查询 "${query}" 的样本中，规则 ${topRule.antecedent.join(', ')} => ${topRule.consequent.join(
+                ', '
+            )} 的置信度为 ${Number(topRule.confidence).toFixed(4)}，提升度为 ${Number(topRule.lift).toFixed(4)}。`;
+        }
+
+        const topItemset = results.find((item) => item.kind === 'frequent_itemset');
+        if (topItemset) {
+            return `在查询 "${query}" 的样本中，频繁组合 ${topItemset.items.join(', ')} 的支持度为 ${Number(
+                topItemset.support
+            ).toFixed(4)}。`;
+        }
+
+        return '当前支持度和置信度阈值下未发现明显的离散字段组合。';
     }
 
     /**
-     * 根因分析建议 - 复用 log-search.ts 的字段列表功能
+     * 根因分析建议：同时输出分布漂移和可疑切片
      */
     async executeRootCauseSuggestions(params: {
         query?: string;
@@ -1131,6 +1777,11 @@ export class AnomalyDetectionModule {
         candidate_fields?: string[];
         significance_threshold?: number;
         topk?: number;
+        field_value_limit?: number;
+        sample_size?: number;
+        slice_max_depth?: number;
+        min_slice_support?: number;
+        min_slice_lift?: number;
     }): Promise<ApiResponse<RootCauseAnalysisResult>> {
         try {
             const {
@@ -1140,82 +1791,98 @@ export class AnomalyDetectionModule {
                 index_name = 'yotta',
                 candidate_fields = [],
                 significance_threshold = 0.1,
-                topk = 5
+                topk = 5,
+                field_value_limit = 20,
+                sample_size = 300,
+                slice_max_depth = 2,
+                min_slice_support = 0.05,
+                min_slice_lift = 2
             } = params;
 
-            // 使用 log-search 模块获取两个时间窗口的字段信息
-            const [anomalyFields, baselineFields] = await Promise.all([
+            const [anomalyFields, baselineFields, anomalyOverview, baselineOverview] = await Promise.all([
                 this.logSearch.executeListFields(query, anomaly_window, index_name),
-                this.logSearch.executeListFields(query, baseline_window, index_name)
+                this.logSearch.executeListFields(query, baseline_window, index_name),
+                this.logSearch.executeLogSearchSheet(query, anomaly_window, index_name, { page: 0, size: 1 }),
+                this.logSearch.executeLogSearchSheet(query, baseline_window, index_name, { page: 0, size: 1 })
             ]);
 
-            const suggestions: Array<{
-                field: string;
-                hypothesis: string;
-                top_changes: Array<{value: string, baseline_count: number, anomaly_count: number, change_ratio: number}>;
-            }> = [];
-
-            // 分析每个候选字段
-            const fieldsToAnalyze = candidate_fields.length > 0 ? candidate_fields : 
-                                  this.getCommonFields(baselineFields.data?.fields || [], anomalyFields.data?.fields || []);
-
-            for (const field of fieldsToAnalyze) {
-                const baselineFieldData = baselineFields.data?.fields?.find((f: any) => f.name === field);
-                const anomalyFieldData = anomalyFields.data?.fields?.find((f: any) => f.name === field);
-                
-                // 处理字段数据格式 - log-search 返回标准化的字段信息
-                const baselineTopValues = baselineFieldData?.top_values || [];
-                const anomalyTopValues = anomalyFieldData?.top_values || [];
-
-                const baselineData = { top_values: baselineTopValues };
-                const anomalyData = { top_values: anomalyTopValues };
-
-                // 转换为计数映射
-                const baselineCounts: Record<string, number> = {};
-                const anomalyCounts: Record<string, number> = {};
-
-                baselineData.top_values.forEach((item: any) => {
-                    baselineCounts[item.value] = item.count;
-                });
-
-                anomalyData.top_values.forEach((item: any) => {
-                    anomalyCounts[item.value] = item.count;
-                });
-
-                // 计算分布差异
-                const differences = this.calculateDistributionDifferences(
-                    baselineCounts, anomalyCounts, topk
-                );
-
-                // 过滤显著差异
-                const significantChanges = differences.filter(d => d.jsd > significance_threshold);
-
-                if (significantChanges.length > 0) {
-                    const hypothesis = this.generateRootCauseHypothesis(field, significantChanges);
-                    
-                    suggestions.push({
-                        field,
-                        hypothesis,
-                        top_changes: significantChanges.map(d => ({
-                            value: d.value,
-                            baseline_count: d.baseline_count,
-                            anomaly_count: d.anomaly_count,
-                            change_ratio: d.change_ratio
-                        }))
-                    });
-                }
+            if (anomalyFields.error || baselineFields.error) {
+                return {
+                    error: anomalyFields.error || baselineFields.error || '字段信息获取失败',
+                    message: anomalyFields.message || baselineFields.message || '根因分析前置字段信息获取失败'
+                };
             }
 
-            // 生成建议查询
-            const suggestedQueries = this.generateSuggestedQueries(query, suggestions);
-            
-            // 生成总结
-            const summary = this.generateRootCauseSummary(suggestions, query);
+            const fieldsToAnalyze = candidate_fields.length > 0
+                ? Array.from(new Set(candidate_fields.filter(Boolean)))
+                : this.selectRootCauseFields(
+                    baselineFields.data?.fields || [],
+                    anomalyFields.data?.fields || [],
+                    Math.max(topk * 2, 6)
+                );
+
+            const distributionDrift: DistributionDriftItem[] = [];
+            for (const field of fieldsToAnalyze) {
+                const [baselineCounts, anomalyCounts] = await Promise.all([
+                    this.getFieldDistribution(query, baseline_window, index_name, field, field_value_limit),
+                    this.getFieldDistribution(query, anomaly_window, index_name, field, field_value_limit)
+                ]);
+
+                const drift = this.analyzeFieldDistributionDrift(
+                    baselineCounts,
+                    anomalyCounts,
+                    Math.max(topk, Math.min(field_value_limit, 10))
+                );
+                if (!drift || drift.drift_score < significance_threshold) {
+                    continue;
+                }
+
+                distributionDrift.push({
+                    field,
+                    ...drift,
+                    hypothesis: this.generateDistributionHypothesis(field, drift.changed_values)
+                });
+            }
+
+            distributionDrift.sort((a, b) => b.drift_score - a.drift_score);
+
+            const suspiciousSlices = await this.mineSuspiciousSlices({
+                query,
+                anomaly_window,
+                baseline_window,
+                index_name,
+                fields: fieldsToAnalyze,
+                sample_size,
+                slice_max_depth,
+                min_slice_support,
+                min_slice_lift,
+                topk
+            });
+
+            const suggestedQueries = this.generateRootCauseSuggestedQueries(
+                query,
+                distributionDrift,
+                suspiciousSlices
+            );
+            const summary = this.generateRootCauseSummary(
+                query,
+                distributionDrift,
+                suspiciousSlices,
+                anomalyOverview.data?.total || 0,
+                baselineOverview.data?.total || 0
+            );
 
             return {
-                status: Math.max(baselineFields.status || 200, anomalyFields.status || 200),
+                status: Math.max(
+                    anomalyFields.status || 200,
+                    baselineFields.status || 200,
+                    anomalyOverview.status || 200,
+                    baselineOverview.status || 200
+                ),
                 data: {
-                    suggestions: suggestions.slice(0, topk),
+                    analyzed_fields: fieldsToAnalyze,
+                    distribution_drift: distributionDrift.slice(0, topk),
+                    suspicious_slices: suspiciousSlices.slice(0, topk),
                     suggested_queries: suggestedQueries,
                     summary
                 },
@@ -1230,92 +1897,370 @@ export class AnomalyDetectionModule {
     }
 
     /**
-     * 获取两个字段列表的交集，用于根因分析
+     * 自动挑选一组适合做根因分析的字段
      */
-    private getCommonFields(baselineFields: any[], anomalyFields: any[]): string[] {
-        const baselineFieldNames = new Set(baselineFields.map(f => f.name));
-        const anomalyFieldNames = new Set(anomalyFields.map(f => f.name));
-        
-        // 返回两个字段列表的交集
-        return Array.from(baselineFieldNames).filter(name => anomalyFieldNames.has(name));
+    private selectRootCauseFields(
+        baselineFields: any[],
+        anomalyFields: any[],
+        limit: number
+    ): string[] {
+        const anomalyFieldMap = new Map(anomalyFields.map((field) => [field.name, field]));
+
+        return baselineFields
+            .filter((field) => anomalyFieldMap.has(field.name))
+            .filter((field) => {
+                const distinctCount = Number(field?.distinct_count || anomalyFieldMap.get(field.name)?.distinct_count || 0);
+                const fieldName = String(field?.name || '');
+                return fieldName.length > 0 &&
+                    !fieldName.startsWith('_') &&
+                    distinctCount > 1 &&
+                    distinctCount <= 200;
+            })
+            .sort((left, right) => {
+                const leftDistinct = Number(left?.distinct_count || 0);
+                const rightDistinct = Number(right?.distinct_count || 0);
+                const leftTotal = Number(left?.total || 0) + Number(anomalyFieldMap.get(left.name)?.total || 0);
+                const rightTotal = Number(right?.total || 0) + Number(anomalyFieldMap.get(right.name)?.total || 0);
+                return leftDistinct - rightDistinct || rightTotal - leftTotal;
+            })
+            .map((field) => field.name)
+            .slice(0, limit);
     }
 
     /**
-     * 生成根因假设
+     * 计算单字段在两个窗口中的分布漂移
      */
-    private generateRootCauseHypothesis(
-        field: string,
-        topChanges: Array<{value: string, baseline_count: number, anomaly_count: number, change_ratio: number}>
-    ): string {
-        const increases = topChanges.filter(d => d.change_ratio > 0);
-        const decreases = topChanges.filter(d => d.change_ratio < 0);
-        
-        let hypothesis = `字段 ${field} 的分布发生显著变化：`;
-        
-        if (increases.length > 0) {
-            const topIncrease = increases[0];
-            hypothesis += `值 "${topIncrease.value}" 从 ${topIncrease.baseline_count} 增加到 ${topIncrease.anomaly_count}（增长 ${(topIncrease.change_ratio * 100).toFixed(1)}%）`;
+    private analyzeFieldDistributionDrift(
+        baselineCounts: Record<string, number>,
+        anomalyCounts: Record<string, number>,
+        topk: number
+    ): Omit<DistributionDriftItem, 'field' | 'hypothesis'> | null {
+        const allValues = Array.from(new Set([...Object.keys(baselineCounts), ...Object.keys(anomalyCounts)]));
+        const baselineTotal = Object.values(baselineCounts).reduce((sum, count) => sum + count, 0);
+        const anomalyTotal = Object.values(anomalyCounts).reduce((sum, count) => sum + count, 0);
+
+        if (allValues.length === 0 || baselineTotal === 0 || anomalyTotal === 0) {
+            return null;
         }
-        
-        if (decreases.length > 0) {
-            if (increases.length > 0) hypothesis += '；';
-            const topDecrease = decreases[0];
-            hypothesis += `值 "${topDecrease.value}" 从 ${topDecrease.baseline_count} 减少到 ${topDecrease.anomaly_count}（下降 ${(Math.abs(topDecrease.change_ratio) * 100).toFixed(1)}%）`;
+
+        const baselineDistribution = allValues.map((value) => (baselineCounts[value] || 0) / baselineTotal);
+        const anomalyDistribution = allValues.map((value) => (anomalyCounts[value] || 0) / anomalyTotal);
+        const driftScore = this.jensenShannonDivergence(baselineDistribution, anomalyDistribution);
+
+        const changedValues = allValues
+            .map((value) => {
+                const baselineCount = baselineCounts[value] || 0;
+                const anomalyCount = anomalyCounts[value] || 0;
+                const baselineSupport = baselineCount / baselineTotal;
+                const anomalySupport = anomalyCount / anomalyTotal;
+                const supportDelta = anomalySupport - baselineSupport;
+                const changeRatio = baselineCount > 0
+                    ? (anomalyCount - baselineCount) / baselineCount
+                    : (anomalyCount > 0 ? anomalyCount : 0);
+
+                return {
+                    value,
+                    baseline_count: baselineCount,
+                    anomaly_count: anomalyCount,
+                    baseline_support: baselineSupport,
+                    anomaly_support: anomalySupport,
+                    support_delta: supportDelta,
+                    change_ratio: changeRatio,
+                    contribution_score: Math.abs(supportDelta),
+                    direction: supportDelta > 0 ? 'up' as const : supportDelta < 0 ? 'down' as const : 'flat' as const
+                };
+            })
+            .filter((item) => item.baseline_count > 0 || item.anomaly_count > 0)
+            .sort((a, b) => b.contribution_score - a.contribution_score)
+            .slice(0, topk);
+
+        return {
+            drift_score: driftScore,
+            baseline_total: baselineTotal,
+            anomaly_total: anomalyTotal,
+            changed_values: changedValues
+        };
+    }
+
+    /**
+     * 为单字段漂移生成自然语言假设
+     */
+    private generateDistributionHypothesis(field: string, changedValues: DistributionValueChange[]): string {
+        if (changedValues.length === 0) {
+            return `字段 ${field} 有轻微漂移，但没有足够突出的值变化。`;
         }
-        
-        hypothesis += '。这可能是导致异常的重要因素。';
-        
-        return hypothesis;
+
+        const topChange = changedValues[0];
+        const directionText = topChange.direction === 'up' ? '上升' : topChange.direction === 'down' ? '下降' : '波动';
+        return `字段 ${field} 的分布发生明显漂移，最突出的值是 "${topChange.value}"，在异常窗口中的占比${directionText}到 ${(topChange.anomaly_support * 100).toFixed(1)}%。`;
+    }
+
+    /**
+     * 在异常窗口中挖掘高支持度、高提升度的可疑切片
+     */
+    private async mineSuspiciousSlices(params: {
+        query: string;
+        anomaly_window: string;
+        baseline_window: string;
+        index_name: string;
+        fields: string[];
+        sample_size: number;
+        slice_max_depth: number;
+        min_slice_support: number;
+        min_slice_lift: number;
+        topk: number;
+    }): Promise<SuspiciousSliceItem[]> {
+        const {
+            query,
+            anomaly_window,
+            baseline_window,
+            index_name,
+            fields,
+            sample_size,
+            slice_max_depth,
+            min_slice_support,
+            min_slice_lift,
+            topk
+        } = params;
+
+        if (fields.length === 0) {
+            return [];
+        }
+
+        const sampledFields = fields.slice(0, Math.max(4, Math.min(fields.length, 6)));
+        const [anomalySample, baselineSample, anomalyTotal, baselineTotal] = await Promise.all([
+            this.logSearch.executeLogSearchSheet(query, anomaly_window, index_name, { page: 0, size: sample_size }, sampledFields),
+            this.logSearch.executeLogSearchSheet(query, baseline_window, index_name, { page: 0, size: sample_size }, sampledFields),
+            this.getExactQueryCount(query, anomaly_window, index_name),
+            this.getExactQueryCount(query, baseline_window, index_name)
+        ]);
+
+        if (anomalySample.error || baselineSample.error || anomalyTotal <= 0 || baselineTotal <= 0) {
+            return [];
+        }
+
+        const anomalyHits = anomalySample.data?.hits || [];
+        const baselineHits = baselineSample.data?.hits || [];
+        if (anomalyHits.length === 0) {
+            return [];
+        }
+
+        const perFieldLimit = 3;
+        const minSampleCount = Math.max(1, Math.ceil(anomalyHits.length * min_slice_support));
+        const termsByField = new Map<string, SliceTerm[]>();
+
+        sampledFields.forEach((field) => {
+            const counts = new Map<string, number>();
+            anomalyHits.forEach((hit) => {
+                this.normalizeDiscreteValues(hit?.[field]).forEach((value) => {
+                    if (this.shouldSkipSliceValue(value)) {
+                        return;
+                    }
+                    counts.set(value, (counts.get(value) || 0) + 1);
+                });
+            });
+
+            const terms = Array.from(counts.entries())
+                .filter(([, count]) => count >= minSampleCount)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, perFieldLimit)
+                .map(([value]) => ({ field, value }));
+
+            if (terms.length > 0) {
+                termsByField.set(field, terms);
+            }
+        });
+
+        const candidateSlices = this.generateSliceCandidates(
+            termsByField,
+            Math.max(1, Math.min(slice_max_depth, 3))
+        );
+
+        const preliminarySlices = candidateSlices
+            .map((terms) => {
+                const anomalyCount = this.countSliceMatches(anomalyHits, terms);
+                const baselineCount = this.countSliceMatches(baselineHits, terms);
+                const anomalySupport = anomalyHits.length > 0 ? anomalyCount / anomalyHits.length : 0;
+                const baselineSupport = baselineHits.length > 0 ? baselineCount / baselineHits.length : 0;
+                const lift = this.calculateLift(anomalySupport, baselineSupport, baselineHits.length);
+                const score = this.calculateSliceScore(anomalySupport, lift, terms.length);
+                return { terms, anomalySupport, lift, score };
+            })
+            .filter((item) => item.anomalySupport >= min_slice_support && item.lift >= min_slice_lift)
+            .sort((a, b) => b.score - a.score)
+            .slice(0, Math.max(topk * 3, 10));
+
+        const exactSlices: SuspiciousSliceItem[] = [];
+        for (const candidate of preliminarySlices) {
+            const sliceQuery = this.buildSliceQuery(query, candidate.terms);
+            const [anomalyCount, baselineCount] = await Promise.all([
+                this.getExactQueryCount(sliceQuery, anomaly_window, index_name),
+                this.getExactQueryCount(sliceQuery, baseline_window, index_name)
+            ]);
+
+            const anomalySupport = anomalyTotal > 0 ? anomalyCount / anomalyTotal : 0;
+            const baselineSupport = baselineTotal > 0 ? baselineCount / baselineTotal : 0;
+            const lift = this.calculateLift(anomalySupport, baselineSupport, baselineTotal);
+            const score = this.calculateSliceScore(anomalySupport, lift, candidate.terms.length);
+
+            if (anomalySupport < min_slice_support || lift < min_slice_lift) {
+                continue;
+            }
+
+            exactSlices.push({
+                slice: Object.fromEntries(candidate.terms.map((term) => [term.field, term.value])),
+                slice_terms: candidate.terms.map((term) => `${term.field}=${term.value}`),
+                depth: candidate.terms.length,
+                anomaly_count: anomalyCount,
+                baseline_count: baselineCount,
+                anomaly_support: anomalySupport,
+                baseline_support: baselineSupport,
+                lift,
+                score,
+                query: sliceQuery
+            });
+        }
+
+        return exactSlices
+            .sort((a, b) => b.score - a.score)
+            .filter((item, index, array) => array.findIndex((candidate) => candidate.query === item.query) === index)
+            .slice(0, topk);
+    }
+
+    private generateSliceCandidates(termsByField: Map<string, SliceTerm[]>, maxDepth: number): SliceTerm[][] {
+        const fieldEntries = Array.from(termsByField.entries());
+        const results: SliceTerm[][] = [];
+
+        const backtrack = (startIndex: number, current: SliceTerm[]) => {
+            if (current.length > 0) {
+                results.push([...current]);
+            }
+            if (current.length >= maxDepth) {
+                return;
+            }
+
+            for (let index = startIndex; index < fieldEntries.length; index++) {
+                const [, terms] = fieldEntries[index];
+                terms.forEach((term) => {
+                    current.push(term);
+                    backtrack(index + 1, current);
+                    current.pop();
+                });
+            }
+        };
+
+        backtrack(0, []);
+        return results;
+    }
+
+    private countSliceMatches(hits: any[], terms: SliceTerm[]): number {
+        return hits.filter((hit) => this.sliceMatchesHit(hit, terms)).length;
+    }
+
+    private sliceMatchesHit(hit: any, terms: SliceTerm[]): boolean {
+        return terms.every((term) => this.normalizeDiscreteValues(hit?.[term.field]).includes(term.value));
+    }
+
+    private shouldSkipSliceValue(value: string): boolean {
+        const trimmed = value.trim();
+        return trimmed.length === 0 || trimmed.length > 80 || trimmed.includes('\n');
+    }
+
+    private buildSliceQuery(baseQuery: string, terms: SliceTerm[]): string {
+        const clauses = terms.map((term) => `${term.field}:"${this.escapeQueryValue(term.value)}"`);
+        if (baseQuery === '*' || baseQuery.trim() === '') {
+            return clauses.join(' AND ');
+        }
+        return `(${baseQuery}) AND ${clauses.join(' AND ')}`;
+    }
+
+    private escapeQueryValue(value: string): string {
+        return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    }
+
+    private calculateLift(anomalySupport: number, baselineSupport: number, baselineTotal: number): number {
+        if (baselineSupport > 0) {
+            return anomalySupport / baselineSupport;
+        }
+        if (anomalySupport <= 0) {
+            return 0;
+        }
+        return anomalySupport / (1 / Math.max(baselineTotal, 1));
+    }
+
+    private calculateSliceScore(anomalySupport: number, lift: number, depth: number): number {
+        return Number((anomalySupport * Math.log2(lift + 1) * depth).toFixed(6));
+    }
+
+    private async getExactQueryCount(query: string, timeRange: string, indexName: string): Promise<number> {
+        const countResult = await this.logSearch.executeLogSearchSheet(
+            `${query} | stats count() as count`,
+            timeRange,
+            indexName,
+            { page: 0, size: 1 },
+            ['count']
+        );
+
+        if (countResult.error) {
+            return 0;
+        }
+
+        return Number(countResult.data?.hits?.[0]?.count || 0);
     }
 
     /**
      * 生成建议查询
      */
-    private generateSuggestedQueries(
+    private generateRootCauseSuggestedQueries(
         baseQuery: string,
-        suggestions: Array<{field: string, top_changes: Array<{value: string, change_ratio: number}>}>
+        distributionDrift: DistributionDriftItem[],
+        suspiciousSlices: SuspiciousSliceItem[]
     ): string[] {
-        const queries: string[] = [];
-        
-        // 生成针对主要变化值的查询
-        suggestions.forEach(suggestion => {
-            const increases = suggestion.top_changes.filter(d => d.change_ratio > 0.5);
-            const decreases = suggestion.top_changes.filter(d => d.change_ratio < -0.5);
-            
-            if (increases.length > 0) {
-                const topIncrease = increases[0];
-                queries.push(`${baseQuery} AND ${suggestion.field}:"${topIncrease.value}"`);
-            }
-            
-            if (decreases.length > 0) {
-                const topDecrease = decreases[0];
-                queries.push(`${baseQuery} AND NOT ${suggestion.field}:"${topDecrease.value}"`);
+        const queries = new Set<string>();
+
+        suspiciousSlices.forEach((slice) => {
+            queries.add(slice.query);
+        });
+
+        distributionDrift.forEach((item) => {
+            const topIncrease = item.changed_values.find((change) => change.direction === 'up');
+            if (topIncrease) {
+                queries.add(this.buildSliceQuery(baseQuery, [{ field: item.field, value: topIncrease.value }]));
             }
         });
-        
-        return queries.slice(0, 5);
+
+        return Array.from(queries).slice(0, 5);
     }
 
     /**
      * 生成根因总结
      */
     private generateRootCauseSummary(
-        suggestions: Array<{field: string, hypothesis: string}>,
-        originalQuery: string
+        originalQuery: string,
+        distributionDrift: DistributionDriftItem[],
+        suspiciousSlices: SuspiciousSliceItem[],
+        anomalyTotal: number,
+        baselineTotal: number
     ): string {
-        if (suggestions.length === 0) {
-            return '未找到明显的根因线索。建议扩大分析时间窗口或增加候选字段。';
+        if (distributionDrift.length === 0 && suspiciousSlices.length === 0) {
+            return '未发现明显的分布漂移或可疑切片。建议扩大时间窗口、补充候选字段，或适当降低切片支持度/提升度阈值。';
         }
-        
-        let summary = `基于查询 "${originalQuery}" 的根因分析发现：\n\n`;
-        
-        suggestions.forEach((suggestion, index) => {
-            summary += `${index + 1}. ${suggestion.hypothesis}\n`;
-        });
-        
-        summary += `\n建议优先关注上述 ${suggestions.length} 个字段的变化，它们可能是导致异常的主要原因。`;
-        
-        return summary;
+
+        const parts: string[] = [
+            `基于查询 "${originalQuery}"，异常窗口日志量 ${anomalyTotal}，基线窗口日志量 ${baselineTotal}。`
+        ];
+
+        if (distributionDrift.length > 0) {
+            const topDrift = distributionDrift[0];
+            parts.push(`分布漂移最明显的字段是 ${topDrift.field}，漂移分数为 ${topDrift.drift_score.toFixed(4)}。`);
+        }
+
+        if (suspiciousSlices.length > 0) {
+            const topSlice = suspiciousSlices[0];
+            parts.push(`最可疑的切片是 ${topSlice.slice_terms.join(' AND ')}，异常支持度 ${(topSlice.anomaly_support * 100).toFixed(1)}%，提升度 ${topSlice.lift.toFixed(2)}。`);
+        }
+
+        return parts.join('\n');
     }
 
     /**
@@ -1449,4 +2394,5 @@ export function createLogSearchModule(client: LogEaseClient): LogSearchModule {
 
 // 为了向后兼容，保持原有的模块导入
 import { LogSearchModule } from './log-search.js';
+import { TimechartQueryModule } from './timechart-query.js';
 import { TrendForecastModule } from './trend-forecast.js';

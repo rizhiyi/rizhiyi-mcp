@@ -12,6 +12,7 @@ import {
     QueryPrecheckResponse,
     QueryPrecheckSyntaxResult
 } from '../types.js';
+import { parseDurationMs as parseTimeRangeDurationMs, parseTimeString as parseTimeValue } from './time-utils.js';
 
 export class LogSearchModule {
     private baseURL: string;
@@ -217,38 +218,14 @@ export class LogSearchModule {
      * 解析时间范围字符串为毫秒
      */
     parseDurationMs(timeRange: string): number {
-        const parts = timeRange.split(',');
-        if (parts.length !== 2) return 15 * 60 * 1000; // 默认15分钟
-        
-        const start = this.parseTimeString(parts[0]);
-        const end = this.parseTimeString(parts[1]);
-        return end - start;
+        return parseTimeRangeDurationMs(timeRange);
     }
 
     /**
      * 解析时间字符串
      */
     parseTimeString(timeStr: string): number {
-        const now = Date.now();
-        
-        if (timeStr === 'now') return now;
-        
-        const match = timeStr.match(/now-(\d+)([smhd])/);
-        if (match) {
-            const value = parseInt(match[1]);
-            const unit = match[2];
-            
-            const multipliers = {
-                's': 1000,
-                'm': 60 * 1000,
-                'h': 60 * 60 * 1000,
-                'd': 24 * 60 * 60 * 1000
-            };
-            
-            return now - (value * multipliers[unit as keyof typeof multipliers]);
-        }
-        
-        return now;
+        return parseTimeValue(timeStr);
     }
 
     /**
@@ -454,6 +431,7 @@ export class LogSearchModule {
                 data: {
                     sid: data?.sid,
                     job_status: data?.job_status,
+                    total_hits: data?.result?.total_hits || 0,
                     result: patterns
                 }
             };

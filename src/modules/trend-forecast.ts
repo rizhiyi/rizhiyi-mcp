@@ -1,17 +1,18 @@
 import { LogEaseClient } from '../client.js';
 import { 
     ApiResponse, 
-    TimeSeriesPoint, 
-    ForecastResult, 
-    TimeSeriesQueryParams 
+    ForecastResult 
 } from '../types.js';
 import { StatisticsModule } from './statistics.js';
+import { TimechartQueryModule } from './timechart-query.js';
 
 export class TrendForecastModule {
     private statistics: StatisticsModule;
+    private timechartQuery: TimechartQueryModule;
 
     constructor(private client: LogEaseClient) {
         this.statistics = new StatisticsModule(client);
+        this.timechartQuery = new TimechartQueryModule(client);
     }
 
     /**
@@ -43,45 +44,28 @@ export class TrendForecastModule {
                 alpha = 0.3
             } = params;
 
-            // 获取时间序列数据 - 使用timechart管道命令
-            const durationMs = this.statistics.parseDurationMs(time_range);
-            const autoBucket = bucket || this.statistics.chooseBucket(durationMs).bin;
-            
-            // 构建timechart查询
-            let tsQuery: string;
-            if (metric_field) {
-                tsQuery = `${query || '*'} | timechart span=${autoBucket} avg(${metric_field}) as value`;
-            } else {
-                tsQuery = `${query || '*'} | timechart span=${autoBucket} count() as cnt`;
-            }
-            
-            const result = await this.client.get<any>('/api/v3/search/sheets/', {
-                query: tsQuery,
+            const result = await this.timechartQuery.execute({
+                query,
                 time_range,
                 index_name,
-                page: 0,
-                size: 100
+                bucket,
+                metric_field
             });
             
             if (result.error) {
-                return result;
+                return {
+                    error: result.error,
+                    message: result.message
+                };
             }
 
-            const data = result.data;
-            if (!data?.results?.sheets?.rows || data.results.sheets.rows.length === 0) {
+            const series = result.data?.series || [];
+            if (series.length === 0) {
                 return {
                     error: '无数据',
                     message: '未找到符合条件的时间序列数据'
                 };
             }
-
-            // 提取时间序列数据
-            const rows = data.results.sheets.rows;
-            const series: TimeSeriesPoint[] = rows.map((item: any) => ({
-                timestamp: item.timestamp || item.time || item._timestamp,
-                value: item.cnt || item.value || item.count || 0,
-                count: item.cnt || item.value || item.count || 0
-            }));
 
             const values = series.map(point => point.value);
             

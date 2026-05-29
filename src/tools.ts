@@ -149,7 +149,7 @@ export const basicLogTools: ToolDefinition[] = [
     },
     {
         name: 'log_reduce_preview',
-        description: '根据任务ID(sid)获取日志聚类分析的实际结果，聚类分析很慢，需要自动轮询等待任务完成。返回的结果可以直接用于pattern_classification进行高级分析',
+        description: '根据任务ID(sid)轮询并返回日志聚类结果。适合回答“最近有哪些重复日志模式”“哪几类 raw_message/错误模式最常见”。当 `analyze_patterns=true` 时，会在返回聚类结果的同时，对每个聚类模式补充时间分布、突发性、周期性、异常点和重要性分析，适合继续判断哪些模式更值得优先排查。',
         inputSchema: {
             type: 'object',
             properties: {
@@ -166,6 +166,16 @@ export const basicLogTools: ToolDefinition[] = [
                     type: 'integer',
                     description: '重试间隔(毫秒)',
                     default: 5000
+                },
+                analyze_patterns: {
+                    type: 'boolean',
+                    description: '是否对返回的每个聚类模式做进一步分析，默认 false',
+                    default: false
+                },
+                analysis_limit: {
+                    type: 'integer',
+                    description: '当 analyze_patterns=true 时，返回的重要模式分析数量上限，默认 20',
+                    default: 20
                 }
             },
             required: ['sid']
@@ -293,7 +303,7 @@ export const basicLogTools: ToolDefinition[] = [
 export const statisticalAnalysisTools: ToolDefinition[] = [
     {
         name: 'trend_summary',
-        description: '趋势概要：按时间桶统计，输出起止、最值、变化率、斜率等，并生成自然语言总结和峰值检测',
+        description: '趋势概要：当你想回答“最近是在上涨、下跌还是持平”“什么时候冲高/触底”“整体走势怎么样”时使用。它会按时间桶汇总并给出起止、最值、变化率、斜率、峰值和自然语言总结，适合做时间序列概览。它不负责逐点异常判定、跨时间窗口对比或根因归因；要找异常点用 `anomaly_points`，要比较两个时间段用 `period_compare`，要解释异常原因用 `root_cause_suggestions`。',
         inputSchema: {
             type: 'object',
             properties: {
@@ -332,7 +342,7 @@ export const statisticalAnalysisTools: ToolDefinition[] = [
     },
     {
         name: 'anomaly_points',
-        description: '异常点标识：在时间序列上检测离群点，支持z-score和IQR方法',
+        description: '异常点标识：当你想回答“这条时间序列在哪些时间点突然异常”“哪些桶是离群点”时使用。它会在单条时间序列上识别异常时间点，适合做 detect anomalies 场景。它不解释异常为什么发生，也不负责跨窗口对比或字段共现分析；要看整体走势用 `trend_summary`，要做异常归因用 `root_cause_suggestions`，要分析指标/字段相关性用 `correlation_analysis`。',
         inputSchema: {
             type: 'object',
             properties: {
@@ -385,88 +395,18 @@ export const statisticalAnalysisTools: ToolDefinition[] = [
 // 智能分析工具
 export const intelligentAnalysisTools: ToolDefinition[] = [
     {
-        name: 'pattern_classification',
-        description: '模式识别和分类：可直接使用 log_reduce_preview 的结果，或独立执行完整流程。当提供 previous_result 时，直接分析该数据；否则执行完整的聚类分析流程',
-        inputSchema: {
-            type: 'object',
-            properties: {
-                previous_result: {
-                    type: 'object',
-                    description: '前一个tool的结果数据，如log_reduce_preview的输出，包含patterns数据。提供此参数时将直接分析该数据而不再执行聚类分析'
-                },
-                query: { 
-                    type: 'string', 
-                    description: '搜索查询语句，例如："appname:firewall", "appname:firewall AND status:error"。当不提供previous_result时必须提供', 
-                    default: '*' 
-                },
-                time_range: { 
-                    type: 'string', 
-                    description: '时间范围，例如："now-1h,now", "now/d,now+1d/d"。当不提供previous_result时必须提供',
-                    default: 'now-15m,now'
-                },
-                index_name: { 
-                    type: 'string', 
-                    description: '索引名称', 
-                    default: 'yotta' 
-                },
-                pattern_options: {
-                    type: 'object',
-                    description: '聚类分析选项（仅在需要执行聚类分析时生效）',
-                    properties: {
-                        initial_dist: {
-                            type: 'string',
-                            description: '初始距离',
-                            default: '0.01'
-                        },
-                        alpha: {
-                            type: 'string',
-                            description: 'alpha值',
-                            default: '1.8'
-                        },
-                        multi_align_threshold: {
-                            type: 'string',
-                            description: '多模式对齐阈值',
-                            default: '0.1'
-                        },
-                        pattern_discover_align_threshold: {
-                            type: 'string',
-                            description: '模式发现对齐阈值',
-                            default: '0.05'
-                        },
-                        find_cluster_align_threshold: {
-                            type: 'string',
-                            description: '聚类对齐阈值',
-                            default: '0.2'
-                        },
-                        stop_threshold: {
-                            type: 'string',
-                            description: '停止阈值',
-                            default: '0.5'
-                        }
-                    },
-                    additionalProperties: true
-                },
-                limit: {
-                    type: 'integer',
-                    description: '返回模式数量限制',
-                    default: 20
-                }
-            }
-        }
-    },
-    {
         name: 'period_compare',
-        description: '跨时间段对比分析：对比两段时间的总量、趋势、差异字段分布。可复用已有时间序列数据进行分析',
+        description: '跨时间段对比分析：当你想回答“今天和昨天相比差了多少”“故障前后哪一段变化最大”“两个窗口的趋势和总量有什么不同”时使用。它适合比较两段时间的总量、趋势和字段分布差异，也可复用已有时间序列数据。它不是逐点异常检测，也不是根因候选排序；要定位异常时间点用 `anomaly_points`，要解释异常窗口相对基线窗口到底什么变了用 `root_cause_suggestions`。',
         inputSchema: {
             type: 'object',
             properties: {
                 previous_time_series_a: {
                     type: 'object',
-                    description: '时间段A的已有时间序列数据，如trend_summary的输出，包含points数组。提供此参数时将跳过数据获取直接进行分析'
+                    description: '时间段A的已有时间序列数据，如 trend_summary 或统一 timechart 查询的输出。兼容 series 数组与旧版 points 数组；提供此参数时将跳过数据获取直接进行分析'
                 },
                 previous_time_series_b: {
                     type: 'object', 
-                    description: '时间段B的已有时间序列数据，如trend_summary的输出，包含points数组。提供此参数时将跳过数据获取直接进行分析'
+                    description: '时间段B的已有时间序列数据，如 trend_summary 或统一 timechart 查询的输出。兼容 series 数组与旧版 points 数组；提供此参数时将跳过数据获取直接进行分析'
                 },
                 query: { 
                     type: 'string', 
@@ -513,7 +453,7 @@ export const intelligentAnalysisTools: ToolDefinition[] = [
     },
     {
         name: 'correlation_analysis',
-        description: '关联性分析：分析数值字段相关系数和类别字段共现关系',
+        description: '关联分析：当你想回答“哪个数值指标会领先或滞后另一个指标”“哪些字段值经常一起出现”时使用。数值时间序列相关请用 `lagged_pearson`，离散字段共现请用 `fp_growth`，不确定时可用 `auto` 自动判断，但所有输入字段必须同属数值或同属离散字段。它适合做 correlate events / metrics，不直接给出根因结论，也不替代日志检索或异常检测；要查异常窗口相对基线窗口哪里变了用 `root_cause_suggestions`，要找异常时间点用 `anomaly_points`。',
         inputSchema: {
             type: 'object',
             properties: {
@@ -535,19 +475,43 @@ export const intelligentAnalysisTools: ToolDefinition[] = [
                 fields: { 
                     type: 'array',
                     items: { type: 'string' },
-                    description: '要分析的字段列表，如["response_time", "cpu_usage", "status"]',
+                    description: '要分析的字段列表。数值模式建议传 2~5 个数值字段；离散模式建议传 2~6 个离散字段。',
                     default: []
                 },
-                method: {
+                mode: {
                     type: 'string',
-                    description: '关联分析方法，默认"mixed"，可选：["pearson", "spearman", "categorical", "mixed"]',
-                    default: 'mixed',
-                    enum: ['pearson', 'spearman', 'categorical', 'mixed']
+                    description: '分析模式。lagged_pearson 用于数值时间序列滞后相关；fp_growth 用于离散字段频繁项集和规则；auto 会先判断字段类型再自动路由。',
+                    default: 'auto',
+                    enum: ['lagged_pearson', 'fp_growth', 'auto']
+                },
+                bucket: {
+                    type: 'string',
+                    description: '数值模式下的时间桶大小，如 "1m"、"5m"、"1h"；不传则按 time_range 自动选择。'
+                },
+                max_lag: {
+                    type: 'integer',
+                    description: '数值模式下最大滞后桶数，系统会计算 [-max_lag, +max_lag] 范围内的 Pearson 相关，默认 3。',
+                    default: 3
+                },
+                min_support: {
+                    type: 'number',
+                    description: '离散模式下最小支持度，范围 0~1，默认 0.05。',
+                    default: 0.05
+                },
+                min_confidence: {
+                    type: 'number',
+                    description: '离散模式下生成关联规则的最小置信度，范围 0~1，默认 0.6。',
+                    default: 0.6
+                },
+                sample_size: {
+                    type: 'integer',
+                    description: '离散模式和 auto 判断时抽样的日志条数，默认 500。',
+                    default: 500
                 },
                 limit: {
                     type: 'integer',
-                    description: '返回结果数量限制，默认50',
-                    default: 50
+                    description: '返回结果数量限制，默认 20。',
+                    default: 20
                 }
             },
             required: ['time_range']
@@ -555,7 +519,7 @@ export const intelligentAnalysisTools: ToolDefinition[] = [
     },
     {
         name: 'root_cause_suggestions',
-        description: '根因分析建议：分析异常窗口与基线窗口的分布差异，提供根因假设和查询建议',
+        description: '根因分析建议：当你想回答“异常窗口相比基线窗口到底什么变了”“哪一撮日志最可疑”“应该优先排查哪些字段组合”时使用。工具会同时输出 `distribution_drift`（字段分布漂移）和 `suspicious_slices`（高支持度、高提升度的可疑切片），适合做 root cause analysis 和根因候选排序。它不负责原始日志检索、单纯趋势概览或纯相关性计算；要搜日志明细用 `log_search_sheet`，要看走势用 `trend_summary`，要做相关/共现分析用 `correlation_analysis`。',
         inputSchema: {
             type: 'object',
             properties: {
@@ -582,18 +546,43 @@ export const intelligentAnalysisTools: ToolDefinition[] = [
                 candidate_fields: { 
                     type: 'array',
                     items: { type: 'string' },
-                    description: '候选字段列表，如["status", "level", "host"]',
+                    description: '候选字段列表，如["status", "level", "host"]。不传时会自动从两个窗口的公共字段中挑选一批字段分析。',
                     default: []
                 },
                 significance_threshold: {
                     type: 'number',
-                    description: '分布差异显著性阈值(JS散度)，默认0.1',
+                    description: '字段分布漂移显著性阈值（drift score），默认0.1',
                     default: 0.1
                 },
                 topk: {
                     type: 'integer',
-                    description: '返回最重要的K个根因假设，默认5',
+                    description: '返回最重要的 K 个漂移字段和可疑切片，默认5',
                     default: 5
+                },
+                field_value_limit: {
+                    type: 'integer',
+                    description: '每个字段显式查询的值分布上限，默认20',
+                    default: 20
+                },
+                sample_size: {
+                    type: 'integer',
+                    description: '异常切片挖掘使用的采样条数，默认300',
+                    default: 300
+                },
+                slice_max_depth: {
+                    type: 'integer',
+                    description: '可疑切片组合的最大深度，默认2；值越大组合爆炸风险越高',
+                    default: 2
+                },
+                min_slice_support: {
+                    type: 'number',
+                    description: '可疑切片在异常窗口中的最小支持度，默认0.05',
+                    default: 0.05
+                },
+                min_slice_lift: {
+                    type: 'number',
+                    description: '可疑切片相对基线窗口的最小提升度，默认2',
+                    default: 2
                 }
             },
             required: ['anomaly_window', 'baseline_window']
@@ -605,7 +594,7 @@ export const intelligentAnalysisTools: ToolDefinition[] = [
 export const predictiveAnalysisTools: ToolDefinition[] = [
     {
         name: 'trend_forecast',
-        description: '趋势预测（短期）：基于线性回归/滑动平均进行时间序列预测，包含置信区间',
+        description: '趋势预测（短期）：当你想回答“按当前走势接下来几个时间桶会怎么走”“未来是否还会继续升高/降低”时使用。它基于历史时间序列做短期预测，并返回预测值与置信区间，适合 forecast 场景。它不负责识别已发生的异常点，也不解释异常原因；要看历史走势概览用 `trend_summary`，要识别异常点用 `anomaly_points`，要做异常归因用 `root_cause_suggestions`。',
         inputSchema: {
             type: 'object',
             properties: {

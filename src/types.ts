@@ -36,23 +36,42 @@ export interface LogSearchResponse {
     has_more?: boolean;
 }
 
+export interface LogReducePatternCluster {
+    id?: string;
+    pattern_string: string;
+    count: number;
+    level?: number;
+    timeline?: {
+        interval?: number;
+        start_ts?: number;
+        end_ts?: number;
+        rows?: Array<{
+            start_ts: number;
+            end_ts: number;
+            count: number;
+        }>;
+        total?: number;
+    };
+}
+
 export interface LogReduceResponse {
     sid?: string;
     job_status?: string;
+    total_hits?: number;
     tree_layer?: {
-        clusters?: Array<{
-            pattern_string: string;
-            count: number;
-        }>;
+        clusters?: LogReducePatternCluster[];
     };
     result?: {
         level?: number;
         max_level?: number;
         total_hits?: number;
-        body?: Array<{
-            pattern_string: string;
-            count: number;
-        }>;
+        body?: LogReducePatternCluster[];
+    } | LogReducePatternCluster[];
+    pattern_analysis?: {
+        total_patterns: number;
+        total_hits: number;
+        patterns: Array<Record<string, any>>;
+        analysis_summary: Record<string, any>;
     };
 }
 
@@ -128,6 +147,14 @@ export interface TimeSeriesPoint {
     count?: number;
 }
 
+export interface TimechartQueryResult {
+    series: TimeSeriesPoint[];
+    bucket_used: string;
+    query_executed: string;
+    aggregation_type: 'count' | 'avg';
+    metric_field?: string;
+}
+
 export interface TrendAnalysisResult {
     series: TimeSeriesPoint[];
     slope: number;
@@ -160,21 +187,31 @@ export interface AnomalyDetectionResult {
     threshold: number;
 }
 
+export type CorrelationMode = 'lagged_pearson' | 'fp_growth' | 'auto';
+export type CorrelationResolvedMode = 'lagged_pearson' | 'fp_growth';
+export type CorrelationFieldType = 'numeric' | 'categorical' | 'mixed' | 'unknown';
+
 // 关联分析接口
 export interface CorrelationResult {
-    correlations: Array<{
-        field1: string;
-        field2: string;
-        correlation: number;
-        method: string;
-        significance?: number;
-    }>;
-    cooccurrence?: Array<{
-        field1: string;
-        field2: string;
-        cooccurrence: number;
-        support: number;
-    }>;
+    mode: CorrelationResolvedMode;
+    requested_mode: CorrelationMode;
+    results: Array<Record<string, any>>;
+    summary: string;
+    evidence: {
+        field_types: Array<{
+            field: string;
+            detected_type: CorrelationFieldType;
+            sample_count: number;
+            numeric_count: number;
+            categorical_count: number;
+        }>;
+        bucket_used?: string;
+        query_executed?: string[];
+        total_transactions?: number;
+        sample_size?: number;
+        max_lag?: number;
+        warnings?: string[];
+    };
 }
 
 // 对比分析接口
@@ -207,19 +244,42 @@ export interface PeriodComparisonResult {
         change: number;
         jsd: number;
     }>;
+    bucket_used?: string;
+    query_executed?: string;
 }
 
 // 根因分析接口
 export interface RootCauseAnalysisResult {
-    suggestions: Array<{
+    analyzed_fields: string[];
+    distribution_drift: Array<{
         field: string;
+        drift_score: number;
+        baseline_total: number;
+        anomaly_total: number;
         hypothesis: string;
-        top_changes: Array<{
+        changed_values: Array<{
             value: string;
             baseline_count: number;
             anomaly_count: number;
+            baseline_support: number;
+            anomaly_support: number;
+            support_delta: number;
             change_ratio: number;
+            contribution_score: number;
+            direction: 'up' | 'down' | 'flat';
         }>;
+    }>;
+    suspicious_slices: Array<{
+        slice: Record<string, string>;
+        slice_terms: string[];
+        depth: number;
+        anomaly_count: number;
+        baseline_count: number;
+        anomaly_support: number;
+        baseline_support: number;
+        lift: number;
+        score: number;
+        query: string;
     }>;
     suggested_queries: string[];
     summary: string;
