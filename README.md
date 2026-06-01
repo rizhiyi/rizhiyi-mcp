@@ -4,6 +4,10 @@
 
 `rizhiyi-mcp` 是基于 Model Context Protocol (MCP) 的日志易服务器，专为 AI 智能体设计。该项目包含多个独立的 MCP 服务器实现，每个 MCP 服务器都针对不同的场景和需求进行了设计和优化。
 
+## 版本
+
+当前版本：`0.1.0`
+
 ## 主要功能
 
 - **`openapi_server` (OpenAPI 封装服务器)**：直接封装了现有的 OpenAPI 接口，为 AI 智能体提供标准化的 API 访问能力，方便智能体调用各种外部服务。
@@ -28,6 +32,13 @@
   所有工具通用输出控制参数：
   - `output_format`: auto|yaml|csv|json（默认 auto）
   - `include_raw_json`: 是否附带原始 JSON（默认 false）
+  - `result_delivery`: auto|inline|resource（默认 auto）
+  - `result_ttl_seconds`: 共享资源存活秒数（可选）
+  资源共享说明：
+  - 大结果默认不会直接内联返回，而是转为 MCP `resource` 共享并返回 `resource_uri`
+  - 通过 MCP 标准 `resources/list` 查看可用资源摘要，通过 `resources/read` 按 `resource_uri` 读取完整 JSON 内容
+  - `log_search_sheet` 在 `result_delivery=auto` 时默认采用兼容策略：`size<=20` 优先内联、`size>20` 优先转为 `resource`，但仍保留字节兜底；可用 `delivery_policy=bytes` 强制改为纯字节判断
+  - 重要：字段如 `raw_message` 很长时，即便 `size=20` 也可能触发转为 `resource`
 - **`dashboard-server` (仪表盘专用服务器)**：专门处理 Dashboard 这类复杂 JSON body 配置，通过语义化输入创建和校验仪表盘，避免 LLM 直接拼接底层 API body。此外还提供了布局和配色美观度评分规则，可以辅助智能体设计出更美观的仪表盘。
   当前提供的高层能力包括：
   - `list_dashboard_tabs`
@@ -155,6 +166,19 @@
         ```
         请确保将 `/path/to/your/rizhiyi-mcp/dist/log-tools-server.js`、`/path/to/your/rizhiyi-mcp/dist/manage-server.js`、`/path/to/your/rizhiyi-mcp/dist/dashboard-server.js`、`/path/to/your/rizhiyi-mcp/dist/parserrule-server.js` 和 `/path/to/your/rizhiyi-mcp/dist/fieldconfig-server.js` 替换为实际路径。
     -   **Rizhiyi 服务器信息**：Rizhiyi 服务器需要认证连接，请在 .env 文件或环境变量中配置相应的服务器 URL 和 API Key。
+
+### 资源共享（MCP resources）
+
+日志分析工具在大结果场景下会返回 `resource_uri`。推荐流程：
+
+1. 先调用任意日志分析工具（如 `log_search_sheet`）获取 `resource_uri`
+2. 如需查看完整返回，使用 MCP 标准 `resources/read` 按 `resource_uri` 读取
+3. 如需继续分析，直接把 `resource_uri` 作为输入传给支持复用的分析工具（例如 `correlation_analysis`、`root_cause_suggestions` 等）
+
+可调参数与环境变量（影响“多大结果会转为 resource”）：
+- `LOG_TOOLS_RESULT_INLINE_MAX_BYTES`：默认约 24KB，超过会在 `auto` 下转为 `resource`
+- `LOG_TOOLS_RESULT_MAX_FILE_BYTES`：单个共享资源落盘上限，默认 5MB
+- `LOG_TOOLS_RESULT_TTL_SECONDS`：共享资源默认 TTL，默认 30 分钟
 
 2.  **在智能体中使用**：
     配置完成后，您的 AI 智能体即可通过自然语言指令或特定的工具调用语法来使用 `rizhiyi-mcp` 提供的功能。例如，您可以指示智能体“使用日志分析工具查询过去一小时的错误日志”。效果如图：

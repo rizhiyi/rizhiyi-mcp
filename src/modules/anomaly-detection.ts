@@ -951,6 +951,7 @@ export class AnomalyDetectionModule {
         min_confidence?: number;
         sample_size?: number;
         limit?: number;
+        input_rows?: Array<Record<string, any>>;
     }): Promise<ApiResponse<CorrelationResult>> {
         try {
             const {
@@ -964,7 +965,8 @@ export class AnomalyDetectionModule {
                 min_support = 0.05,
                 min_confidence = 0.6,
                 sample_size = 500,
-                limit = 20
+                limit = 20,
+                input_rows = []
             } = params;
 
             if (fields.length < 2) {
@@ -974,22 +976,28 @@ export class AnomalyDetectionModule {
                 };
             }
 
-            const searchResult = await this.logSearch.executeLogSearchSheet(
-                query,
-                time_range,
-                index_name,
-                { page: 0, size: sample_size },
-                fields
-            );
+            let hits = Array.isArray(input_rows) ? input_rows : [];
+            let searchStatus = 200;
+            if (hits.length === 0) {
+                const searchResult = await this.logSearch.executeLogSearchSheet(
+                    query,
+                    time_range,
+                    index_name,
+                    { page: 0, size: sample_size },
+                    fields
+                );
 
-            if (searchResult.error) {
-                return {
-                    error: searchResult.error,
-                    message: searchResult.message || '获取日志数据失败'
-                };
+                if (searchResult.error) {
+                    return {
+                        error: searchResult.error,
+                        message: searchResult.message || '获取日志数据失败'
+                    };
+                }
+
+                hits = searchResult.data?.hits || [];
+                searchStatus = searchResult.status || 200;
             }
 
-            const hits = searchResult.data?.hits || [];
             if (hits.length === 0) {
                 return {
                     error: '无数据',
@@ -1037,7 +1045,7 @@ export class AnomalyDetectionModule {
                 min_confidence,
                 limit,
                 sample_size,
-                status: searchResult.status
+                status: searchStatus
             });
         } catch (error: any) {
             return {
@@ -1782,6 +1790,7 @@ export class AnomalyDetectionModule {
         slice_max_depth?: number;
         min_slice_support?: number;
         min_slice_lift?: number;
+        input_rows?: Array<Record<string, any>>;
     }): Promise<ApiResponse<RootCauseAnalysisResult>> {
         try {
             const {
@@ -1796,13 +1805,29 @@ export class AnomalyDetectionModule {
                 sample_size = 300,
                 slice_max_depth = 2,
                 min_slice_support = 0.05,
-                min_slice_lift = 2
+                min_slice_lift = 2,
+                input_rows = []
             } = params;
 
+            const anomalyInputRows = Array.isArray(input_rows) ? input_rows : [];
             const [anomalyFields, baselineFields, anomalyOverview, baselineOverview] = await Promise.all([
-                this.logSearch.executeListFields(query, anomaly_window, index_name),
+                anomalyInputRows.length > 0
+                    ? Promise.resolve<ApiResponse<{ fields: Array<{ name: string; type: string }> }>>({
+                        status: 200,
+                        data: {
+                            fields: this.inferFieldsFromHits(anomalyInputRows)
+                        }
+                    })
+                    : this.logSearch.executeListFields(query, anomaly_window, index_name),
                 this.logSearch.executeListFields(query, baseline_window, index_name),
-                this.logSearch.executeLogSearchSheet(query, anomaly_window, index_name, { page: 0, size: 1 }),
+                anomalyInputRows.length > 0
+                    ? Promise.resolve<ApiResponse<{ total: number }>>({
+                        status: 200,
+                        data: {
+                            total: anomalyInputRows.length
+                        }
+                    })
+                    : this.logSearch.executeLogSearchSheet(query, anomaly_window, index_name, { page: 0, size: 1 }),
                 this.logSearch.executeLogSearchSheet(query, baseline_window, index_name, { page: 0, size: 1 })
             ]);
 
@@ -1852,6 +1877,7 @@ export class AnomalyDetectionModule {
                 baseline_window,
                 index_name,
                 fields: fieldsToAnalyze,
+                anomaly_hits: anomalyInputRows.length > 0 ? anomalyInputRows : undefined,
                 sample_size,
                 slice_max_depth,
                 min_slice_support,
@@ -1894,6 +1920,39 @@ export class AnomalyDetectionModule {
                 message: `执行根因分析出错: ${error.message}`
             };
         }
+    }
+
+    private inferFieldsFromHits(hits: Array<Record<string, any>>): Array<{ name: string; type: string }> {
+        const fields = new Map<string, string>();
+
+        hits.forEach((hit) => {
+            Object.entries(hit || {}).forEach(([key, value]) => {
+                if (!fields.has(key)) {
+                    fields.set(key, this.detectFieldTypeFromValue(value));
+                }
+            });
+        });
+
+        return Array.from(fields.entries()).map(([name, type]) => ({ name, type }));
+    }
+
+    private detectFieldTypeFromValue(value: any): string {
+        if (Array.isArray(value)) {
+            return 'array';
+        }
+        if (value === null || value === undefined) {
+            return 'unknown';
+        }
+        if (typeof value === 'number') {
+            return 'number';
+        }
+        if (typeof value === 'boolean') {
+            return 'boolean';
+        }
+        if (typeof value === 'object') {
+            return 'object';
+        }
+        return 'string';
     }
 
     /**
@@ -2004,6 +2063,7 @@ export class AnomalyDetectionModule {
         baseline_window: string;
         index_name: string;
         fields: string[];
+        anomaly_hits?: Array<Record<string, any>>;
         sample_size: number;
         slice_max_depth: number;
         min_slice_support: number;
@@ -2016,6 +2076,7 @@ export class AnomalyDetectionModule {
             baseline_window,
             index_name,
             fields,
+            anomaly_hits,
             sample_size,
             slice_max_depth,
             min_slice_support,
@@ -2028,8 +2089,16 @@ export class AnomalyDetectionModule {
         }
 
         const sampledFields = fields.slice(0, Math.max(4, Math.min(fields.length, 6)));
+        const anomalySamplePromise = Array.isArray(anomaly_hits) && anomaly_hits.length > 0
+            ? Promise.resolve<ApiResponse<{ hits: Array<Record<string, any>> }>>({
+                status: 200,
+                data: {
+                    hits: anomaly_hits
+                }
+            })
+            : this.logSearch.executeLogSearchSheet(query, anomaly_window, index_name, { page: 0, size: sample_size }, sampledFields);
         const [anomalySample, baselineSample, anomalyTotal, baselineTotal] = await Promise.all([
-            this.logSearch.executeLogSearchSheet(query, anomaly_window, index_name, { page: 0, size: sample_size }, sampledFields),
+            anomalySamplePromise,
             this.logSearch.executeLogSearchSheet(query, baseline_window, index_name, { page: 0, size: sample_size }, sampledFields),
             this.getExactQueryCount(query, anomaly_window, index_name),
             this.getExactQueryCount(query, baseline_window, index_name)

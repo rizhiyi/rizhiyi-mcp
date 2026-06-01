@@ -140,6 +140,37 @@ export interface QueryPrecheckResponse {
     recommendation_reason: string;
 }
 
+export type SharedResultKind = 'rows' | 'precheck' | 'patterns' | 'stats' | 'analysis' | 'timeseries' | 'generic';
+
+export interface SharedResultSummary {
+    title: string;
+    text: string;
+    key_metrics?: Record<string, number | string | boolean | null>;
+    preview_fields?: string[];
+    warnings?: string[];
+}
+
+export interface SharedResultEnvelope<TPayload = unknown> {
+    handle: string;
+    resource_uri: string;
+    resource_title: string;
+    resource_type: SharedResultKind;
+    resource_mime_type: string;
+    created_at: string;
+    expires_at: string;
+    tool_name: string;
+    result_kind: SharedResultKind;
+    source_query?: string;
+    time_range?: string;
+    index_name?: string;
+    upstream_sid?: string;
+    payload_bytes: number;
+    summary: SharedResultSummary;
+    payload: TPayload;
+}
+
+export type SharedResultReadView = 'summary' | 'sample' | 'full';
+
 // 时间序列相关接口
 export interface TimeSeriesPoint {
     timestamp: string;
@@ -173,6 +204,7 @@ export interface ForecastResult {
     trend: string;
     r_squared?: number;
     method: string;
+    series?: TimeSeriesPoint[];
 }
 
 // 异常检测接口
@@ -185,6 +217,7 @@ export interface AnomalyDetectionResult {
     }>;
     method: string;
     threshold: number;
+    series?: TimeSeriesPoint[];
 }
 
 export type CorrelationMode = 'lagged_pearson' | 'fp_growth' | 'auto';

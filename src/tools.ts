@@ -11,6 +11,17 @@ const outputControlProperties = {
         type: 'boolean',
         description: '是否在输出中附带原始JSON数据，默认false',
         default: false
+    },
+    result_delivery: {
+        type: 'string',
+        description: '结果交付方式。默认 auto：当结果较小时直接内联返回，结果较大时会自动转为 MCP resource 共享并返回稳定的 resource_uri；inline 强制内联返回；resource 强制转为共享资源。',
+        default: 'auto',
+        enum: ['auto', 'inline', 'resource']
+    },
+    result_ttl_seconds: {
+        type: 'integer',
+        description: '当结果转为共享资源（MCP resource）时的存活秒数；未传则使用服务端默认 TTL。',
+        minimum: 1
     }
 };
 
@@ -24,6 +35,16 @@ function withOutputControls(tools: ToolDefinition[]): ToolDefinition[] {
                 ...outputControlProperties
             }
         }
+    }));
+}
+
+function withSharedResourceHint(tools: ToolDefinition[]): ToolDefinition[] {
+    const hint = ' 大结果默认不会直接内联返回，而是转为 MCP resource 共享并返回 `resource_uri`；如需强制内联，可传 `result_delivery=inline`。';
+    return tools.map((tool) => ({
+        ...tool,
+        description: tool.description.includes('MCP resource')
+            ? tool.description
+            : `${tool.description}${hint}`
     }));
 }
 
@@ -80,9 +101,14 @@ export const basicLogTools: ToolDefinition[] = [
                     items: { type: 'number' },
                     description: '百分位数数组，默认[50,90,99]',
                     default: [50, 90, 99]
+                },
+                delivery_policy: {
+                    type: 'string',
+                    description: '仅对 log_search_sheet 的 auto 交付生效。compat：兼容历史习惯，size<=20 时优先内联、size>20 时优先转 resource，但仍保留字节兜底；bytes：始终按结果字节大小判断。',
+                    default: 'compat',
+                    enum: ['compat', 'bytes']
                 }
-            },
-            required: ['time_range']
+            }
         }
     },
     {
@@ -157,6 +183,10 @@ export const basicLogTools: ToolDefinition[] = [
                     type: 'string', 
                     description: '日志聚类分析任务ID，通过log_reduce_pattern工具获取' 
                 },
+                resource_uri: {
+                    type: 'string',
+                    description: '可选，共享资源 URI。若来源于 log_reduce_pattern 的大结果返回，可自动从元数据中提取 sid。'
+                },
                 max_retries: {
                     type: 'integer',
                     description: '最大重试次数',
@@ -177,8 +207,7 @@ export const basicLogTools: ToolDefinition[] = [
                     description: '当 analyze_patterns=true 时，返回的重要模式分析数量上限，默认 20',
                     default: 20
                 }
-            },
-            required: ['sid']
+            }
         }
     },
     {
@@ -202,8 +231,7 @@ export const basicLogTools: ToolDefinition[] = [
                     description: '索引名称', 
                     default: 'yotta' 
                 }
-            },
-            required: ['time_range']
+            }
         }
     },
     {
@@ -296,7 +324,8 @@ export const basicLogTools: ToolDefinition[] = [
             },
             required: ['query']
         }
-    }
+    },
+    
 ];
 
 // 统计分析工具
@@ -335,9 +364,12 @@ export const statisticalAnalysisTools: ToolDefinition[] = [
                     type: 'integer',
                     description: '返回峰值数量，默认3',
                     default: 3
+                },
+                resource_uri: {
+                    type: 'string',
+                    description: '可选，共享资源 URI。若资源中已包含 series/points，会优先复用已有时间序列，减少重复查询。'
                 }
-            },
-            required: ['time_range']
+            }
         }
     },
     {
@@ -385,9 +417,12 @@ export const statisticalAnalysisTools: ToolDefinition[] = [
                     type: 'integer',
                     description: '最小支持度，默认0',
                     default: 0
+                },
+                resource_uri: {
+                    type: 'string',
+                    description: '可选，共享资源 URI。若资源中已包含 series/points，会优先复用已有时间序列，减少重复查询。'
                 }
-            },
-            required: ['time_range']
+            }
         }
     }
 ];
@@ -407,6 +442,14 @@ export const intelligentAnalysisTools: ToolDefinition[] = [
                 previous_time_series_b: {
                     type: 'object', 
                     description: '时间段B的已有时间序列数据，如 trend_summary 或统一 timechart 查询的输出。兼容 series 数组与旧版 points 数组；提供此参数时将跳过数据获取直接进行分析'
+                },
+                resource_uri_a: {
+                    type: 'string',
+                    description: '可选，共享资源 URI A。若资源中已包含 series/points，将优先复用为时间段A数据。'
+                },
+                resource_uri_b: {
+                    type: 'string',
+                    description: '可选，共享资源 URI B。若资源中已包含 series/points，将优先复用为时间段B数据。'
                 },
                 query: { 
                     type: 'string', 
@@ -512,9 +555,12 @@ export const intelligentAnalysisTools: ToolDefinition[] = [
                     type: 'integer',
                     description: '返回结果数量限制，默认 20。',
                     default: 20
+                },
+                resource_uri: {
+                    type: 'string',
+                    description: '可选，共享资源 URI。若资源中已包含 rows/sample_rows，会优先复用，减少重复查询。'
                 }
-            },
-            required: ['time_range']
+            }
         }
     },
     {
@@ -583,6 +629,10 @@ export const intelligentAnalysisTools: ToolDefinition[] = [
                     type: 'number',
                     description: '可疑切片相对基线窗口的最小提升度，默认2',
                     default: 2
+                },
+                resource_uri: {
+                    type: 'string',
+                    description: '可选，共享资源 URI。若资源中已包含异常窗口样本，会优先复用该样本，并仅补齐基线侧查询。'
                 }
             },
             required: ['anomaly_window', 'baseline_window']
@@ -647,9 +697,12 @@ export const predictiveAnalysisTools: ToolDefinition[] = [
                     type: 'number',
                     description: '指数平滑参数（仅exponential_smoothing方法有效），默认0.3',
                     default: 0.3
+                },
+                resource_uri: {
+                    type: 'string',
+                    description: '可选，共享资源 URI。若资源中已包含 series/points，会优先复用已有时间序列，减少重复查询。'
                 }
-            },
-            required: ['time_range']
+            }
         }
     },
     {
@@ -708,9 +761,12 @@ export const predictiveAnalysisTools: ToolDefinition[] = [
                 metric_field: { 
                     type: 'string', 
                     description: '数值型字段名，若无则按count统计' 
+                },
+                resource_uri: {
+                    type: 'string',
+                    description: '可选，共享资源 URI。若资源中已包含 series/points，会优先复用已有时间序列，减少重复查询。'
                 }
-            },
-            required: ['time_range']
+            }
         }
     }
 ];
@@ -1479,10 +1535,10 @@ export const fieldConfigTools: ToolDefinition[] = [
 ];
 
 export const searchTools: ToolDefinition[] = [
-    ...withOutputControls(basicLogTools),
-    ...withOutputControls(statisticalAnalysisTools),
-    ...withOutputControls(intelligentAnalysisTools),
-    ...withOutputControls(predictiveAnalysisTools)
+    ...withOutputControls(withSharedResourceHint(basicLogTools)),
+    ...withOutputControls(withSharedResourceHint(statisticalAnalysisTools)),
+    ...withOutputControls(withSharedResourceHint(intelligentAnalysisTools)),
+    ...withOutputControls(withSharedResourceHint(predictiveAnalysisTools))
 ];
 
 export const dashboardServerTools: ToolDefinition[] = [

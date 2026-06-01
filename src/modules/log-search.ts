@@ -84,6 +84,16 @@ export class LogSearchModule {
         return { page, size };
     }
 
+    private computeHasMore(total: number, page: number, size: number, returned: number): boolean {
+        if (returned <= 0 || size <= 0) {
+            return false;
+        }
+
+        // 用“已实际取回多少条”做保守判断，避免出现 returned=0 但 has_more=true 的误导。
+        const consumed = Math.max(0, page) * Math.max(0, size) + returned;
+        return total > consumed;
+    }
+
     /**
      * 提取数据行 - 从搜索结果中提取行数据
      */
@@ -294,6 +304,8 @@ export class LogSearchModule {
                 });
             }
 
+            const returned = hits.length;
+
             return {
                 status: result.status,
                 data: {
@@ -301,8 +313,8 @@ export class LogSearchModule {
                     total,
                     page,
                     size,
-                    returned: hits.length,
-                    has_more: total > (page + 1) * size
+                    returned,
+                    has_more: this.computeHasMore(total, page, size, returned)
                 },
                 message: '日志搜索成功'
             };

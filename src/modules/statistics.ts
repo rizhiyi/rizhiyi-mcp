@@ -216,6 +216,156 @@ export class StatisticsModule {
         return summary;
     }
 
+    normalizeTimeSeriesInput(input: any): TimeSeriesPoint[] {
+        if (Array.isArray(input)) {
+            return input
+                .filter((item): item is Record<string, any> => Boolean(item) && typeof item === 'object')
+                .map((item) => ({
+                    timestamp: String(item.timestamp ?? item.time ?? item._timestamp ?? ''),
+                    value: Number(item.value ?? item.count ?? item.cnt ?? 0),
+                    count: Number(item.count ?? item.value ?? item.cnt ?? 0)
+                }))
+                .filter((item) => item.timestamp);
+        }
+
+        const series = input?.series || input?.data?.series || input?.points || input?.data?.points;
+        if (Array.isArray(series)) {
+            return this.normalizeTimeSeriesInput(series);
+        }
+
+        if (Array.isArray(input?.timestamps) && Array.isArray(input?.values)) {
+            return input.timestamps.map((timestamp: string, index: number) => {
+                const value = Number(input.values[index] ?? 0);
+                return {
+                    timestamp: String(timestamp),
+                    value,
+                    count: value
+                };
+            });
+        }
+
+        return [];
+    }
+
+    private buildTrendSummaryResult(
+        series: TimeSeriesPoint[],
+        limitPeaks: number,
+        status: number = 200,
+        message: string = '趋势分析完成'
+    ): ApiResponse<TrendAnalysisResult> {
+        if (series.length === 0) {
+            return {
+                error: '无数据',
+                message: '未找到符合条件的时间序列数据'
+            };
+        }
+
+        const values = series.map(point => point.value);
+        const { slope, intercept } = this.linearRegression(values);
+        const changeRate = values.length > 1 ? (values[values.length - 1] - values[0]) / values[0] : 0;
+        const peaks = this.detectPeaks(values, limitPeaks);
+        const timeline = this.buildTimelineFromSeries(series);
+        const seriesAnalysis = analyzeTimeline(timeline);
+        const anomalies = seriesAnalysis.statistical_anomalies.map((anomaly) => ({
+            index: anomaly.index,
+            value: anomaly.value,
+            threshold: anomaly.z_score,
+            reason: `Z-score ${anomaly.z_score.toFixed(2)} 超过阈值 2`
+        }));
+        const summary = this.generateTrendSummary(values, slope, changeRate);
+
+        return {
+            status,
+            data: {
+                series,
+                slope,
+                intercept,
+                changeRate,
+                peaks,
+                anomalies,
+                summary
+            },
+            message
+        };
+    }
+
+    private buildAnomalyPointsResult(
+        series: TimeSeriesPoint[],
+        method: string,
+        sensitivity: number,
+        minSupport: number,
+        status: number = 200,
+        message: string = '异常检测完成'
+    ): ApiResponse<AnomalyDetectionResult> {
+        if (series.length === 0) {
+            return {
+                error: '无数据',
+                message: '未找到符合条件的时间序列数据'
+            };
+        }
+
+        const values = series.map(point => point.value);
+        let anomalies: Array<{index: number, value: number, threshold: number, reason: string}> = [];
+
+        if (method === 'iqr') {
+            anomalies = this.detectAnomaliesIQR(values, sensitivity);
+        } else {
+            anomalies = detectStatisticalAnomalies(values, sensitivity).map((anomaly) => ({
+                index: anomaly.index,
+                value: anomaly.value,
+                threshold: anomaly.z_score,
+                reason: `Z-score ${anomaly.z_score.toFixed(2)} 超过阈值 ${sensitivity}`
+            }));
+        }
+
+        if (minSupport > 0) {
+            anomalies = anomalies.filter(item => item.value >= minSupport);
+        }
+
+        return {
+            status,
+            data: {
+                anomalies,
+                method,
+                threshold: sensitivity,
+                series
+            },
+            message
+        };
+    }
+
+    async executeTrendSummaryWithData(
+        reusedTimeSeries: any,
+        limitPeaks: number = 3
+    ): Promise<ApiResponse<TrendAnalysisResult>> {
+        try {
+            const series = this.normalizeTimeSeriesInput(reusedTimeSeries);
+            return this.buildTrendSummaryResult(series, limitPeaks, 200, '趋势分析完成（数据复用）');
+        } catch (error: any) {
+            return {
+                error: error.message,
+                message: `执行趋势分析出错: ${error.message}`
+            };
+        }
+    }
+
+    async executeAnomalyPointsWithData(
+        reusedTimeSeries: any,
+        method: string = 'zscore',
+        sensitivity: number = 3,
+        minSupport: number = 0
+    ): Promise<ApiResponse<AnomalyDetectionResult>> {
+        try {
+            const series = this.normalizeTimeSeriesInput(reusedTimeSeries);
+            return this.buildAnomalyPointsResult(series, method, sensitivity, minSupport, 200, '异常检测完成（数据复用）');
+        } catch (error: any) {
+            return {
+                error: error.message,
+                message: `执行异常检测出错: ${error.message}`
+            };
+        }
+    }
+
     /**
      * 获取趋势分析
      */
@@ -244,47 +394,7 @@ export class StatisticsModule {
             }
 
             const series = result.data?.series || [];
-            if (series.length === 0) {
-                return {
-                    error: '无数据',
-                    message: '未找到符合条件的时间序列数据'
-                };
-            }
-
-            const values = series.map(point => point.value);
-            
-            // 计算趋势分析
-            const { slope, intercept } = this.linearRegression(values);
-            const changeRate = values.length > 1 ? (values[values.length - 1] - values[0]) / values[0] : 0;
-            
-            // 检测峰值
-            const peaks = this.detectPeaks(values, limitPeaks);
-            
-            const timeline = this.buildTimelineFromSeries(series);
-            const seriesAnalysis = analyzeTimeline(timeline);
-            const anomalies = seriesAnalysis.statistical_anomalies.map((anomaly) => ({
-                index: anomaly.index,
-                value: anomaly.value,
-                threshold: anomaly.z_score,
-                reason: `Z-score ${anomaly.z_score.toFixed(2)} 超过阈值 2`
-            }));
-            
-            // 生成总结
-            const summary = this.generateTrendSummary(values, slope, changeRate);
-
-            return {
-                status: result.status,
-                data: {
-                    series,
-                    slope,
-                    intercept,
-                    changeRate,
-                    peaks,
-                    anomalies,
-                    summary
-                },
-                message: '趋势分析完成'
-            };
+            return this.buildTrendSummaryResult(series, limitPeaks, result.status, '趋势分析完成');
         } catch (error: any) {
             return {
                 error: error.message,
@@ -323,43 +433,7 @@ export class StatisticsModule {
             }
 
             const series = result.data?.series || [];
-            if (series.length === 0) {
-                return {
-                    error: '无数据',
-                    message: '未找到符合条件的时间序列数据'
-                };
-            }
-
-            const values = series.map(point => point.value);
-            
-            // 检测异常
-            let anomalies: Array<{index: number, value: number, threshold: number, reason: string}> = [];
-            
-            if (method === 'iqr') {
-                anomalies = this.detectAnomaliesIQR(values, sensitivity);
-            } else {
-                anomalies = detectStatisticalAnomalies(values, sensitivity).map((anomaly) => ({
-                    index: anomaly.index,
-                    value: anomaly.value,
-                    threshold: anomaly.z_score,
-                    reason: `Z-score ${anomaly.z_score.toFixed(2)} 超过阈值 ${sensitivity}`
-                }));
-            }
-
-            // 过滤最小支持度
-            if (minSupport > 0) {
-                anomalies = anomalies.filter(item => item.value >= minSupport);
-            }
-
-            return {
-                status: result.status,
-                data: {
-                    anomalies,
-                    method,
-                    threshold: sensitivity
-                },
-                message: '异常检测完成'
-            };
+            return this.buildAnomalyPointsResult(series, method, sensitivity, minSupport, result.status, '异常检测完成');
         } catch (error: any) {
             return {
                 error: error.message,
