@@ -1,77 +1,72 @@
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from '@modelcontextprotocol/sdk/types.js';
 import { Converter } from 'openapi2mcptools';
 import * as fs from 'fs';
 import * as yaml from 'js-yaml';
 import axios from 'axios';
-import https from 'https';
-import dotenv from 'dotenv';
 
-dotenv.config();
+import { isExecutedDirectly } from './runtime-entry.js';
+import { createHttpClientConfig, createServerContextForStdio, type ServerContext } from './config.js';
+import { registerToolDefinitions } from './mcp-tool-helpers.js';
+import { buildToolSuccessResult } from './result-formatter.js';
+import type { ToolDefinition } from './types.js';
 
-const openapiBaseURL = process.env.LOGEASE_BASE_URL ?? 'https://192.168.40.116:8090';
-const openapiAuthHeader = process.env.LOGEASE_AUTH_HEADER;
-const openapiApiKey = process.env.LOGEASE_API_KEY;
-const openapiTlsRejectUnauthorized = process.env.LOGEASE_TLS_REJECT_UNAUTHORIZED !== 'false';
+const yamlContent = fs.readFileSync(new URL('../config/Api_5.3_schema.yaml', import.meta.url), 'utf8');
+const rzySpecs = yaml.load(yamlContent);
 
-if (!openapiBaseURL) {
-  console.warn('LOGEASE_BASE_URL is not set. Using default: https://192.168.40.116:8090');
-}
+export async function createOpenapiServer(context: ServerContext): Promise<McpServer> {
+  const httpClientConfig = createHttpClientConfig(context);
+  const httpClient = axios.create({
+    baseURL: httpClientConfig.baseURL,
+    headers: httpClientConfig.headers,
+    httpsAgent: httpClientConfig.httpsAgent,
+  });
+  const converter = new Converter({ httpClient });
+  await converter.load(rzySpecs);
 
-let authorization: string | undefined;
-if (openapiAuthHeader) {
-  authorization = openapiAuthHeader;
-} else if (openapiApiKey) {
-  authorization = `apikey ${openapiApiKey}`;
-}
+  const tools = converter.getToolsList();
+  const toolCaller = converter.getToolsCaller();
 
-if (!authorization) {
-  console.warn('Neither LOGEASE_AUTH_HEADER nor LOGEASE_API_KEY is set. Requests to LogEase server might fail.');
-}
-
-const httpsAgent = new https.Agent({
-  rejectUnauthorized: openapiTlsRejectUnauthorized,
-});
-
-const httpClient = axios.create({
-  baseURL: openapiBaseURL,
-  headers: authorization ? { Authorization: authorization } : {},
-  httpsAgent,
-});
-const converter = new Converter({ httpClient });
-
-const yamlContent = fs.readFileSync('/Users/rizhiyi/Downloads/gitdir/node-serp/rizhiyi-mcp/config/Api_5.3_schema.yaml', 'utf8');
-const rzy_specs = yaml.load(yamlContent);
-await converter.load(rzy_specs);
-
-const tools = converter.getToolsList();
-const toolCaller = converter.getToolsCaller();
-
-const server = new Server(
-  {
-    name: 'rizhiyi',
-    version: '1.0.0',
-  },
-  {
-    capabilities: {
-      tools: {},
+  const server = new McpServer(
+    {
+      name: 'rizhiyi',
+      version: '1.0.0',
     },
-  },
-);
+  );
 
-server.setRequestHandler(ListToolsRequestSchema, async () => {
-  return {
-    tools,
-  };
-});
+  registerToolDefinitions(server, tools as ToolDefinition[], Object.fromEntries(
+    (tools as ToolDefinition[]).map((tool) => [
+      tool.name,
+      async (parameters: Record<string, unknown>) => {
+        const result = await toolCaller({
+          params: {
+            name: tool.name,
+            arguments: parameters,
+          }
+        } as any);
 
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  return await toolCaller(request);
-});
+        if (result?.isError) {
+          return result;
+        }
 
-const transport = new StdioServerTransport();
-await server.connect(transport);
+        const payload = typeof result?.toolResult === 'undefined' ? result : result.toolResult;
+        return buildToolSuccessResult(tool.name, payload);
+      }
+    ])
+  ));
+
+  return server;
+}
+
+async function startServer(): Promise<void> {
+  const server = await createOpenapiServer(createServerContextForStdio());
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+}
+
+if (isExecutedDirectly(import.meta.url)) {
+  startServer().catch((error) => {
+    console.error('启动 OpenAPI MCP 服务器失败:', error);
+    process.exit(1);
+  });
+}

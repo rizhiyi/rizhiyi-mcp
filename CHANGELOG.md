@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.2.0
+
+### Added
+
+- 新增 HTTP MCP 网关（Streamable HTTP），支持 stdio 之外的 HTTP 方式：
+  - `GET /healthz`
+  - `POST /mcp/{server}`（initialize、tools/list、tools/call、resources/read 等）
+  - `DELETE /mcp/{server}`（关闭 session）
+- 新增请求级鉴权解析与透传（HTTP）：
+  - 支持 `Authorization: apikey ...` 与 `Authorization: Basic ...`
+  - 同一 HTTP session 禁止切换 `Authorization`
+- `.env.example` 补齐 HTTP 网关与共享结果落盘相关的环境变量示例，避免本地/部署时漏配：
+  - `MCP_HTTP_HOST` / `MCP_HTTP_PORT` / `MCP_HTTP_BASE_PATH`
+  - `LOG_TOOLS_RESULT_STORE_DIR` / `LOG_TOOLS_RESULT_TTL_SECONDS` / `LOG_TOOLS_RESULT_INLINE_MAX_BYTES` / `LOG_TOOLS_RESULT_MAX_FILE_BYTES`
+
+### Changed
+
+- 全量迁移各 server 入口到 `McpServer` 风格（`registerTool`/`registerResource`），提升与官方 SDK 对齐度。
+- 利用 `zod` 将 JSON Schema 动态转换为 Zod Schema，并自动推导工具的 Annotations（如只读、破坏性操作等）。
+- 将原本散落在各个文件中的环境变读取和 Axios 客户端配置统一提取到 `src/config.ts` 和 `src/auth-context.ts` 中。
+
+### Breaking
+
+- 依赖升级：`@modelcontextprotocol/sdk` 跨版本升级（如从 `v1.9.0` 到 `v1.29.0`）。旧客户端若未适配新握手/传输行为可能存在兼容性风险。
+
 ## 0.1.0
 
 ### Added

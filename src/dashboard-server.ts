@@ -1,42 +1,13 @@
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import https from 'https';
-import dotenv from 'dotenv';
-import type { HttpClientConfig } from './types.js';
 
+import { isExecutedDirectly } from './runtime-entry.js';
 import { LogEaseClient } from './client.js';
+import { createHttpClientConfig, createServerContextForStdio, type ServerContext } from './config.js';
 import { dashboardServerTools } from './tools.js';
 import { DashboardModule } from './modules/dashboard.js';
-import { formatErrorPayload, formatSuccessPayload } from './result-formatter.js';
-
-dotenv.config({ path: ['.env.local', '.env'] });
-
-const baseURL = process.env.LOGEASE_BASE_URL ?? 'http://127.0.0.1:8090';
-const authHeader = process.env.LOGEASE_AUTH_HEADER || (process.env.LOGEASE_API_KEY ? `apikey ${process.env.LOGEASE_API_KEY}` : undefined);
-const rejectUnauthorizedEnv = process.env.LOGEASE_TLS_REJECT_UNAUTHORIZED;
-const rejectUnauthorized = typeof rejectUnauthorizedEnv !== 'undefined' ? rejectUnauthorizedEnv === 'true' : false;
-
-if (!process.env.LOGEASE_BASE_URL) {
-    console.warn('LOGEASE_BASE_URL 未设置，默认使用 http://127.0.0.1:8090');
-}
-if (!authHeader) {
-    console.warn('未检测到认证信息（LOGEASE_AUTH_HEADER 或 LOGEASE_API_KEY），与服务交互可能失败');
-}
-
-const headers: Record<string, string> = {};
-if (authHeader) {
-    headers.Authorization = authHeader;
-}
-
-const httpClientConfig: HttpClientConfig = {
-    baseURL,
-    headers,
-    httpsAgent: new https.Agent({ rejectUnauthorized })
-};
-
-const client = new LogEaseClient(httpClientConfig);
-const dashboardModule = new DashboardModule(client);
+import { registerToolDefinitions } from './mcp-tool-helpers.js';
+import { buildToolSuccessResult, formatErrorPayload } from './result-formatter.js';
 
 const SERVER_LEVEL_INSTRUCTIONS = `使用说明:
 1. 仪表盘配置是复杂 JSON body，请优先使用动作型工具：先 list tabs/panels 看现状，再按模板创建、按 spec 创建、调整 layout、增删改 panel。
@@ -53,123 +24,100 @@ const SERVER_LEVEL_INSTRUCTIONS = `使用说明:
 8. 对 \`networkflow\`、\`tracing\`、\`chord\`、\`sankey\`、\`force\`、\`attackmap\` 这类依赖显式字段映射的图表，不要跳过数据概要和 query 预检步骤。
 9. 遇到错误时，优先根据 suggestion 字段修正参数后重试一次。`;
 
-const server = new Server(
-    {
-        name: 'rizhiyi-dashboard-server',
-        version: '1.0.0',
-        instructions: SERVER_LEVEL_INSTRUCTIONS,
-    },
-    {
-        capabilities: {
-            tools: {},
+export function createDashboardServer(context: ServerContext): McpServer {
+    const client = new LogEaseClient(createHttpClientConfig(context));
+    const dashboardModule = new DashboardModule(client);
+
+    const server = new McpServer(
+        {
+            name: 'rizhiyi-dashboard-server',
+            version: '1.0.0',
         },
-    }
-);
-
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    try {
-        const { name, arguments: parameters } = request.params;
-
-        switch (name) {
-            case 'list_dashboard_tabs':
-                return await handleToolExecution(() => dashboardModule.listDashboardTabs(parameters), parameters);
-            case 'get_dashboard_tab_content':
-                return await handleToolExecution(() => dashboardModule.getDashboardTabContent(parameters), parameters);
-            case 'clone_dashboard_tab':
-                return await handleToolExecution(() => dashboardModule.cloneDashboardTab(parameters), parameters);
-            case 'evaluate_dashboard_aesthetics':
-                return await handleToolExecution(() => dashboardModule.evaluateDashboardAesthetics(parameters), parameters);
-            case 'list_dashboard_panels':
-                return await handleToolExecution(() => dashboardModule.listDashboardPanels(parameters), parameters);
-            case 'create_dashboard_from_template':
-                return await handleToolExecution(() => dashboardModule.createDashboardFromTemplate(parameters), parameters);
-            case 'create_dashboard_from_spec':
-                return await handleToolExecution(() => dashboardModule.createDashboardFromSpec(parameters), parameters);
-            case 'update_dashboard_layout':
-                return await handleToolExecution(() => dashboardModule.updateDashboardLayout(parameters), parameters);
-            case 'add_dashboard_panel':
-                return await handleToolExecution(() => dashboardModule.addDashboardPanel(parameters), parameters);
-            case 'update_dashboard_panel':
-                return await handleToolExecution(() => dashboardModule.updateDashboardPanel(parameters), parameters);
-            case 'remove_dashboard_panel':
-                return await handleToolExecution(() => dashboardModule.removeDashboardPanel(parameters), parameters);
-            default:
-                return buildToolError(
-                    'UNKNOWN_TOOL',
-                    `未知的工具: ${name}`,
-                    '请先调用 tools 列表确认可用工具名称，再重试。'
-                );
+        {
+            instructions: SERVER_LEVEL_INSTRUCTIONS,
         }
-    } catch (error: any) {
-        return buildToolError(
-            'TOOL_EXECUTION_EXCEPTION',
-            `执行工具出错: ${error.message}`,
-            '请检查仪表盘名称、tabs、panels 结构以及 query 配置后重试。'
-        );
-    }
-});
+    );
 
-server.setRequestHandler(ListToolsRequestSchema, async () => {
-    return {
-        tools: dashboardServerTools,
+    const handlers = {
+        list_dashboard_tabs: async (parameters: Record<string, unknown>) => handleToolExecution('list_dashboard_tabs', () => dashboardModule.listDashboardTabs(parameters), parameters),
+        get_dashboard_tab_content: async (parameters: Record<string, unknown>) => handleToolExecution('get_dashboard_tab_content', () => dashboardModule.getDashboardTabContent(parameters), parameters),
+        clone_dashboard_tab: async (parameters: Record<string, unknown>) => handleToolExecution('clone_dashboard_tab', () => dashboardModule.cloneDashboardTab(parameters), parameters),
+        evaluate_dashboard_aesthetics: async (parameters: Record<string, unknown>) => handleToolExecution('evaluate_dashboard_aesthetics', () => dashboardModule.evaluateDashboardAesthetics(parameters), parameters),
+        list_dashboard_panels: async (parameters: Record<string, unknown>) => handleToolExecution('list_dashboard_panels', () => dashboardModule.listDashboardPanels(parameters), parameters),
+        create_dashboard_from_template: async (parameters: Record<string, unknown>) => handleToolExecution('create_dashboard_from_template', () => dashboardModule.createDashboardFromTemplate(parameters), parameters),
+        create_dashboard_from_spec: async (parameters: Record<string, unknown>) => handleToolExecution('create_dashboard_from_spec', () => dashboardModule.createDashboardFromSpec(parameters), parameters),
+        update_dashboard_layout: async (parameters: Record<string, unknown>) => handleToolExecution('update_dashboard_layout', () => dashboardModule.updateDashboardLayout(parameters), parameters),
+        add_dashboard_panel: async (parameters: Record<string, unknown>) => handleToolExecution('add_dashboard_panel', () => dashboardModule.addDashboardPanel(parameters), parameters),
+        update_dashboard_panel: async (parameters: Record<string, unknown>) => handleToolExecution('update_dashboard_panel', () => dashboardModule.updateDashboardPanel(parameters), parameters),
+        remove_dashboard_panel: async (parameters: Record<string, unknown>) => handleToolExecution('remove_dashboard_panel', () => dashboardModule.removeDashboardPanel(parameters), parameters)
     };
-});
 
-async function handleToolExecution(executor: () => Promise<any>, params: any) {
-    const result = await executor();
-    return formatResult(result, params);
-}
+    registerToolDefinitions(server, dashboardServerTools, handlers);
 
-function formatResult(result: any, params: any = {}): any {
-    if (result.error) {
+    async function handleToolExecution(toolName: string, executor: () => Promise<any>, params: any) {
+        try {
+            const result = await executor();
+            return formatResult(toolName, result, params);
+        } catch (error: any) {
+            return buildToolError(
+                'TOOL_EXECUTION_EXCEPTION',
+                `执行工具出错: ${String(error?.message || error)}`,
+                '请检查仪表盘配置结构，特别是 tabs、panels、query 和 grid 字段。'
+            );
+        }
+    }
+
+    function formatResult(toolName: string, result: any, params: any = {}): any {
+        if (result.error) {
+            return {
+                isError: true,
+                content: [{
+                    type: 'text',
+                    text: formatErrorPayload({
+                        error_code: result.error_code || 'DASHBOARD_EXECUTION_ERROR',
+                        message: result.message || result.error,
+                        suggestion: result.suggestion || '请检查仪表盘配置结构，特别是 tabs、panels、query 和 grid 字段。',
+                        retryable: typeof result.retryable === 'boolean' ? result.retryable : true,
+                        details: result.details
+                    })
+                }]
+            };
+        }
+
+        return buildToolSuccessResult(toolName, result.data || result, {
+            outputFormat: params.output_format,
+            includeRawJson: params.include_raw_json
+        });
+    }
+
+    function buildToolError(errorCode: string, message: string, suggestion: string): any {
         return {
             isError: true,
             content: [{
                 type: 'text',
                 text: formatErrorPayload({
-                    error_code: result.error_code || 'DASHBOARD_EXECUTION_ERROR',
-                    message: result.message || result.error,
-                    suggestion: result.suggestion || '请检查仪表盘配置结构，特别是 tabs、panels、query 和 grid 字段。',
-                    retryable: typeof result.retryable === 'boolean' ? result.retryable : true,
-                    details: result.details
+                    error_code: errorCode,
+                    message,
+                    suggestion,
+                    retryable: true
                 })
             }]
         };
     }
 
-    return {
-        content: [{
-            type: 'text',
-            text: formatSuccessPayload(result.data || result, {
-                outputFormat: params.output_format,
-                includeRawJson: params.include_raw_json
-            })
-        }]
-    };
-}
-
-function buildToolError(errorCode: string, message: string, suggestion: string): any {
-    return {
-        isError: true,
-        content: [{
-            type: 'text',
-            text: formatErrorPayload({
-                error_code: errorCode,
-                message,
-                suggestion,
-                retryable: true
-            })
-        }]
-    };
+    return server;
 }
 
 async function startServer(): Promise<void> {
+    const server = createDashboardServer(createServerContextForStdio());
     const transport = new StdioServerTransport();
     await server.connect(transport);
     console.error('Rizhiyi Dashboard MCP 服务器已启动');
 }
 
-startServer().catch((error) => {
-    console.error('启动服务器失败:', error);
-    process.exit(1);
-});
+if (isExecutedDirectly(import.meta.url)) {
+    startServer().catch((error) => {
+        console.error('启动服务器失败:', error);
+        process.exit(1);
+    });
+}

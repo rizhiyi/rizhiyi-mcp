@@ -1,30 +1,28 @@
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
-    CallToolRequestSchema,
     ErrorCode,
     ListResourcesRequestSchema,
-    ListToolsRequestSchema,
     McpError,
     ReadResourceRequestSchema
 } from '@modelcontextprotocol/sdk/types.js';
-import https from 'https';
-import dotenv from 'dotenv';
 import type {
-    HttpClientConfig,
     SharedResultEnvelope,
     SharedResultKind,
     SharedResultReadView,
     SharedResultSummary
 } from './types.js';
 
+import { isExecutedDirectly } from './runtime-entry.js';
 import { LogEaseClient } from './client.js';
+import { createHttpClientConfig, createServerContextForStdio, type ServerContext } from './config.js';
 import { searchTools } from './tools.js';
 import { LogSearchModule } from './modules/log-search.js';
 import { StatisticsModule } from './modules/statistics.js';
 import { TrendForecastModule } from './modules/trend-forecast.js';
 import { AnomalyDetectionModule } from './modules/anomaly-detection.js';
-import { formatErrorPayload, formatSuccessPayload } from './result-formatter.js';
+import { registerToolDefinitions } from './mcp-tool-helpers.js';
+import { buildToolSuccessResult, formatErrorPayload } from './result-formatter.js';
 import {
     listSharedResults,
     SharedResultStoreError,
@@ -32,42 +30,6 @@ import {
     readSharedResult,
     saveSharedResult
 } from './shared-result-store.js';
-
-// 加载环境变量
-dotenv.config({path: ['.env.local', '.env']});
-
-// 配置HTTP客户端（从环境变量读取）
-const baseURL = process.env.LOGEASE_BASE_URL ?? 'http://127.0.0.1:8090';
-const authHeader = process.env.LOGEASE_AUTH_HEADER || (process.env.LOGEASE_API_KEY ? `apikey ${process.env.LOGEASE_API_KEY}` : undefined);
-const rejectUnauthorizedEnv = process.env.LOGEASE_TLS_REJECT_UNAUTHORIZED;
-const rejectUnauthorized = typeof rejectUnauthorizedEnv !== 'undefined' ? rejectUnauthorizedEnv === 'true' : false;
-
-if (!process.env.LOGEASE_BASE_URL) {
-    console.warn('LOGEASE_BASE_URL 未设置，默认使用 http://127.0.0.1:8090');
-}
-if (!authHeader) {
-    console.warn('未检测到认证信息（LOGEASE_AUTH_HEADER 或 LOGEASE_API_KEY），与服务交互可能失败');
-}
-
-// 显式构造 headers 以满足 Record<string, string> 类型
-const headers: Record<string, string> = {};
-if (authHeader) {
-    headers.Authorization = authHeader;
-}
-
-const httpClientConfig: HttpClientConfig = {
-    baseURL,
-    headers,
-    httpsAgent: new https.Agent({ rejectUnauthorized })
-};
-
-// 创建模块实例
-const client = new LogEaseClient(httpClientConfig);
-const logSearchModule = new LogSearchModule(client, baseURL);
-const statisticsModule = new StatisticsModule(client);
-const trendForecastModule = new TrendForecastModule(client);
-const anomalyDetectionModule = new AnomalyDetectionModule(client);
-const sharedResultStoreConfig = getSharedResultStoreConfig();
 
 const SERVER_LEVEL_INSTRUCTIONS = `使用说明:
 ## 核心原则：先统计，后采样
@@ -96,105 +58,47 @@ const SERVER_LEVEL_INSTRUCTIONS = `使用说明:
 ## 若用户已明确要求“最近 N 条日志并做关联/根因分析”，优先一次 log_search_sheet 后直接复用其返回的 resource_uri，不要额外补做趋势/字段探测。
 ## 遇到错误时，优先根据 suggestion 字段修正参数后自动重试一次。`;
 
+export function createLogToolsServer(context: ServerContext): McpServer {
+    const httpClientConfig = createHttpClientConfig(context);
+    const client = new LogEaseClient(httpClientConfig);
+    const logSearchModule = new LogSearchModule(client, context.runtimeConfig.logeaseBaseURL);
+    const statisticsModule = new StatisticsModule(client);
+    const trendForecastModule = new TrendForecastModule(client);
+    const anomalyDetectionModule = new AnomalyDetectionModule(client);
+    const sharedResultStoreConfig = getSharedResultStoreConfig();
+
 // 创建MCP服务器
-const server = new Server(
+const server = new McpServer(
     {
         name: 'logease-mcp-server',
         version: '0.1.0',
-        instructions: SERVER_LEVEL_INSTRUCTIONS,
     },
     {
-        capabilities: {
-            tools: {},
-            resources: {},
-        },
+        instructions: SERVER_LEVEL_INSTRUCTIONS,
     }
 );
-
-/**
- * 处理工具调用请求
- */
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    try {
-        const { name, arguments: rawParameters } = request.params;
-        const parameters = {
-            ...(rawParameters && typeof rawParameters === 'object' ? rawParameters : {}),
-            __tool_name: name
-        };
-        
-        switch (name) {
-            // 基础日志工具
-            case 'log_search_sheet':
-                return await handleLogSearchSheet(parameters);
-                
-            case 'log_reduce_pattern':
-                return await handleLogReducePattern(parameters);
-                
-            case 'log_reduce_preview':
-                return await handleLogReducePreview(parameters);
-                
-            case 'list_fields':
-                return await handleListFields(parameters);
-                
-            case 'list_field_values':
-                return await handleListFieldValues(parameters);
-
-            case 'query_precheck':
-                return await handleQueryPrecheck(parameters);
-
-            // 统计分析工具
-            case 'data_overview':
-                return await handleDataOverview(parameters);
-                
-            case 'trend_summary':
-                return await handleTrendSummary(parameters);
-                
-            case 'anomaly_points':
-                return await handleAnomalyPoints(parameters);
-
-            // 智能分析工具
-            case 'period_compare':
-                return await handlePeriodCompare(parameters);
-                
-            case 'correlation_analysis':
-                return await handleCorrelationAnalysis(parameters);
-                
-            case 'root_cause_suggestions':
-                return await handleRootCauseSuggestions(parameters);
-
-            // 预测分析工具
-            case 'trend_forecast':
-                return await handleTrendForecast(parameters);
-                
-            case 'anomaly_alert':
-                return await handleAnomalyAlert(parameters);
-
-            default:
-                return buildToolError(
-                    'UNKNOWN_TOOL',
-                    `未知的工具: ${name}`,
-                    '请先调用 tools 列表确认可用工具名称，再重试。'
-                );
-        }
-    } catch (error: any) {
-        return buildToolError(
-            'TOOL_EXECUTION_EXCEPTION',
-            `执行工具出错: ${error.message}`,
-            '请检查输入参数格式；如果是时间范围查询，建议先缩小范围后重试。'
-        );
-    }
+server.server.registerCapabilities({
+    resources: {}
 });
 
-/**
- * 处理工具列表请求
- */
-server.setRequestHandler(ListToolsRequestSchema, async () => {
-    return {
-        tools: searchTools,
-    };
-});
+    registerToolDefinitions(server, searchTools, {
+        log_search_sheet: async (parameters) => handleLogSearchSheet({ ...parameters, __tool_name: 'log_search_sheet' }),
+        log_reduce_pattern: async (parameters) => handleLogReducePattern({ ...parameters, __tool_name: 'log_reduce_pattern' }),
+        log_reduce_preview: async (parameters) => handleLogReducePreview({ ...parameters, __tool_name: 'log_reduce_preview' }),
+        list_fields: async (parameters) => handleListFields({ ...parameters, __tool_name: 'list_fields' }),
+        list_field_values: async (parameters) => handleListFieldValues({ ...parameters, __tool_name: 'list_field_values' }),
+        query_precheck: async (parameters) => handleQueryPrecheck({ ...parameters, __tool_name: 'query_precheck' }),
+        data_overview: async (parameters) => handleDataOverview({ ...parameters, __tool_name: 'data_overview' }),
+        trend_summary: async (parameters) => handleTrendSummary({ ...parameters, __tool_name: 'trend_summary' }),
+        anomaly_points: async (parameters) => handleAnomalyPoints({ ...parameters, __tool_name: 'anomaly_points' }),
+        period_compare: async (parameters) => handlePeriodCompare({ ...parameters, __tool_name: 'period_compare' }),
+        correlation_analysis: async (parameters) => handleCorrelationAnalysis({ ...parameters, __tool_name: 'correlation_analysis' }),
+        root_cause_suggestions: async (parameters) => handleRootCauseSuggestions({ ...parameters, __tool_name: 'root_cause_suggestions' }),
+        trend_forecast: async (parameters) => handleTrendForecast({ ...parameters, __tool_name: 'trend_forecast' }),
+        anomaly_alert: async (parameters) => handleAnomalyAlert({ ...parameters, __tool_name: 'anomaly_alert' })
+    });
 
-server.setRequestHandler(ListResourcesRequestSchema, async () => {
+server.server.setRequestHandler(ListResourcesRequestSchema, async () => {
     const resources = await listSharedResults(sharedResultStoreConfig);
     return {
         resources: resources.map((envelope) => ({
@@ -206,7 +110,7 @@ server.setRequestHandler(ListResourcesRequestSchema, async () => {
     };
 });
 
-server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+server.server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
     try {
         const envelope = await readSharedResult(request.params.uri, sharedResultStoreConfig);
         return {
@@ -765,15 +669,10 @@ async function formatResult(result: any, params: any = {}): Promise<any> {
 }
 
 function formatImmediateSuccess(data: unknown, params: any = {}): any {
-    return {
-        content: [{
-            type: 'text',
-            text: formatSuccessPayload(data, {
-                outputFormat: params.output_format,
-                includeRawJson: params.include_raw_json
-            })
-        }]
-    };
+    return buildToolSuccessResult(String(params.__tool_name || 'unknown_tool'), data, {
+        outputFormat: params.output_format,
+        includeRawJson: params.include_raw_json
+    });
 }
 
 function shouldPersistAsSharedResource(payload: unknown, params: any): boolean {
@@ -1203,17 +1102,19 @@ function buildToolError(errorCode: string, message: string, suggestion: string):
     };
 }
 
-/**
- * 启动服务器
- */
+    return server;
+}
+
 async function startServer(): Promise<void> {
+    const server = createLogToolsServer(createServerContextForStdio());
     const transport = new StdioServerTransport();
     await server.connect(transport);
     console.error('LogEase MCP 服务器已启动');
 }
 
-// 启动服务器
-startServer().catch((error) => {
-    console.error('启动服务器失败:', error);
-    process.exit(1);
-});
+if (isExecutedDirectly(import.meta.url)) {
+    startServer().catch((error) => {
+        console.error('启动服务器失败:', error);
+        process.exit(1);
+    });
+}

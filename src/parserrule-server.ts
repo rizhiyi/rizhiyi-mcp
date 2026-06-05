@@ -1,42 +1,13 @@
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import https from 'https';
-import dotenv from 'dotenv';
-import type { HttpClientConfig } from './types.js';
 
+import { isExecutedDirectly } from './runtime-entry.js';
 import { LogEaseClient } from './client.js';
+import { createHttpClientConfig, createServerContextForStdio, type ServerContext } from './config.js';
 import { parserRuleServerTools } from './tools.js';
 import { ParserRuleModule } from './modules/parserrule.js';
-import { formatErrorPayload, formatSuccessPayload } from './result-formatter.js';
-
-dotenv.config({ path: ['.env.local', '.env'] });
-
-const baseURL = process.env.LOGEASE_BASE_URL ?? 'http://127.0.0.1:8090';
-const authHeader = process.env.LOGEASE_AUTH_HEADER || (process.env.LOGEASE_API_KEY ? `apikey ${process.env.LOGEASE_API_KEY}` : undefined);
-const rejectUnauthorizedEnv = process.env.LOGEASE_TLS_REJECT_UNAUTHORIZED;
-const rejectUnauthorized = typeof rejectUnauthorizedEnv !== 'undefined' ? rejectUnauthorizedEnv === 'true' : false;
-
-if (!process.env.LOGEASE_BASE_URL) {
-    console.warn('LOGEASE_BASE_URL 未设置，默认使用 http://127.0.0.1:8090');
-}
-if (!authHeader) {
-    console.warn('未检测到认证信息（LOGEASE_AUTH_HEADER 或 LOGEASE_API_KEY），与服务交互可能失败');
-}
-
-const headers: Record<string, string> = {};
-if (authHeader) {
-    headers.Authorization = authHeader;
-}
-
-const httpClientConfig: HttpClientConfig = {
-    baseURL,
-    headers,
-    httpsAgent: new https.Agent({ rejectUnauthorized })
-};
-
-const client = new LogEaseClient(httpClientConfig);
-const parserRuleModule = new ParserRuleModule(client);
+import { registerToolDefinitions } from './mcp-tool-helpers.js';
+import { buildToolSuccessResult, formatErrorPayload } from './result-formatter.js';
 
 const SERVER_LEVEL_INSTRUCTIONS = `使用说明:
 1. 这是 parserrule 专用入口，只处理字段提取 / 解析规则，也就是 schema on write，不处理动态字段 fieldconfigs。
@@ -47,118 +18,90 @@ const SERVER_LEVEL_INSTRUCTIONS = `使用说明:
 6. 输出默认使用 output_format=auto，以减少上下文消耗。
 7. 遇到错误时，优先根据 suggestion 字段修正参数后重试一次。`;
 
-const server = new Server(
-    {
-        name: 'rizhiyi-parserrule-server',
-        version: '0.1.0',
-        instructions: SERVER_LEVEL_INSTRUCTIONS,
-    },
-    {
-        capabilities: {
-            tools: {},
+export function createParserRuleServer(context: ServerContext): McpServer {
+    const client = new LogEaseClient(createHttpClientConfig(context));
+    const parserRuleModule = new ParserRuleModule(client);
+
+    const server = new McpServer(
+        {
+            name: 'rizhiyi-parserrule-server',
+            version: '0.1.0',
         },
-    }
-);
-
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    try {
-        const { name, arguments: parameters = {} } = request.params;
-
-        switch (name) {
-            case 'list_parserrules':
-                return await handleToolExecution(() => parserRuleModule.listParserRules(parameters), parameters);
-            case 'get_parserrule_detail':
-                return await handleToolExecution(() => parserRuleModule.getParserRuleDetail(parameters), parameters);
-            case 'generate_parserrule_draft':
-                return await handleToolExecution(() => parserRuleModule.generateParserRuleDraft(parameters), parameters);
-            case 'create_parserrule':
-                return await handleToolExecution(() => parserRuleModule.createParserRule(parameters), parameters);
-            case 'update_parserrule':
-                return await handleToolExecution(() => parserRuleModule.updateParserRule(parameters), parameters);
-            case 'delete_parserrule':
-                return await handleToolExecution(() => parserRuleModule.deleteParserRule(parameters), parameters);
-            case 'verify_parserrule':
-                return await handleToolExecution(() => parserRuleModule.verifyParserRule(parameters), parameters);
-            case 'list_parserrule_references':
-                return await handleToolExecution(() => parserRuleModule.listParserRuleReferences(parameters), parameters);
-            default:
-                return buildToolError(
-                    'UNKNOWN_TOOL',
-                    `未知的工具: ${name}`,
-                    '请先调用 tools 列表确认可用工具名称，再重试。'
-                );
+        {
+            instructions: SERVER_LEVEL_INSTRUCTIONS,
         }
-    } catch (error: any) {
-        return buildToolError(
-            'TOOL_EXECUTION_EXCEPTION',
-            `执行工具出错: ${error.message}`,
-            '请检查 parserrule 工具参数结构，尤其是 sample_logs、rule、changes 和 payload 的取值类型。'
-        );
-    }
-});
+    );
 
-server.setRequestHandler(ListToolsRequestSchema, async () => {
-    return {
-        tools: parserRuleServerTools,
+    const handlers = {
+        list_parserrules: async (parameters: Record<string, unknown>) => handleToolExecution('list_parserrules', () => parserRuleModule.listParserRules(parameters), parameters),
+        get_parserrule_detail: async (parameters: Record<string, unknown>) => handleToolExecution('get_parserrule_detail', () => parserRuleModule.getParserRuleDetail(parameters), parameters),
+        generate_parserrule_draft: async (parameters: Record<string, unknown>) => handleToolExecution('generate_parserrule_draft', () => parserRuleModule.generateParserRuleDraft(parameters), parameters),
+        create_parserrule: async (parameters: Record<string, unknown>) => handleToolExecution('create_parserrule', () => parserRuleModule.createParserRule(parameters), parameters),
+        update_parserrule: async (parameters: Record<string, unknown>) => handleToolExecution('update_parserrule', () => parserRuleModule.updateParserRule(parameters), parameters),
+        delete_parserrule: async (parameters: Record<string, unknown>) => handleToolExecution('delete_parserrule', () => parserRuleModule.deleteParserRule(parameters), parameters),
+        verify_parserrule: async (parameters: Record<string, unknown>) => handleToolExecution('verify_parserrule', () => parserRuleModule.verifyParserRule(parameters), parameters),
+        list_parserrule_references: async (parameters: Record<string, unknown>) => handleToolExecution('list_parserrule_references', () => parserRuleModule.listParserRuleReferences(parameters), parameters)
     };
-});
 
-async function handleToolExecution(executor: () => Promise<any>, params: any) {
-    const result = await executor();
-    return formatResult(result, params);
-}
+    registerToolDefinitions(server, parserRuleServerTools, handlers);
 
-function formatResult(result: any, params: any = {}): any {
-    if (result.error) {
+    async function handleToolExecution(toolName: string, executor: () => Promise<any>, params: any) {
+        const result = await executor();
+        return formatResult(toolName, result, params);
+    }
+
+    function formatResult(toolName: string, result: any, params: any = {}): any {
+        if (result.error) {
+            return {
+                isError: true,
+                content: [{
+                    type: 'text',
+                    text: formatErrorPayload({
+                        error_code: result.error_code || 'PARSERRULE_EXECUTION_ERROR',
+                        message: result.message || result.error,
+                        suggestion: result.suggestion || '请检查解析规则参数结构后重试。',
+                        retryable: typeof result.retryable === 'boolean' ? result.retryable : true,
+                        details: result.details
+                    })
+                }]
+            };
+        }
+
+        return buildToolSuccessResult(toolName, result.data || result, {
+            outputFormat: params.output_format,
+            includeRawJson: params.include_raw_json,
+            rawJsonData: result.raw_data || result.data || result
+        });
+    }
+
+    function buildToolError(errorCode: string, message: string, suggestion: string): any {
         return {
             isError: true,
             content: [{
                 type: 'text',
                 text: formatErrorPayload({
-                    error_code: result.error_code || 'PARSERRULE_EXECUTION_ERROR',
-                    message: result.message || result.error,
-                    suggestion: result.suggestion || '请检查解析规则参数结构后重试。',
-                    retryable: typeof result.retryable === 'boolean' ? result.retryable : true,
-                    details: result.details
+                    error_code: errorCode,
+                    message,
+                    suggestion,
+                    retryable: true
                 })
             }]
         };
     }
 
-    return {
-        content: [{
-            type: 'text',
-            text: formatSuccessPayload(result.data || result, {
-                outputFormat: params.output_format,
-                includeRawJson: params.include_raw_json,
-                rawJsonData: result.raw_data || result.data || result
-            })
-        }]
-    };
-}
-
-function buildToolError(errorCode: string, message: string, suggestion: string): any {
-    return {
-        isError: true,
-        content: [{
-            type: 'text',
-            text: formatErrorPayload({
-                error_code: errorCode,
-                message,
-                suggestion,
-                retryable: true
-            })
-        }]
-    };
+    return server;
 }
 
 async function startServer(): Promise<void> {
+    const server = createParserRuleServer(createServerContextForStdio());
     const transport = new StdioServerTransport();
     await server.connect(transport);
     console.error('Rizhiyi ParserRule MCP 服务器已启动');
 }
 
-startServer().catch((error) => {
-    console.error('启动服务器失败:', error);
-    process.exit(1);
-});
+if (isExecutedDirectly(import.meta.url)) {
+    startServer().catch((error) => {
+        console.error('启动服务器失败:', error);
+        process.exit(1);
+    });
+}

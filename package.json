@@ -1,6 +1,6 @@
 {
   "name": "rizhiyi-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "rizhiyi-mcp MCP server",
   "type": "module",
   "bin": {
@@ -12,27 +12,33 @@
   "scripts": {
     "build": "tsc",
     "watch": "tsc --watch",
+    "test:http-smoke": "npm run build && node scripts/http-smoke-test.mjs",
     "start": "npm run build && node dist/log-tools-server.js",
     "dev": "node --experimental-specifier-resolution=node --loader ts-node/esm src/log-tools-server.ts",
+    "start:http": "npm run build && node dist/http-server.js",
+    "dev:http": "node --experimental-specifier-resolution=node --loader ts-node/esm src/http-server.ts",
     "start:search": "npm run build && node dist/log-tools-server.js",
     "start:manage": "npm run build && node dist/manage-server.js",
     "start:dashboard": "npm run build && node dist/dashboard-server.js",
     "start:parserrule": "npm run build && node dist/parserrule-server.js",
     "start:fieldconfig": "npm run build && node dist/fieldconfig-server.js",
+    "start:openapi": "npm run build && node dist/openapi_server.js",
     "dev:search": "node --experimental-specifier-resolution=node --loader ts-node/esm src/log-tools-server.ts",
     "dev:manage": "node --experimental-specifier-resolution=node --loader ts-node/esm src/manage-server.ts",
     "dev:dashboard": "node --experimental-specifier-resolution=node --loader ts-node/esm src/dashboard-server.ts",
     "dev:parserrule": "node --experimental-specifier-resolution=node --loader ts-node/esm src/parserrule-server.ts",
-    "dev:fieldconfig": "node --experimental-specifier-resolution=node --loader ts-node/esm src/fieldconfig-server.ts"
+    "dev:fieldconfig": "node --experimental-specifier-resolution=node --loader ts-node/esm src/fieldconfig-server.ts",
+    "dev:openapi": "node --experimental-specifier-resolution=node --loader ts-node/esm src/openapi_server.ts"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.9.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "axios": "^1.6.7",
+    "dotenv": "^16.4.5",
     "express": "^5.1.0",
     "js-yaml": "^4.1.0",
     "mcp-sequentialthinking-tools": "^0.0.2",
     "openapi2mcptools": "^0.0.3",
-    "dotenv": "^16.4.5"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/express": "^5.0.1",
