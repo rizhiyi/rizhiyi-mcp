@@ -18,6 +18,7 @@
 | `rizhiyi_dashboard` | `dist/dashboard-server.js` | 仪表盘创建/更新/校验与美观度评分 |
 | `rizhiyi_parserule` | `dist/parserrule-server.js` | 解析规则（schema on write）常用操作 |
 | `rizhiyi_dynamic_field` | `dist/fieldconfig-server.js` | 动态字段（schema on read）常用操作 |
+| `rizhiyi_ingest` | `dist/ingest-server.js` | Agent 分组管理、pipeline 管理、Agent 只读状态查询 |
 | `openapi_server` | `dist/openapi_server.js` | OpenAPI 直封装（可选；未裁剪时接口过多，容易撑爆上下文） |
 
 工具明细与参数以 MCP 的 tools 自描述为准（在你的 MCP 客户端里查看 tools 列表即可）。
@@ -45,6 +46,30 @@
    npm run build
    ```
    注意：仓库默认忽略 `dist/`，使用前需先构建生成产物。
+
+## Python 迁移版
+
+仓库中已经新增 `python/` 子工程，作为迁移期的 Python HTTP 实现。当前策略是：
+
+- 保留现有 TS 版，继续作为兼容实现
+- Python 版只提供 HTTP 模式，不提供 `stdio`
+
+### Python 版启动
+
+```bash
+cd python
+/usr/local/bin/python3.11 -m venv .venv
+source .venv/bin/activate
+pip install -e '.[dev]'
+rizhiyi-mcp-python
+```
+
+默认监听：
+
+- `GET /healthz`
+- `GET /mcp/{server}`
+- `POST /mcp/{server}`
+- `DELETE /mcp/{server}`
 
 ## 使用
 
@@ -88,11 +113,17 @@
                     "args": [
                         "/path/to/your/rizhiyi-mcp/dist/fieldconfig-server.js"
                     ]
+                },
+                "rizhiyi_ingest": {
+                    "command": "node",
+                    "args": [
+                        "/path/to/your/rizhiyi-mcp/dist/ingest-server.js"
+                    ]
                 }
             }
         }
         ```
-        请确保将 `/path/to/your/rizhiyi-mcp/dist/log-tools-server.js`、`/path/to/your/rizhiyi-mcp/dist/manage-server.js`、`/path/to/your/rizhiyi-mcp/dist/dashboard-server.js`、`/path/to/your/rizhiyi-mcp/dist/parserrule-server.js` 和 `/path/to/your/rizhiyi-mcp/dist/fieldconfig-server.js` 替换为实际路径。
+        请确保将 `/path/to/your/rizhiyi-mcp/dist/log-tools-server.js`、`/path/to/your/rizhiyi-mcp/dist/manage-server.js`、`/path/to/your/rizhiyi-mcp/dist/dashboard-server.js`、`/path/to/your/rizhiyi-mcp/dist/parserrule-server.js`、`/path/to/your/rizhiyi-mcp/dist/fieldconfig-server.js` 和 `/path/to/your/rizhiyi-mcp/dist/ingest-server.js` 替换为实际路径。
     -   **Rizhiyi 服务器信息**：Rizhiyi 服务器需要认证连接，请在 .env 文件或环境变量中配置相应的服务器 URL 和 API Key。
 
 ### 远程 HTTP 网关
@@ -111,6 +142,7 @@ npm run start:http
 - `POST /mcp/dashboard`
 - `POST /mcp/parserrule`
 - `POST /mcp/fieldconfig`
+- `POST /mcp/ingest`
 - `POST /mcp/openapi`
 
 可用环境变量：
@@ -264,7 +296,7 @@ Authorization: Basic <base64(username:password)>
 
 以下能力属于复杂 JSON body 配置类功能，计划以独立 MCP Server 方式提供：
 - `rizhiyi_alert`：监控/告警配置（alerts）
-- `rizhiyi_agent_config`：采集/Agent 配置（agent）
+- `rizhiyi_ingest`：Agent 分组、pipeline 采集配置与 Agent 只读查询（ingest）
 
 ## 开发
 

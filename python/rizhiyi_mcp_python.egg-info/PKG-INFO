@@ -1,0 +1,72 @@
+Metadata-Version: 2.4
+Name: rizhiyi-mcp-python
+Version: 0.1.0
+Summary: Python MCP skeleton for rizhiyi streamable HTTP migration
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: fastapi<1.0.0,>=0.115.0
+Requires-Dist: httpx<1.0.0,>=0.27.0
+Requires-Dist: mcp>=1.0.0
+Requires-Dist: pydantic<3.0.0,>=2.8.0
+Requires-Dist: pydantic-settings<3.0.0,>=2.4.0
+Requires-Dist: PyYAML<7.0.0,>=6.0.0
+Requires-Dist: uvicorn[standard]<1.0.0,>=0.30.0
+Provides-Extra: dev
+Requires-Dist: pytest<9.0.0,>=8.3.0; extra == "dev"
+Requires-Dist: pytest-asyncio<1.0.0,>=0.24.0; extra == "dev"
+Requires-Dist: ruff<1.0.0,>=0.6.0; extra == "dev"
+
+# Python MCP Skeleton
+
+这是迁移期新增的 Python 子工程骨架，目标是先沉淀公共基础层，再逐步把现有 TS 版 HTTP MCP 能力迁到 Python。
+
+当前已包含：
+
+- 依赖与项目元数据（`pyproject.toml`）
+- 运行时配置加载（`rizhiyi_mcp/config.py`）
+- `Authorization` 解析与身份描述（`rizhiyi_mcp/auth.py`）
+- 上游 HTTP client 与错误映射（`rizhiyi_mcp/http_client.py`）
+- 共享类型、资源 envelope、请求上下文（`rizhiyi_mcp/types.py`）
+- 手写 MCP JSON-RPC HTTP 网关（`rizhiyi_mcp/gateway.py`）
+- 最小 FastAPI 启动入口（`rizhiyi_mcp/main.py`）
+
+当前未包含：
+
+- 真正的 MCP `streamable_http` transport
+- 七个子服务的真实业务工具迁移
+- 共享结果持久化到磁盘
+- 对照 TS 版的 smoke case
+
+## 当前已支持的 HTTP JSON-RPC 方法
+
+- `GET /healthz`
+- `POST /mcp/{server}`:
+  - `initialize`
+  - `notifications/initialized`
+  - `tools/list`
+  - `tools/call`
+  - `resources/list`
+  - `resources/read`
+- `DELETE /mcp/{server}` 关闭 session
+
+## 当前内置的占位 server registry
+
+- `log-tools`
+- `manage`
+- `dashboard`
+- `parserrule`
+- `fieldconfig`
+- `ingest`
+- `openapi`
+
+## 本地启动
+
+```bash
+cd python
+python3.11 -m venv .venv
+source .venv/bin/activate
+pip install -e .[dev]
+rizhiyi-mcp-python
+```
+
+默认监听 `http://0.0.0.0:3000/healthz`。

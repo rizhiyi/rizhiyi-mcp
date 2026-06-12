@@ -158,3 +158,11 @@ docs/
 
 # dist folder
 dist/
+
+# Python local files
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+python/.venv/

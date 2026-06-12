@@ -1,0 +1,2 @@
+[console_scripts]
+rizhiyi-mcp-python = rizhiyi_mcp.main:main
