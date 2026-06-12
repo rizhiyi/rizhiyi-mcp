@@ -33,6 +33,37 @@ export class DashboardModule {
         this.client = client;
     }
 
+    async listDashboards(params: any): Promise<any> {
+        const allowedKeys = ['page', 'size', 'name', 'uuid', 'app_id', 'export'];
+        const filtered = Object.fromEntries(
+            Object.entries(params || {}).filter(([key, value]) => allowedKeys.includes(key) && value !== undefined && value !== null)
+        );
+        const response = await this.client.get('/api/v3/dashboards/', filtered);
+
+        if (response.error || response.data == null) {
+            return this.buildError(
+                response.error_code || 'UPSTREAM_REQUEST_FAILED',
+                response.message || response.error || '获取仪表盘列表失败。',
+                response.suggestion || '请检查筛选条件、鉴权信息以及上游服务状态。',
+                response.details
+            );
+        }
+
+        const payload = typeof response.data === 'object' && response.data !== null
+            ? response.data
+            : { raw: response.data };
+
+        return {
+            status: 200,
+            data: {
+                path: '/api/v3/dashboards/',
+                params: filtered,
+                status: response.status,
+                ...payload
+            }
+        };
+    }
+
     async createDashboard(params: any): Promise<any> {
         return this.createDashboardFromSpec(params);
     }

@@ -774,6 +774,40 @@ export const predictiveAnalysisTools: ToolDefinition[] = [
 // 仪表盘工具
 export const dashboardTools: ToolDefinition[] = [
     {
+        name: 'list_dashboards',
+        description: '获取仪表盘列表，便于先发现可用 dashboard，再继续查看 tabs、panels 或内容。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                page: {
+                    type: 'integer',
+                    description: '页码，从 1 开始'
+                },
+                size: {
+                    type: 'integer',
+                    description: '每页数量'
+                },
+                name: {
+                    type: 'string',
+                    description: '按仪表盘名称过滤'
+                },
+                uuid: {
+                    type: 'string',
+                    description: '按仪表盘 UUID 过滤'
+                },
+                app_id: {
+                    type: 'integer',
+                    description: '按应用 ID 过滤'
+                },
+                export: {
+                    type: 'string',
+                    enum: ['local', 'system'],
+                    description: '导出类型过滤'
+                }
+            }
+        }
+    },
+    {
         name: 'list_dashboard_tabs',
         description: '列出指定 dashboard 下的 tabs 摘要，便于后续定位 tab 和查看 panel 数量。',
         inputSchema: {
@@ -1356,7 +1390,7 @@ export const parserRuleTools: ToolDefinition[] = [
     },
     {
         name: 'verify_parserrule',
-        description: '验证解析规则对样例日志的解析结果。推荐流程是先 `generate_parserrule_draft`，再 `create_parserrule` / `update_parserrule`，最后用本工具验证。底层调用 `parserrules/verify/logtype`，只用于字段提取 / schema on write。支持两种传参方式：1）传 payload 作为 verify 原始请求体；2）直接把 rawMessage、rule、sample_logs、conf、logtype、enable 平铺到顶层。rule/conf/logtype 支持原生数组对象或 JSON 字符串；工具会先在本地校验空规则、空样例、非法 JSON，再把返回结果整理成更适合 LLM 阅读的摘要。',
+        description: '验证解析规则对样例日志的解析结果。推荐流程是先 `generate_parserrule_draft`，再 `create_parserrule` / `update_parserrule`，最后用本工具验证。底层调用 `parserrules/verify/logtype`，只用于字段提取 / schema on write。支持两种传参方式：1）传 payload 作为 verify 原始请求体；2）直接把 rawMessage、rule、sample_logs、conf、logtype、enable 平铺到顶层。rule/conf 支持原生数组对象或 JSON 字符串；logtype 优先传字符串，也兼容旧的对象/数组输入，工具会尽量提取其中的 name/type/logtype 字段。sample_logs 会尽量保持你传入的原始形态，既支持字符串数组，也支持对象数组。工具会先在本地校验空规则、空样例、非法 JSON，再把返回结果整理成更适合 LLM 阅读的摘要。',
         inputSchema: {
             type: 'object',
             properties: {
@@ -1364,9 +1398,9 @@ export const parserRuleTools: ToolDefinition[] = [
                 query_logtype: { type: 'string', description: '可选，verify 接口 query 参数 logtype。' },
                 logtype: {
                     oneOf: [
-                        { type: 'string', description: '顶层直传模式下可作为 body.logtype 的 JSON 字符串；payload 模式下兼容旧行为，仍可作为 query 参数。' },
-                        { type: 'array', items: { type: 'object' }, description: '顶层直传模式下的 body.logtype 数组。' },
-                        { type: 'object', additionalProperties: true, description: '顶层直传模式下的单个 logtype 对象，会自动包装成数组。' }
+                        { type: 'string', description: '推荐直接传单个 logtype 字符串，例如 nginx_access、text。' },
+                        { type: 'array', items: { oneOf: [{ type: 'string' }, { type: 'object', additionalProperties: true }] }, description: '兼容旧输入：会从数组中提取首个可识别的 name/type/logtype。' },
+                        { type: 'object', additionalProperties: true, description: '兼容旧输入：会从对象中提取 name/type/logtype。' }
                     ]
                 },
                 rawMessage: { type: 'string', description: '顶层直传模式下的待解析原始日志。若缺失，会尝试从 sample_logs 第一条样例中兜底提取。' },
@@ -1426,7 +1460,7 @@ export const parserRuleTools: ToolDefinition[] = [
                                         { type: 'object', additionalProperties: true },
                                         { type: 'string' }
                                     ],
-                                    description: '当前规则 logtype。支持数组、对象或 JSON 字符串。'
+                                    description: '当前规则 logtype。推荐直接传字符串；也兼容对象、数组或 JSON 字符串，并会尽量提取 name/type/logtype。'
                                 },
                                 rawMessage: { type: 'string', description: '待解析原始日志。' },
                                 enable: { oneOf: [{ type: 'boolean' }, { type: 'string' }], description: '是否启用。' },
@@ -1534,6 +1568,443 @@ export const fieldConfigTools: ToolDefinition[] = [
     }
 ];
 
+export const ingestTools: ToolDefinition[] = [
+    {
+        name: 'list_agents',
+        description: '列出 Agent 列表。只读工具；`group_ids` 可选，默认值为 `all`，表示当前账号可读的全部分组。可按 IP、平台、状态、主机名等条件过滤。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                fields: { type: 'string', description: '可选，返回字段列表，逗号分隔。' },
+                permits: { type: 'string', description: '可选，是否返回权限相关信息。' },
+                page: { type: 'integer', description: '页码。' },
+                size: { type: 'integer', description: '每页条数。' },
+                group_ids: { type: 'string', description: '可选，逗号分隔的分组 id 集合，或特殊值 `all`；默认 `all`。', default: 'all' },
+                id: { type: 'integer', description: '按 Agent ID 过滤。' },
+                ip: { type: 'string', description: '按 Agent IP 过滤。' },
+                port: { type: 'integer', description: '按端口过滤。' },
+                status: { type: 'string', description: '按状态过滤。' },
+                os: { type: 'string', description: '按操作系统过滤。' },
+                platform: { type: 'string', description: '按平台过滤。' },
+                cur_version: { type: 'string', description: '按当前版本过滤。' },
+                expected_version: { type: 'string', description: '按预期版本过滤。' },
+                is_server_heka: {
+                    oneOf: [{ type: 'boolean' }, { type: 'string' }],
+                    description: '是否为 Server 类型；支持布尔值或字符串。'
+                },
+                proxy_ip: { type: 'string', description: '按代理地址过滤。' },
+                proxy_port: { type: 'integer', description: '按代理端口过滤。' },
+                domain_id: { type: 'integer', description: '按 domain_id 过滤。' },
+                hostname: { type: 'string', description: '按主机名过滤。' },
+                comment: { type: 'string', description: '按备注过滤。' },
+                cmd: { type: 'string', description: '按命令状态过滤。' },
+                cmd_timestamp: { type: 'string', description: '按命令时间过滤。' },
+                create_timestamp: { type: 'string', description: '按接入时间过滤。' },
+                last_update_timestamp: { type: 'string', description: '按最近更新时间过滤。' },
+                sort: { type: 'string', description: '排序字段。' }
+            }
+        }
+    },
+    {
+        name: 'list_agent_groups',
+        description: '列出 Agent 分组列表，可按名称、描述、创建者等过滤。`assignable_only=true` 时切换为仅返回当前账号可分配 Agent 的分组。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                assignable_only: { type: 'boolean', description: '可选，是否只返回当前账号有更新权限、可用于分配 Agent 的分组。默认 false。', default: false },
+                fields: { type: 'string', description: '可选，返回字段列表，逗号分隔。' },
+                permits: { type: 'string', description: '可选，是否返回权限相关信息。' },
+                page: { type: 'integer', description: '页码。' },
+                size: { type: 'integer', description: '每页条数。' },
+                custom_collection: { type: 'string', description: '可选，自定义收藏过滤。' },
+                id: { type: 'integer', description: '按分组 ID 过滤。' },
+                domain_id: { type: 'integer', description: '按 domain_id 过滤。' },
+                name: { type: 'string', description: '按名称过滤。' },
+                memo: { type: 'string', description: '按描述过滤。' },
+                creator_id: { type: 'integer', description: '按创建者过滤。' },
+                from_app: { type: 'integer', description: '按所属应用过滤。' },
+                rt_ids: { type: 'string', description: '按资源标签过滤，多个标签用逗号分隔。' },
+                sort: { type: 'string', description: '排序字段。' }
+            }
+        }
+    },
+    {
+        name: 'get_agent_group_detail',
+        description: '读取单个 Agent 分组详情。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                id: { type: 'integer', description: '分组 ID。' },
+                fields: { type: 'string', description: '可选，返回字段列表。' },
+                permit: { type: 'string', description: '可选，是否返回资源权限。' }
+            },
+            required: ['id']
+        }
+    },
+    {
+        name: 'create_agent_group',
+        description: '创建 Agent 分组。请把主体放在 `group` 中，至少提供 `name` 和 `roles`。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                group: {
+                    oneOf: [
+                        {
+                            type: 'object',
+                            properties: {
+                                name: { type: 'string', description: '分组名称。' },
+                                memo: { type: 'string', description: '分组描述。' },
+                                rt_names: { type: 'string', description: '资源标签名称。' },
+                                roles: { type: 'array', items: { type: 'number' }, description: '角色 ID 数组。' }
+                            }
+                        },
+                        {
+                            type: 'string',
+                            description: '创建分组请求体的 JSON 对象字符串。'
+                        }
+                    ]
+                }
+            },
+            required: ['group']
+        }
+    },
+    {
+        name: 'update_agent_group',
+        description: '更新 Agent 分组。请提供分组 `id` 和 `changes`。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                id: { type: 'integer', description: '分组 ID。' },
+                changes: {
+                    oneOf: [
+                        {
+                            type: 'object',
+                            properties: {
+                                name: { type: 'string', description: '新的分组名称。' },
+                                memo: { type: 'string', description: '新的分组描述。' },
+                                rt_names: { type: 'string', description: '新的资源标签名称。' },
+                                roles: { type: 'array', items: { type: 'number' }, description: '新的角色 ID 数组。' }
+                            }
+                        },
+                        {
+                            type: 'string',
+                            description: '更新分组请求体的 JSON 对象字符串。'
+                        }
+                    ]
+                }
+            },
+            required: ['id', 'changes']
+        }
+    },
+    {
+        name: 'delete_agent_group',
+        description: '删除单个 Agent 分组。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                id: { type: 'integer', description: '分组 ID。' }
+            },
+            required: ['id']
+        }
+    },
+    {
+        name: 'add_agents_to_group',
+        description: '把指定 Agent 加入某个分组。`target_agents` 支持 Agent ID 数组、对象数组，或逗号分隔字符串。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                id: { type: 'integer', description: '目标分组 ID。' },
+                target_agents: {
+                    oneOf: [
+                        {
+                            type: 'array',
+                            items: {
+                                oneOf: [
+                                    { type: 'integer' },
+                                    { type: 'string' },
+                                    {
+                                        type: 'object',
+                                        properties: {
+                                            id: { type: 'integer', description: 'Agent ID。' },
+                                            group_ids: { type: 'string', description: '可选，分组 id 串；默认使用路径上的分组 id。' }
+                                        }
+                                    }
+                                ]
+                            }
+                        },
+                        {
+                            type: 'string',
+                            description: 'Agent ID 的逗号分隔字符串，或 JSON 数组字符串。'
+                        }
+                    ],
+                    description: '待加入分组的 Agent 集合。'
+                }
+            },
+            required: ['id', 'target_agents']
+        }
+    },
+    {
+        name: 'remove_agents_from_group',
+        description: '把指定 Agent 从某个分组移除。`target_agents` 支持 Agent ID 数组、对象数组，或逗号分隔字符串。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                id: { type: 'integer', description: '目标分组 ID。' },
+                target_agents: {
+                    oneOf: [
+                        {
+                            type: 'array',
+                            items: {
+                                oneOf: [
+                                    { type: 'integer' },
+                                    { type: 'string' },
+                                    {
+                                        type: 'object',
+                                        properties: {
+                                            id: { type: 'integer', description: 'Agent ID。' }
+                                        }
+                                    }
+                                ]
+                            }
+                        },
+                        {
+                            type: 'string',
+                            description: 'Agent ID 的逗号分隔字符串，或 JSON 数组字符串。'
+                        }
+                    ],
+                    description: '待移出分组的 Agent 集合。'
+                }
+            },
+            required: ['id', 'target_agents']
+        }
+    },
+    {
+        name: 'list_pipeline_schemas',
+        description: '列出指定平台下的 pipeline schema，用于辅助组装 pipeline.detail。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                kind: {
+                    type: 'string',
+                    description: 'schema 类型。',
+                    enum: ['InstanceConfiguration', 'PluginType', 'ReferenceResource']
+                },
+                platform: { type: 'string', description: '目标平台。' }
+            },
+            required: ['kind', 'platform']
+        }
+    },
+    {
+        name: 'list_pipelines',
+        description: '列出 pipeline 列表。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                page: { type: 'integer', description: '页码。' },
+                size: { type: 'integer', description: '每页条数。' },
+                filter: { type: 'string', description: '过滤条件。' },
+                sort: { type: 'string', description: '排序字段。' },
+                order: { type: 'string', description: '升序/降序。' }
+            }
+        }
+    },
+    {
+        name: 'get_pipeline_detail',
+        description: '读取单个 pipeline 详情。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                id: { type: 'string', description: 'pipeline ID。' }
+            },
+            required: ['id']
+        }
+    },
+    {
+        name: 'create_pipeline',
+        description: '创建 pipeline。请把主体放在 `pipeline` 中；其中 `detail` 支持对象、数组或合法 JSON 字符串。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                pipeline: {
+                    oneOf: [
+                        {
+                            type: 'object',
+                            properties: {
+                                name: { type: 'string', description: 'pipeline 名称。' },
+                                platform: { type: 'string', description: '目标平台。' },
+                                memo: { type: 'string', description: '备注。' },
+                                detail: {
+                                    oneOf: [
+                                        { type: 'string', description: '插件配置 JSON 字符串。' },
+                                        { type: 'object', additionalProperties: true, description: '插件配置对象。' },
+                                        { type: 'array', items: { type: 'object' }, description: '插件配置对象数组。' }
+                                    ]
+                                }
+                            }
+                        },
+                        {
+                            type: 'string',
+                            description: '创建 pipeline 请求体的 JSON 对象字符串。'
+                        }
+                    ]
+                }
+            },
+            required: ['pipeline']
+        }
+    },
+    {
+        name: 'update_pipeline',
+        description: '更新 pipeline。请提供 `id` 和 `changes`；其中 `detail` 支持对象、数组或合法 JSON 字符串。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                id: { type: 'string', description: 'pipeline ID。' },
+                changes: {
+                    oneOf: [
+                        {
+                            type: 'object',
+                            properties: {
+                                name: { type: 'string', description: '新的 pipeline 名称。' },
+                                platform: { type: 'string', description: '新的平台。' },
+                                memo: { type: 'string', description: '新的备注。' },
+                                detail: {
+                                    oneOf: [
+                                        { type: 'string', description: '插件配置 JSON 字符串。' },
+                                        { type: 'object', additionalProperties: true, description: '插件配置对象。' },
+                                        { type: 'array', items: { type: 'object' }, description: '插件配置对象数组。' }
+                                    ]
+                                }
+                            }
+                        },
+                        {
+                            type: 'string',
+                            description: '更新 pipeline 请求体的 JSON 对象字符串。'
+                        }
+                    ]
+                }
+            },
+            required: ['id', 'changes']
+        }
+    },
+    {
+        name: 'delete_pipeline',
+        description: '删除单个 pipeline。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                id: { type: 'string', description: 'pipeline ID。' }
+            },
+            required: ['id']
+        }
+    },
+    {
+        name: 'get_pipeline_groups',
+        description: '读取某个 pipeline 当前关联的 Agent 分组。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                id: { type: 'string', description: 'pipeline ID。' },
+                page: { type: 'integer', description: '页码。' },
+                size: { type: 'integer', description: '每页条数。' }
+            },
+            required: ['id']
+        }
+    },
+    {
+        name: 'add_pipeline_groups',
+        description: '给某个 pipeline 增量添加 Agent 分组。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                id: { type: 'string', description: 'pipeline ID。' },
+                group_ids: {
+                    oneOf: [
+                        { type: 'array', items: { oneOf: [{ type: 'integer' }, { type: 'string' }, { type: 'object', additionalProperties: true }] } },
+                        { type: 'string', description: '分组 ID 的逗号分隔字符串，或 JSON 数组字符串。' }
+                    ],
+                    description: '目标分组 id 集合。'
+                }
+            },
+            required: ['id', 'group_ids']
+        }
+    },
+    {
+        name: 'replace_pipeline_groups',
+        description: '整体替换某个 pipeline 关联的 Agent 分组。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                id: { type: 'string', description: 'pipeline ID。' },
+                group_ids: {
+                    oneOf: [
+                        { type: 'array', items: { oneOf: [{ type: 'integer' }, { type: 'string' }, { type: 'object', additionalProperties: true }] } },
+                        { type: 'string', description: '分组 ID 的逗号分隔字符串，或 JSON 数组字符串。' }
+                    ],
+                    description: '目标分组 id 集合。'
+                }
+            },
+            required: ['id', 'group_ids']
+        }
+    },
+    {
+        name: 'delete_pipeline_groups',
+        description: '清空某个 pipeline 当前关联的所有 Agent 分组。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                id: { type: 'string', description: 'pipeline ID。' }
+            },
+            required: ['id']
+        }
+    },
+    {
+        name: 'get_pipeline_agent_status',
+        description: '读取某个 pipeline 关联 Agent 的同步状态。`group_ids` 可选，默认值为 `all`，表示当前账号可读的全部分组。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                id: { type: 'string', description: 'pipeline ID。' },
+                page: { type: 'integer', description: '页码。' },
+                size: { type: 'integer', description: '每页条数。' },
+                filter: { type: 'string', description: '过滤条件。' },
+                group_ids: { type: 'string', description: '可选，逗号分隔的分组 id 集合，或特殊值 `all`；默认 `all`。', default: 'all' },
+                sort: { type: 'string', description: '排序字段。' },
+                order: { type: 'string', description: '升序/降序。' },
+                status: { type: 'string', description: '文件下发状态。' }
+            },
+            required: ['id']
+        }
+    },
+    {
+        name: 'list_available_pipeline_agents',
+        description: '列出指定平台下可用于 pipeline 绑定的 Agent。`group_ids` 可选，默认值为 `all`，表示当前账号可读的全部分组。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                page: { type: 'integer', description: '页码。' },
+                size: { type: 'integer', description: '每页条数。' },
+                filter: { type: 'string', description: '过滤条件。' },
+                group_ids: { type: 'string', description: '可选，逗号分隔的分组 id 集合，或特殊值 `all`；默认 `all`。', default: 'all' },
+                sort: { type: 'string', description: '排序字段。' },
+                order: { type: 'string', description: '升序/降序。' },
+                platform: { type: 'string', description: '目标平台。' },
+                exclude_instance: { type: 'string', description: '排除的实例 id。' }
+            },
+            required: ['platform']
+        }
+    },
+    {
+        name: 'list_available_pipeline_agent_groups',
+        description: '列出可用于 pipeline 关联的 Agent 分组。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                permit: { type: 'string', description: '可选，权限过滤。' }
+            }
+        }
+    }
+];
+
 export const searchTools: ToolDefinition[] = [
     ...withOutputControls(withSharedResourceHint(basicLogTools)),
     ...withOutputControls(withSharedResourceHint(statisticalAnalysisTools)),
@@ -1553,10 +2024,15 @@ export const fieldConfigServerTools: ToolDefinition[] = [
     ...withOutputControls(fieldConfigTools)
 ];
 
+export const ingestServerTools: ToolDefinition[] = [
+    ...withOutputControls(ingestTools)
+];
+
 // 所有工具
 export const allTools: ToolDefinition[] = [
     ...searchTools,
     ...dashboardServerTools,
     ...parserRuleServerTools,
-    ...fieldConfigServerTools
+    ...fieldConfigServerTools,
+    ...ingestServerTools
 ];

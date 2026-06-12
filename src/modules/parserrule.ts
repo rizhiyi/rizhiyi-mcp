@@ -553,10 +553,110 @@ export class ParserRuleModule {
     }
 
     private buildVerifyRequest(params: any): { payload: Record<string, unknown>; queryLogtype?: string; error?: never } | { error: any } {
-        const hasPayload = typeof params?.payload !== 'undefined';
-        let source: any;
+        const source = this.resolveVerifySource(params);
+        if (source.error) {
+            return { error: source.error };
+        }
+        const resolvedSource = (source as { value: any }).value;
 
-        if (hasPayload) {
+        const rule = this.normalizeVerifyArrayField(resolvedSource.rule, 'rule', '匹配规则');
+        if (rule.error) {
+            return { error: rule.error };
+        }
+        const normalizedRule = rule as { value: any[] };
+        if (normalizedRule.value.length === 0) {
+            return {
+                error: this.buildError(
+                    'EMPTY_RULE',
+                    'verify_parserrule 的 rule 不能为空。',
+                    '请至少提供 1 条匹配规则；如果你传的是 JSON 字符串，请确认它能解析成非空数组或对象。'
+                )
+            };
+        }
+
+        const conf = this.normalizeVerifyArrayField(resolvedSource.conf, 'conf', '解析规则 conf');
+        if (conf.error) {
+            return { error: conf.error };
+        }
+        const normalizedConf = conf as { value: any[] };
+        if (normalizedConf.value.length === 0) {
+            return {
+                error: this.buildError(
+                    'EMPTY_CONF',
+                    'verify_parserrule 的 conf 不能为空。',
+                    '请至少提供 1 条 conf 配置；如果你传的是 JSON 字符串，请确认它能解析成非空数组或对象。'
+                )
+            };
+        }
+
+        const logtype = this.normalizeVerifyLogtypeField(resolvedSource.logtype);
+        if (logtype.error) {
+            return { error: logtype.error };
+        }
+        const normalizedLogtype = logtype as { value: string };
+        if (!normalizedLogtype.value) {
+            return {
+                error: this.buildError(
+                    'EMPTY_LOGTYPE',
+                    'verify_parserrule 的 logtype 不能为空。',
+                    '请传入非空的 logtype；优先直接传字符串，例如 nginx_access、text。'
+                )
+            };
+        }
+
+        const sampleLogs = this.normalizeSampleLogs(resolvedSource.sample_logs);
+        if (sampleLogs.error) {
+            return { error: sampleLogs.error };
+        }
+        const normalizedSampleLogs = sampleLogs as { value: any[] };
+        if (normalizedSampleLogs.value.length === 0) {
+            return {
+                error: this.buildError(
+                    'EMPTY_SAMPLE_LOGS',
+                    'verify_parserrule 的 sample_logs 不能为空。',
+                    '请至少提供 1 条样例日志；可以传字符串数组、对象数组，或合法 JSON 字符串。'
+                )
+            };
+        }
+
+        const rawMessage = this.normalizeRawMessage(resolvedSource.rawMessage, normalizedSampleLogs.value);
+        if (rawMessage.error) {
+            return { error: rawMessage.error };
+        }
+        const normalizedRawMessage = rawMessage as { value: string };
+
+        const enable = this.normalizeBoolean(resolvedSource.enable, 'enable');
+        if (enable.error) {
+            return { error: enable.error };
+        }
+        const normalizedEnable = enable as { value: boolean };
+
+        const grok = this.normalizeOptionalObjectField(resolvedSource.grok, 'grok');
+        if (grok.error) {
+            return { error: grok.error };
+        }
+        const normalizedGrok = grok as { value?: Record<string, unknown> };
+
+        return {
+            payload: this.pickDefined({
+                appname: this.normalizeOptionalScalar(resolvedSource.appname),
+                conf: normalizedConf.value,
+                logtype: normalizedLogtype.value,
+                rawMessage: normalizedRawMessage.value,
+                enable: normalizedEnable.value,
+                rule: normalizedRule.value,
+                sample_logs: normalizedSampleLogs.value,
+                grok: normalizedGrok.value,
+                hostname: this.normalizeOptionalScalar(resolvedSource.hostname),
+                source: this.normalizeOptionalScalar(resolvedSource.source),
+                ip: this.normalizeOptionalScalar(resolvedSource.ip)
+            }),
+            queryLogtype: this.normalizeQueryLogtype(params)
+        };
+    }
+
+    private resolveVerifySource(params: any): { value: Record<string, unknown>; error?: never } | { error: any } {
+        if (typeof params?.payload !== 'undefined') {
             const parsedPayload = this.parseJsonStringField(params.payload, 'payload');
             if (parsedPayload.error) {
                 return { error: parsedPayload.error };
@@ -573,126 +673,74 @@ export class ParserRuleModule {
                 };
             }
 
-            source = verifiedPayload.value;
-        } else {
-            source = this.pickDefined({
-                appname: params?.appname,
-                conf: params?.conf,
-                logtype: params?.logtype,
-                rawMessage: params?.rawMessage,
-                enable: params?.enable,
-                rule: params?.rule,
-                sample_logs: params?.sample_logs,
-                grok: params?.grok,
-                hostname: params?.hostname,
-                source: params?.source,
-                ip: params?.ip
-            });
+            return { value: verifiedPayload.value };
+        }
 
-            if (Object.keys(source).length === 0) {
-                return {
-                    error: this.buildError(
-                        'MISSING_REQUIRED_PARAM',
-                        'verify_parserrule 需要 payload，或直接提供 rawMessage、rule、sample_logs、conf、logtype、enable。',
-                        '推荐直接传 payload；如果想少包一层，也可以把 rawMessage、rule、sample_logs、conf、logtype、enable 这些字段平铺到顶层。'
-                    )
-                };
+        const source = this.pickDefined({
+            appname: params?.appname,
+            conf: params?.conf,
+            logtype: params?.logtype,
+            rawMessage: params?.rawMessage,
+            enable: params?.enable,
+            rule: params?.rule,
+            sample_logs: params?.sample_logs,
+            grok: params?.grok,
+            hostname: params?.hostname,
+            source: params?.source,
+            ip: params?.ip
+        });
+
+        if (Object.keys(source).length === 0) {
+            return {
+                error: this.buildError(
+                    'MISSING_REQUIRED_PARAM',
+                    'verify_parserrule 需要 payload，或直接提供 rawMessage、rule、sample_logs、conf、logtype、enable。',
+                    '推荐直接传 payload；如果想少包一层，也可以把 rawMessage、rule、sample_logs、conf、logtype、enable 这些字段平铺到顶层。'
+                )
+            };
+        }
+
+        return { value: source };
+    }
+
+    private normalizeVerifyLogtypeField(rawValue: unknown): { value: string; error?: never } | { error: any } {
+        if (typeof rawValue === 'undefined' || rawValue === null) {
+            return {
+                error: this.buildError(
+                    'MISSING_REQUIRED_PARAM',
+                    'verify_parserrule 需要 logtype。',
+                    '请提供当前规则 logtype；优先直接传字符串，例如 nginx_access、text。'
+                )
+            };
+        }
+
+        if (typeof rawValue === 'string') {
+            const trimmed = rawValue.trim();
+            if (!trimmed) {
+                return { value: '' };
+            }
+            if (!trimmed.startsWith('[') && !trimmed.startsWith('{')) {
+                return { value: trimmed };
             }
         }
 
-        const rule = this.normalizeVerifyArrayField(source.rule, 'rule', '匹配规则');
-        if (rule.error) {
-            return { error: rule.error };
-        }
-        const normalizedRule = rule as { value: any[] };
-        if (normalizedRule.value.length === 0) {
-            return {
-                error: this.buildError(
-                    'EMPTY_RULE',
-                    'verify_parserrule 的 rule 不能为空。',
-                    '请至少提供 1 条匹配规则；如果你传的是 JSON 字符串，请确认它能解析成非空数组或对象。'
-                )
-            };
+        const parsed = this.parseJsonStringField(rawValue, 'logtype');
+        if (parsed.error) {
+            return { error: parsed.error };
         }
 
-        const conf = this.normalizeVerifyArrayField(source.conf, 'conf', '解析规则 conf');
-        if (conf.error) {
-            return { error: conf.error };
+        const normalizedParsed = parsed as { value: any };
+        const resolved = this.extractVerifyLogtypeValue(normalizedParsed.value);
+        if (resolved) {
+            return { value: resolved };
         }
-        const normalizedConf = conf as { value: any[] };
-        if (normalizedConf.value.length === 0) {
-            return {
-                error: this.buildError(
-                    'EMPTY_CONF',
-                    'verify_parserrule 的 conf 不能为空。',
-                    '请至少提供 1 条 conf 配置；如果你传的是 JSON 字符串，请确认它能解析成非空数组或对象。'
-                )
-            };
-        }
-
-        const logtype = this.normalizeVerifyArrayField(source.logtype, 'logtype', '当前规则 logtype');
-        if (logtype.error) {
-            return { error: logtype.error };
-        }
-        const normalizedLogtype = logtype as { value: any[] };
-        if (normalizedLogtype.value.length === 0) {
-            return {
-                error: this.buildError(
-                    'EMPTY_LOGTYPE',
-                    'verify_parserrule 的 logtype 不能为空。',
-                    '请至少提供 1 条 logtype 配置；如果你传的是 JSON 字符串，请确认它能解析成非空数组或对象。'
-                )
-            };
-        }
-
-        const sampleLogs = this.normalizeSampleLogs(source.sample_logs);
-        if (sampleLogs.error) {
-            return { error: sampleLogs.error };
-        }
-        const normalizedSampleLogs = sampleLogs as { value: any[] };
-        if (normalizedSampleLogs.value.length === 0) {
-            return {
-                error: this.buildError(
-                    'EMPTY_SAMPLE_LOGS',
-                    'verify_parserrule 的 sample_logs 不能为空。',
-                    '请至少提供 1 条样例日志；可以传字符串数组、对象数组，或合法 JSON 字符串。'
-                )
-            };
-        }
-
-        const rawMessage = this.normalizeRawMessage(source.rawMessage, normalizedSampleLogs.value);
-        if (rawMessage.error) {
-            return { error: rawMessage.error };
-        }
-        const normalizedRawMessage = rawMessage as { value: string };
-
-        const enable = this.normalizeBoolean(source.enable, 'enable');
-        if (enable.error) {
-            return { error: enable.error };
-        }
-        const normalizedEnable = enable as { value: boolean };
-
-        const grok = this.normalizeOptionalObjectField(source.grok, 'grok');
-        if (grok.error) {
-            return { error: grok.error };
-        }
-        const normalizedGrok = grok as { value?: Record<string, unknown> };
 
         return {
-            payload: this.pickDefined({
-                appname: this.normalizeOptionalScalar(source.appname),
-                conf: normalizedConf.value,
-                logtype: normalizedLogtype.value,
-                rawMessage: normalizedRawMessage.value,
-                enable: normalizedEnable.value,
-                rule: normalizedRule.value,
-                sample_logs: normalizedSampleLogs.value,
-                grok: normalizedGrok.value,
-                hostname: this.normalizeOptionalScalar(source.hostname),
-                source: this.normalizeOptionalScalar(source.source),
-                ip: this.normalizeOptionalScalar(source.ip)
-            }),
-            queryLogtype: this.normalizeQueryLogtype(params, hasPayload)
+            error: this.buildError(
+                'INVALID_PARAM_TYPE',
+                'verify_parserrule 的 logtype 必须是字符串、对象、数组，或合法 JSON 字符串。',
+                '推荐直接传字符串；如果传对象/数组，请至少包含 name、type 或 logtype 这类可识别字段。'
+            )
         };
     }
 
@@ -762,7 +810,7 @@ export class ParserRuleModule {
                 return this.normalizeSampleLogs(normalizedParsed.value);
             }
 
-            return { value: [{ raw_message: trimmed }] };
+            return { value: [trimmed] };
         }
 
         if (Array.isArray(rawValue)) {
@@ -784,14 +832,14 @@ export class ParserRuleModule {
 
     private normalizeSampleLogEntry(sample: unknown): any {
         if (typeof sample === 'string') {
-            return { raw_message: sample };
+            return sample;
         }
 
         if (this.isPlainObject(sample)) {
             return sample;
         }
 
-        return { raw_message: String(sample) };
+        return String(sample);
     }
 
     private normalizeRawMessage(rawValue: unknown, sampleLogs: any[]): { value: string; error?: never } | { error: any } {
@@ -914,7 +962,7 @@ export class ParserRuleModule {
                 enable: requestPayload.enable,
                 rule_count: Array.isArray(requestPayload.rule) ? requestPayload.rule.length : 0,
                 conf_count: Array.isArray(requestPayload.conf) ? requestPayload.conf.length : 0,
-                logtype_count: Array.isArray(requestPayload.logtype) ? requestPayload.logtype.length : 0,
+                logtype_count: typeof requestPayload.logtype === 'string' && requestPayload.logtype.trim() ? 1 : 0,
                 sample_count: Array.isArray(requestPayload.sample_logs) ? requestPayload.sample_logs.length : 0
             },
             summary: {
@@ -1007,13 +1055,39 @@ export class ParserRuleModule {
         return undefined;
     }
 
-    private normalizeQueryLogtype(params: any, hasPayload: boolean): string | undefined {
+    private normalizeQueryLogtype(params: any): string | undefined {
         if (typeof params?.query_logtype === 'string' && params.query_logtype.trim()) {
             return params.query_logtype;
         }
 
-        if (hasPayload && typeof params?.logtype === 'string' && params.logtype.trim()) {
-            return params.logtype;
+        return undefined;
+    }
+
+    private extractVerifyLogtypeValue(rawValue: unknown): string | undefined {
+        if (typeof rawValue === 'string') {
+            const trimmed = rawValue.trim();
+            return trimmed || undefined;
+        }
+
+        if (Array.isArray(rawValue)) {
+            for (const item of rawValue) {
+                const resolved = this.extractVerifyLogtypeValue(item);
+                if (resolved) {
+                    return resolved;
+                }
+            }
+            return undefined;
+        }
+
+        if (!this.isPlainObject(rawValue)) {
+            return undefined;
+        }
+
+        for (const key of ['logtype', 'name', 'type']) {
+            const candidate = rawValue[key];
+            if (typeof candidate === 'string' && candidate.trim()) {
+                return candidate.trim();
+            }
         }
 
         return undefined;

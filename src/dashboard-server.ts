@@ -40,6 +40,7 @@ export function createDashboardServer(context: ServerContext): McpServer {
 
     const handlers = {
         list_dashboard_tabs: async (parameters: Record<string, unknown>) => handleToolExecution('list_dashboard_tabs', () => dashboardModule.listDashboardTabs(parameters), parameters),
+        list_dashboards: async (parameters: Record<string, unknown>) => handleToolExecution('list_dashboards', () => dashboardModule.listDashboards(parameters), parameters),
         get_dashboard_tab_content: async (parameters: Record<string, unknown>) => handleToolExecution('get_dashboard_tab_content', () => dashboardModule.getDashboardTabContent(parameters), parameters),
         clone_dashboard_tab: async (parameters: Record<string, unknown>) => handleToolExecution('clone_dashboard_tab', () => dashboardModule.cloneDashboardTab(parameters), parameters),
         evaluate_dashboard_aesthetics: async (parameters: Record<string, unknown>) => handleToolExecution('evaluate_dashboard_aesthetics', () => dashboardModule.evaluateDashboardAesthetics(parameters), parameters),

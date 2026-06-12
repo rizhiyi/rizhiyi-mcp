@@ -13,6 +13,31 @@ export class LogEaseClient {
         });
     }
 
+    private hasHeader(headers: Record<string, any> | undefined, name: string): boolean {
+        if (!headers) {
+            return false;
+        }
+        const target = name.toLowerCase();
+        return Object.keys(headers).some((key) => key.toLowerCase() === target);
+    }
+
+    private withDefaultHeaders(
+        options: any,
+        defaults: Record<string, string>
+    ): any {
+        const nextOptions = options ? { ...options } : {};
+        const nextHeaders = { ...(nextOptions.headers || {}) };
+
+        for (const [name, value] of Object.entries(defaults)) {
+            if (!this.hasHeader(nextHeaders, name)) {
+                nextHeaders[name] = value;
+            }
+        }
+
+        nextOptions.headers = nextHeaders;
+        return nextOptions;
+    }
+
     private buildTransportError<T>(error: any): ApiResponse<T> {
         const baseMessage = error?.message || '未知网络错误';
         const errorCode = error?.code || '';
@@ -69,7 +94,13 @@ export class LogEaseClient {
      */
     async get<T>(path: string, params?: Record<string, any>, options?: any): Promise<ApiResponse<T>> {
         try {
-            const response: AxiosResponse<T> = await this.client.get(path, { params, ...options });
+            const response: AxiosResponse<T> = await this.client.get(
+                path,
+                {
+                    params,
+                    ...this.withDefaultHeaders(options, { Accept: 'application/json' })
+                }
+            );
             return {
                 status: response.status,
                 data: response.data,
@@ -83,9 +114,19 @@ export class LogEaseClient {
     /**
      * 执行POST请求
      */
-    async post<T>(path: string, data?: any, params?: Record<string, any>): Promise<ApiResponse<T>> {
+    async post<T>(path: string, data?: any, params?: Record<string, any>, options?: any): Promise<ApiResponse<T>> {
         try {
-            const response: AxiosResponse<T> = await this.client.post(path, data, { params });
+            const response: AxiosResponse<T> = await this.client.post(
+                path,
+                data,
+                {
+                    params,
+                    ...this.withDefaultHeaders(options, {
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json;charset=UTF-8'
+                    })
+                }
+            );
             return {
                 status: response.status,
                 data: response.data,
@@ -99,9 +140,19 @@ export class LogEaseClient {
     /**
      * 执行PUT请求
      */
-    async put<T>(path: string, data?: any, params?: Record<string, any>): Promise<ApiResponse<T>> {
+    async put<T>(path: string, data?: any, params?: Record<string, any>, options?: any): Promise<ApiResponse<T>> {
         try {
-            const response: AxiosResponse<T> = await this.client.put(path, data, { params });
+            const response: AxiosResponse<T> = await this.client.put(
+                path,
+                data,
+                {
+                    params,
+                    ...this.withDefaultHeaders(options, {
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json;charset=UTF-8'
+                    })
+                }
+            );
             return {
                 status: response.status,
                 data: response.data,
@@ -117,7 +168,10 @@ export class LogEaseClient {
      */
     async delete<T>(path: string, params?: Record<string, any>): Promise<ApiResponse<T>> {
         try {
-            const response: AxiosResponse<T> = await this.client.delete(path, { params });
+            const response: AxiosResponse<T> = await this.client.delete(
+                path,
+                { params, ...this.withDefaultHeaders(undefined, { Accept: 'application/json' }) }
+            );
             return {
                 status: response.status,
                 data: response.data,

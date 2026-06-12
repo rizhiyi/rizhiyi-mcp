@@ -22,12 +22,14 @@
     "start:dashboard": "npm run build && node dist/dashboard-server.js",
     "start:parserrule": "npm run build && node dist/parserrule-server.js",
     "start:fieldconfig": "npm run build && node dist/fieldconfig-server.js",
+    "start:ingest": "npm run build && node dist/ingest-server.js",
     "start:openapi": "npm run build && node dist/openapi_server.js",
     "dev:search": "node --experimental-specifier-resolution=node --loader ts-node/esm src/log-tools-server.ts",
     "dev:manage": "node --experimental-specifier-resolution=node --loader ts-node/esm src/manage-server.ts",
     "dev:dashboard": "node --experimental-specifier-resolution=node --loader ts-node/esm src/dashboard-server.ts",
     "dev:parserrule": "node --experimental-specifier-resolution=node --loader ts-node/esm src/parserrule-server.ts",
     "dev:fieldconfig": "node --experimental-specifier-resolution=node --loader ts-node/esm src/fieldconfig-server.ts",
+    "dev:ingest": "node --experimental-specifier-resolution=node --loader ts-node/esm src/ingest-server.ts",
     "dev:openapi": "node --experimental-specifier-resolution=node --loader ts-node/esm src/openapi_server.ts"
   },
   "dependencies": {

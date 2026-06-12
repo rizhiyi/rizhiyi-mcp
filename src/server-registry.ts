@@ -2,6 +2,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ServerContext } from './config.js';
 import { createDashboardServer } from './dashboard-server.js';
 import { createFieldConfigServer } from './fieldconfig-server.js';
+import { createIngestServer } from './ingest-server.js';
 import { createLogToolsServer } from './log-tools-server.js';
 import { createManageServer } from './manage-server.js';
 import { createOpenapiServer } from './openapi_server.js';
@@ -15,5 +16,6 @@ export const serverRegistry: Record<string, ServerFactory> = {
     dashboard: createDashboardServer,
     parserrule: createParserRuleServer,
     fieldconfig: createFieldConfigServer,
+    ingest: createIngestServer,
     openapi: createOpenapiServer
 };
