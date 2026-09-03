@@ -76,15 +76,22 @@ export function createChatsplServer(context: ServerContext): McpServer {
             '发送SPL'
         ];
 
+        const progressToken = extra?._meta?.progressToken;
+
         try {
             const result = await chatSplModule.chatSpl(content, deepThink, lang, async (step, index, total) => {
                 const stepName = stepNames[index] || step;
+                if (progressToken === undefined) {
+                    return;
+                }
                 try {
                     await extra.sendNotification({
-                        method: 'notifications/message',
+                        method: 'notifications/progress',
                         params: {
-                            level: 'info',
-                            data: `[${index + 1}/${total}] ${stepName}`
+                            progressToken,
+                            progress: index + 1,
+                            total,
+                            message: stepName
                         }
                     });
                 } catch { /* 客户端可能不支持，忽略 */ }

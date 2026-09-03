@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 from collections.abc import Awaitable, Callable, Iterable
 from contextvars import ContextVar, Token
+import inspect
 import json
 from dataclasses import asdict, dataclass, field
 from typing import Any
@@ -242,13 +243,30 @@ class RizhiyiFastMCPServer(FastMCP[None]):
 
         handler = self._tool_handlers.get(name)
         if handler is not None:
-            return await handler(safe_arguments)
+            return await self._invoke_tool_handler(handler, safe_arguments)
 
         raise McpServerError(
             f"未知工具: {name}",
             code=-32601,
             data={"name": name},
         )
+
+    async def _invoke_tool_handler(self, handler: Any, arguments: dict[str, Any]) -> ToolCallResult:
+        """调用工具 handler；若 handler 声明了第二参数，则注入 FastMCP Context 以支持进度通知。"""
+        try:
+            signature = inspect.signature(handler)
+            wants_context = len(signature.parameters) >= 2
+        except (TypeError, ValueError):
+            wants_context = False
+
+        if not wants_context:
+            return await handler(arguments)
+
+        try:
+            context = self.get_context()
+        except Exception:
+            context = None
+        return await handler(arguments, context)
 
     def _custom_tool_definitions(self) -> list[ToolDefinition]:
         if self._tool_definitions is not None:

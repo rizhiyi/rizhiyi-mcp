@@ -11,6 +11,7 @@ from .service_servers import (
     create_openapi_server,
     create_parserrule_server,
 )
+from .service_chatspl import create_chatspl_server
 from .config import RuntimeConfig
 from .servers import RizhiyiFastMCPServer, ServiceRuntimeState
 
@@ -24,6 +25,7 @@ _SERVER_FACTORIES: dict[str, ServerFactory] = {
     "fieldconfig": create_fieldconfig_server,
     "ingest": create_ingest_server,
     "openapi": create_openapi_server,
+    "chatspl": create_chatspl_server,
 }
 
 server_registry: dict[str, ServerFactory] = dict(_SERVER_FACTORIES)
