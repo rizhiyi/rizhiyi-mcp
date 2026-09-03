@@ -79,6 +79,72 @@ DASHBOARD_SCHEME_COLORS: dict[str, list[list[str]]] = {
     ],
 }
 
+CHART_SPECIFIC_SEARCH_DATA_KEYS: list[str] = [
+    "config",
+    "valueField",
+    "metricField",
+    "singleValueField",
+    "singleChartFontSize",
+    "singleValueFontSize",
+    "singleChartDisplayMode",
+    "singleChartComparsionMode",
+    "singleDisplayMode",
+    "showSparkline",
+    "showComparison",
+    "compareTime",
+    "colorValues",
+    "trendColorType",
+    "scheme",
+    "market_day",
+    "categoryField",
+    "dimensionField",
+    "pieCategoryField",
+    "pieValueField",
+    "showLegend",
+    "legendPosition",
+    "donut",
+    "innerRadius",
+    "labelDisplay",
+    "labelFormatter",
+    "showType",
+    "percentN",
+    "radiusRatio",
+    "outerRadiusRatio",
+    "cornerRadius",
+    "layoutColumns",
+    "trellisField",
+    "yFields",
+    "ySmooths",
+    "yRanges",
+    "yAxisAttrs",
+    "xAxisRotate",
+    "xAxisSort",
+    "byStacks",
+    "columnWidth",
+    "columnBorderRadius",
+    "fromField",
+    "toField",
+    "weightField",
+    "outlierField",
+    "upperField",
+    "lowerField",
+    "fromLongitudeField",
+    "fromLatitudeField",
+    "toLongitudeField",
+    "toLatitudeField",
+    "mapType",
+]
+
+
+def _omit_chart_specific_search_data(search_data: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(search_data, dict):
+        return {}
+    next_search_data = dict(search_data)
+    for key in CHART_SPECIFIC_SEARCH_DATA_KEYS:
+        next_search_data.pop(key, None)
+    return next_search_data
+
+
 def list_supported_dashboard_schemes() -> list[str]:
     return list(DASHBOARD_SCHEME_COLORS)
 
@@ -298,7 +364,11 @@ def get_widget_color(widget: dict[str, Any]) -> str:
 def sanitize_field_name(value: Any) -> str:
     if not isinstance(value, str):
         return ""
-    return re.sub(r"[,)]+$", "", value.strip().strip("`'\""))
+    cleaned = value.strip()
+    cleaned = re.sub(r"^[`'\"]+", "", cleaned)
+    cleaned = re.sub(r"[`'\"]+$", "", cleaned)
+    cleaned = re.sub(r"[,)]+$", "", cleaned)
+    return cleaned
 
 
 def split_field_list(value: Any) -> list[str]:
@@ -444,6 +514,41 @@ def resolve_panel_field_hints(panel: dict[str, Any], chart_type: str) -> dict[st
 
 
 def _build_chart_search_data(chart_type: str, field_hints: dict[str, Any], panel: dict[str, Any], existing: dict[str, Any]) -> dict[str, Any]:
+    result = _build_chart_search_data_core(chart_type, field_hints, panel, existing)
+
+    if chart_type in {"single", "pie", "rose", "multiaxis"}:
+        result.pop("yField", None)
+    if chart_type == "single":
+        for key in ("byFields", "valueField", "metricField", "singleValueField"):
+            result.pop(key, None)
+    if chart_type in {"pie", "rose"}:
+        for key in (
+            "trendColorType",
+            "showLegend",
+            "legendPosition",
+            "donut",
+            "innerRadius",
+            "labelDisplay",
+            "valueField",
+            "metricField",
+            "pieValueField",
+            "categoryField",
+            "dimensionField",
+            "pieCategoryField",
+        ):
+            result.pop(key, None)
+    if chart_type == "multiaxis":
+        for key in ("showLegend", "trendColorType"):
+            result.pop(key, None)
+        result["config"] = []
+    if chart_type == "column":
+        for key in ("showLegend", "trendColorType"):
+            result.pop(key, None)
+
+    return result
+
+
+def _build_chart_search_data_core(chart_type: str, field_hints: dict[str, Any], panel: dict[str, Any], existing: dict[str, Any]) -> dict[str, Any]:
     common = {
         "trendName": panel.get("title") or "Panel",
         "query": panel.get("query") or "*",
@@ -464,6 +569,7 @@ def _build_chart_search_data(chart_type: str, field_hints: dict[str, Any], panel
     if chart_type == "single":
         color = normalize_hex_color(panel.get("color") or existing.get("singleChartFontColor") or existing.get("chartStartingColor")) or "#4A4A4A"
         return {
+            **existing,
             **common,
             "showType": "single",
             "visType": "STATS_NEW",
@@ -491,6 +597,7 @@ def _build_chart_search_data(chart_type: str, field_hints: dict[str, Any], panel
     if chart_type in {"pie", "rose"}:
         color = normalize_hex_color(existing.get("chartStartingColor") or panel.get("color")) or "#3661EB"
         return {
+            **existing,
             **common,
             "chartStartingColor": color,
             "categoryField": field_hints["categoryField"],
@@ -510,11 +617,12 @@ def _build_chart_search_data(chart_type: str, field_hints: dict[str, Any], panel
         }
 
     if chart_type == "liquidfill":
-        return {**common, "xField": field_hints["valueField"]}
+        return {**existing, **common, "xField": field_hints["valueField"]}
 
     if chart_type == "bar":
         color = normalize_hex_color(existing.get("chartStartingColor") or panel.get("color")) or "#3661EB"
         return {
+            **existing,
             **common,
             "xField": field_hints["valueField"],
             "yField": field_hints["categoryField"],
@@ -531,6 +639,7 @@ def _build_chart_search_data(chart_type: str, field_hints: dict[str, Any], panel
 
     if chart_type in {"sunburst", "heatmap", "wordcloud"}:
         return {
+            **existing,
             **common,
             "xField": field_hints["valueField"],
             "byFields": field_hints["byFields"],
@@ -542,6 +651,7 @@ def _build_chart_search_data(chart_type: str, field_hints: dict[str, Any], panel
         y_smooths = field_hints["ySmooths"] or [False for _ in y_fields]
         y_ranges = field_hints["yRanges"] or [{} for _ in y_fields]
         return {
+            **existing,
             **common,
             "chartType": "multiaxis",
             "xField": field_hints["xField"],
@@ -555,6 +665,7 @@ def _build_chart_search_data(chart_type: str, field_hints: dict[str, Any], panel
     if chart_type == "column":
         color = normalize_hex_color(existing.get("chartStartingColor") or panel.get("color")) or "#5C9DF5"
         return {
+            **existing,
             **common,
             "xField": field_hints["xField"],
             "yField": field_hints["yField"],
@@ -571,6 +682,7 @@ def _build_chart_search_data(chart_type: str, field_hints: dict[str, Any], panel
 
     if chart_type == "rangeline":
         return {
+            **existing,
             **common,
             "xField": field_hints["xField"],
             "yField": field_hints["yField"],
@@ -586,6 +698,7 @@ def _build_chart_search_data(chart_type: str, field_hints: dict[str, Any], panel
 
     if chart_type in {"chord", "sankey", "force", "networkflow", "tracing"}:
         return {
+            **existing,
             **common,
             "fromField": sanitize_field_name(panel.get("fromField") or existing.get("fromField")),
             "toField": sanitize_field_name(panel.get("toField") or existing.get("toField")),
@@ -599,6 +712,7 @@ def _build_chart_search_data(chart_type: str, field_hints: dict[str, Any], panel
 
     if chart_type == "attackmap":
         return {
+            **existing,
             **common,
             "fromField": sanitize_field_name(panel.get("fromField") or existing.get("fromField")),
             "toField": sanitize_field_name(panel.get("toField") or existing.get("toField")),
@@ -625,6 +739,7 @@ def _build_chart_search_data(chart_type: str, field_hints: dict[str, Any], panel
 
     color = normalize_hex_color(existing.get("chartStartingColor") or panel.get("color"))
     result = {
+        **existing,
         **common,
         "xField": field_hints["xField"],
         "yField": field_hints["yField"],
@@ -701,7 +816,7 @@ def patch_widget_with_changes(widget: dict[str, Any], merged_panel: dict[str, An
     existing_search_data = widget.get("searchData") if isinstance(widget.get("searchData"), dict) else {}
     normalized_kind = normalize_panel_kind(merged_panel.get("type"), merged_panel.get("chartType"))
     if "chartType" in changes:
-        existing_search_data = {key: value for key, value in existing_search_data.items() if key in {"scheme", "market_day", "trendColorType", "legendPosition", "xAxisRotate", "xAxisSort"}}
+        existing_search_data = _omit_chart_specific_search_data(existing_search_data)
     next_widget = deepcopy(widget)
     next_widget["type"] = normalized_kind["type"]
     next_widget["searchData"] = _build_chart_search_data(

@@ -266,7 +266,7 @@ export function normalizePanelSpec(panel: any, index: number, options: { applyDe
         yFields: splitFieldList(panel?.yFields),
         ySmooths: normalizeBooleanList(panel?.ySmooths),
         yRanges: normalizeRangeList(panel?.yRanges),
-        byFields: Array.isArray(panel?.byFields) ? panel.byFields : [],
+        byFields: splitFieldList(panel?.byFields),
         outlierField: sanitizeFieldName(panel?.outlierField || ''),
         upperField: sanitizeFieldName(panel?.upperField || ''),
         lowerField: sanitizeFieldName(panel?.lowerField || ''),
@@ -648,7 +648,7 @@ function buildSequenceChartConfig(chartType: string, searchData: Record<string, 
             yRange: yRanges[0] || searchData?.yRange || { min: '', max: '' }
         },
         {
-            byFields: Array.isArray(searchData?.byFields) ? searchData.byFields : [],
+            byFields: splitFieldList(searchData?.byFields),
             byStacks: Array.isArray(searchData?.byStacks) && searchData.byStacks.length > 0
                 ? searchData.byStacks.some(Boolean)
                 : Boolean(searchData?.byStacks)
@@ -729,11 +729,11 @@ function buildDimensionChartConfig(chartType: string, searchData: Record<string,
                 xField: searchData?.categoryField
                     || searchData?.dimensionField
                     || searchData?.pieCategoryField
-                    || (Array.isArray(searchData?.byFields) ? searchData.byFields[0] : '')
+                    || splitFieldList(searchData?.byFields)[0]
                     || ''
             },
             {
-                byFields: Array.isArray(searchData?.byFields) ? searchData.byFields : []
+                byFields: splitFieldList(searchData?.byFields)
             },
             {
                 trellisField: searchData?.trellisField || '',
@@ -765,13 +765,13 @@ function buildDimensionChartConfig(chartType: string, searchData: Record<string,
     if (chartType === 'bar') {
         return [
             {
-                xField: searchData?.yField || (Array.isArray(searchData?.byFields) ? searchData.byFields[0] : '') || ''
+                xField: searchData?.yField || splitFieldList(searchData?.byFields)[0] || ''
             },
             {
-                yField: searchData?.yField || (Array.isArray(searchData?.byFields) ? searchData.byFields[0] : '') || ''
+                yField: searchData?.yField || splitFieldList(searchData?.byFields)[0] || ''
             },
             {
-                byFields: searchData?.yField ? [searchData.yField] : (Array.isArray(searchData?.byFields) ? searchData.byFields : []),
+                byFields: searchData?.yField ? [searchData.yField] : splitFieldList(searchData?.byFields),
                 byStacks: Boolean(searchData?.byStacks)
             },
             {
@@ -797,7 +797,7 @@ function buildDimensionChartConfig(chartType: string, searchData: Record<string,
                 xField: searchData?.xField || ''
             },
             {
-                byFields: Array.isArray(searchData?.byFields) ? searchData.byFields : []
+                byFields: splitFieldList(searchData?.byFields)
             }
         ];
     }
@@ -807,7 +807,7 @@ function buildDimensionChartConfig(chartType: string, searchData: Record<string,
             xField: searchData?.xField || ''
         }),
         createConfigBlock('group', {
-            byFields: Array.isArray(searchData?.byFields) ? searchData.byFields : []
+            byFields: splitFieldList(searchData?.byFields)
         }),
         createConfigBlock('style', {
             trendColorType: searchData?.trendColorType || DEFAULT_TREND_COLOR_TYPE,
@@ -1383,7 +1383,7 @@ export function widgetToPanel(widget: any): any {
         yFields: splitFieldList(searchData?.yFields),
         ySmooths: normalizeBooleanList(searchData?.ySmooths),
         yRanges: normalizeRangeList(searchData?.yRanges),
-        byFields: Array.isArray(searchData?.byFields) ? searchData.byFields : [],
+        byFields: splitFieldList(searchData?.byFields),
         outlierField: sanitizeFieldName(searchData?.outlierField || ''),
         upperField: sanitizeFieldName(searchData?.upperField || ''),
         lowerField: sanitizeFieldName(searchData?.lowerField || ''),
