@@ -66,6 +66,8 @@ class LogEaseHttpClient:
 
     async def _request(self, method: str, path: str, **kwargs: Any) -> ApiResponse[Any]:
         try:
+            # 自动注入 username 到 query params（避免中文 username 写入 HTTP header）
+            kwargs["params"] = self._merge_username_into_params(kwargs.get("params"))
             kwargs["headers"] = self._merge_default_headers(
                 method=method,
                 headers=kwargs.get("headers"),
@@ -152,6 +154,16 @@ class LogEaseHttpClient:
         if method.upper() in {"POST", "PUT", "PATCH"} and has_json_body and not _has_header(merged_headers, "Content-Type"):
             merged_headers["Content-Type"] = "application/json;charset=UTF-8"
         return merged_headers
+
+    def _merge_username_into_params(
+        self,
+        params: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        merged = dict(params) if params else {}
+        username = self._config.username
+        if username and "username" not in merged:
+            merged["username"] = username
+        return merged
 
 
 def _decode_response_body(response: httpx.Response) -> Any:

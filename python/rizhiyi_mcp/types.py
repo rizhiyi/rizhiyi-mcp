@@ -36,6 +36,7 @@ class HttpClientConfig:
     headers: dict[str, str]
     verify_tls: bool = False
     timeout_seconds: float = 30.0
+    username: str | None = None
 
 
 @dataclass(slots=True)
@@ -80,6 +81,7 @@ class ApiKeyAuthorization:
     kind: Literal["apikey"]
     raw_authorization: str
     api_key_preview: str
+    username: str | None = None
 
 
 @dataclass(slots=True)
@@ -96,6 +98,7 @@ ParsedAuthorization = ApiKeyAuthorization | BasicAuthorization
 class AuthContext:
     authorization: ParsedAuthorization | None
     headers: dict[str, str]
+    username: str | None = None
 
 
 if TYPE_CHECKING:

@@ -19,6 +19,7 @@ class RuntimeConfig(BaseSettings):
     )
 
     logease_base_url: str = "http://127.0.0.1:8090"
+    logease_username: str | None = None
     logease_tls_reject_unauthorized: bool = False
     mcp_http_host: str = "0.0.0.0"
     mcp_http_port: int = 3000
@@ -64,6 +65,7 @@ class RuntimeConfig(BaseSettings):
             headers=auth_context.headers,
             verify_tls=self.logease_tls_reject_unauthorized,
             timeout_seconds=self.upstream_timeout_seconds,
+            username=auth_context.username,
         )
 
 
