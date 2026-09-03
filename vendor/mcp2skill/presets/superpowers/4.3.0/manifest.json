@@ -1,0 +1,14 @@
+{
+  "server": "superpowers",
+  "server_version": "4.3.0",
+  "tool_count": 2,
+  "cli_hash": "44dd1b4e",
+  "generated_at": "2026-04-06T08:07:00.687286+00:00",
+  "generated_by": "mcp2cli-push",
+  "files": [
+    "tools.json",
+    "cli.yaml",
+    "skills/SKILL.md",
+    "skills/reference/skill.md"
+  ]
+}

@@ -1,0 +1,229 @@
+{
+  "server": "openspec",
+  "version": "1.0.0",
+  "scanned_at": "2026-04-06T08:21:29.913975+00:00",
+  "tools": [
+    {
+      "name": "openspec_init",
+      "description": "Initialize OpenSpec in your project",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "openspec_update",
+      "description": "Update OpenSpec instruction files",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "openspec_list",
+      "description": "List items (changes or specs). Returns a JSON array when --json is used.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "specs": {
+            "type": "boolean",
+            "description": "List specs instead of changes"
+          },
+          "json": {
+            "type": "boolean",
+            "description": "Output as JSON",
+            "default": true
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "openspec_show",
+      "description": "Show a change or spec. Use type to specify if it is ambiguous.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "itemName": {
+            "type": "string",
+            "description": "Name of the item to show"
+          },
+          "type": {
+            "type": "string",
+            "description": "Item type: \"change\" or \"spec\""
+          },
+          "json": {
+            "type": "boolean",
+            "description": "Output as JSON",
+            "default": true
+          }
+        },
+        "required": [
+          "itemName"
+        ]
+      }
+    },
+    {
+      "name": "openspec_validate",
+      "description": "Validate a change proposal or spec",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "itemName": {
+            "type": "string",
+            "description": "Name of the change to validate (optional)"
+          },
+          "all": {
+            "type": "boolean",
+            "description": "Validate all changes and specs"
+          },
+          "strict": {
+            "type": "boolean",
+            "description": "Enable strict validation mode"
+          },
+          "json": {
+            "type": "boolean",
+            "description": "Output as JSON"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "openspec_archive",
+      "description": "Archive a completed change and update main specs",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "changeName": {
+            "type": "string",
+            "description": "Name of the change to archive"
+          },
+          "skipSpecs": {
+            "type": "boolean",
+            "description": "Skip spec updates"
+          }
+        },
+        "required": [
+          "changeName"
+        ]
+      }
+    },
+    {
+      "name": "openspec_new_change",
+      "description": "Create a new change directory",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Name of the change"
+          },
+          "description": {
+            "type": "string",
+            "description": "Description to add to README.md"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
+    },
+    {
+      "name": "openspec_status",
+      "description": "Display artifact completion status for a change",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "changeName": {
+            "type": "string",
+            "description": "Change name to show status for"
+          },
+          "json": {
+            "type": "boolean",
+            "description": "Output as JSON",
+            "default": true
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "openspec_instructions",
+      "description": "Output enriched instructions for an artifact or apply",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "artifact": {
+            "type": "string",
+            "description": "Artifact name (e.g. design.md, tasks.md) or \"apply\""
+          },
+          "changeName": {
+            "type": "string",
+            "description": "Change name"
+          },
+          "json": {
+            "type": "boolean",
+            "description": "Output as JSON"
+          }
+        },
+        "required": [
+          "artifact"
+        ]
+      }
+    },
+    {
+      "name": "openspec_read_file",
+      "description": "Read any OpenSpec artifact directly. Much faster than show — use this when you need file contents.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Change or spec name (e.g. \"add-dark-mode\")"
+          },
+          "fileType": {
+            "type": "string",
+            "description": "File to read",
+            "enum": [
+              "proposal.md",
+              "design.md",
+              "tasks.md",
+              ".openspec.yaml"
+            ]
+          },
+          "type": {
+            "type": "string",
+            "description": "Item type to disambiguate if a change and spec share the same name. If omitted, prefers changes.",
+            "enum": [
+              "change",
+              "spec"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "fileType"
+        ]
+      }
+    },
+    {
+      "name": "openspec_refresh_cache",
+      "description": "Force refresh the cached directory listing. Use if you suspect changes were made outside OpenSpec tools.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    }
+  ],
+  "server_meta": {
+    "command": "npx",
+    "args": [
+      "-y",
+      "@igor-olikh/openspec-mcp-server"
+    ]
+  }
+}

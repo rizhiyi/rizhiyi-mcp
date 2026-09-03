@@ -1,0 +1,131 @@
+server: chrome-devtools-mcp
+version: "0.21.0"
+generated_at: "2026-04-06T08:00:00Z"
+generated_by: ai
+
+server_aliases:
+  - chrome-devtools
+
+command_shortcuts: []
+
+commands:
+  page:
+    _description: "Browser page lifecycle management"
+    list:
+      _tool: list_pages
+      _description: "List all open pages in the browser"
+    create:
+      _tool: new_page
+      _description: "Open a new tab and load a URL"
+      _examples:
+        - "mcp2cli chrome-devtools-mcp page create --url https://example.com"
+    navigate:
+      _tool: navigate_page
+      _description: "Navigate to a URL or go back, forward, or reload"
+      _examples:
+        - "mcp2cli chrome-devtools-mcp page navigate --type url --url https://example.com"
+    close:
+      _tool: close_page
+      _description: "Close a page by its ID"
+    select:
+      _tool: select_page
+      _description: "Select a page as context for future tool calls"
+    resize:
+      _tool: resize_page
+      _description: "Resize the page window to specified dimensions"
+    emulate:
+      _tool: emulate
+      _description: "Emulate network conditions, CPU, geolocation, or viewport"
+    wait:
+      _tool: wait_for
+      _description: "Wait for specified text to appear on the page"
+
+  element:
+    _description: "DOM element interaction"
+    click:
+      _tool: click
+      _description: "Click on an element"
+    hover:
+      _tool: hover
+      _description: "Hover over an element"
+    drag:
+      _tool: drag
+      _description: "Drag an element onto another element"
+    fill:
+      _tool: fill
+      _description: "Type text into an input or select an option"
+    fill-form:
+      _tool: fill_form
+      _description: "Fill multiple form elements at once"
+    type:
+      _tool: type_text
+      _description: "Type text using keyboard into a focused input"
+    press-key:
+      _tool: press_key
+      _description: "Press a key or key combination"
+    upload:
+      _tool: upload_file
+      _description: "Upload a file through a file input element"
+
+  dialog:
+    _description: "Browser dialog handling"
+    handle:
+      _tool: handle_dialog
+      _description: "Accept or dismiss a browser dialog"
+
+  capture:
+    _description: "Page capture and snapshot operations"
+    snapshot:
+      _tool: take_snapshot
+      _description: "Take a text snapshot of the page based on the accessibility tree"
+      _examples:
+        - "mcp2cli chrome-devtools-mcp capture snapshot"
+    screenshot:
+      _tool: take_screenshot
+      _description: "Take a screenshot of the page or an element"
+      _examples:
+        - "mcp2cli chrome-devtools-mcp capture screenshot --format png"
+
+  console:
+    _description: "Browser console monitoring"
+    list:
+      _tool: list_console_messages
+      _description: "List all console messages for the current page"
+    get:
+      _tool: get_console_message
+      _description: "Get a console message by its ID"
+
+  network:
+    _description: "Network request monitoring"
+    list:
+      _tool: list_network_requests
+      _description: "List all network requests for the current page"
+    get:
+      _tool: get_network_request
+      _description: "Get details of a network request by ID"
+
+  script:
+    _description: "JavaScript execution"
+    evaluate:
+      _tool: evaluate_script
+      _description: "Evaluate a JavaScript function in the current page"
+      _examples:
+        - "mcp2cli chrome-devtools-mcp script evaluate --function '() => document.title'"
+
+  performance:
+    _description: "Performance tracing and analysis"
+    trace-start:
+      _tool: performance_start_trace
+      _description: "Start a performance trace on the current page"
+    trace-stop:
+      _tool: performance_stop_trace
+      _description: "Stop the active performance trace recording"
+    analyze:
+      _tool: performance_analyze_insight
+      _description: "Analyze a specific performance insight from a trace"
+    memory-snapshot:
+      _tool: take_memory_snapshot
+      _description: "Capture a heap snapshot for memory analysis"
+    lighthouse:
+      _tool: lighthouse_audit
+      _description: "Run a Lighthouse audit for accessibility, SEO, and best practices"

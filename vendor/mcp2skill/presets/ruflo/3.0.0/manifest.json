@@ -1,0 +1,23 @@
+{
+  "server": "ruflo",
+  "server_version": "3.0.0",
+  "tool_count": 254,
+  "cli_hash": "d3fd1093",
+  "generated_at": "2026-04-06T08:43:09.828172+00:00",
+  "generated_by": "mcp2cli-push",
+  "files": [
+    "tools.json",
+    "cli.yaml",
+    "skills/SKILL.md",
+    "skills/reference/agent.md",
+    "skills/reference/browser.md",
+    "skills/reference/claims.md",
+    "skills/reference/config.md",
+    "skills/reference/hive-mind.md",
+    "skills/reference/hooks.md",
+    "skills/reference/memory.md",
+    "skills/reference/swarm.md",
+    "skills/reference/task.md",
+    "skills/reference/workflow.md"
+  ]
+}

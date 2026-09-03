@@ -1,0 +1,19 @@
+{
+  "server": "serena",
+  "server_version": "1.26.0",
+  "tool_count": 28,
+  "cli_hash": "bc6b949c",
+  "generated_at": "2026-04-06T08:51:52.903660+00:00",
+  "generated_by": "mcp2cli-push",
+  "files": [
+    "tools.json",
+    "cli.yaml",
+    "skills/SKILL.md",
+    "skills/reference/file.md",
+    "skills/reference/memory.md",
+    "skills/reference/project.md",
+    "skills/reference/session.md",
+    "skills/reference/shell.md",
+    "skills/reference/symbol.md"
+  ]
+}

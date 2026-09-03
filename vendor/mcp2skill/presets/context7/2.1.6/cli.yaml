@@ -1,0 +1,23 @@
+server: context7
+version: "2.1.6"
+generated_at: "2026-04-06T08:07:04Z"
+generated_by: ai
+
+server_aliases: []
+
+command_shortcuts: []
+
+commands:
+  library:
+    _description: "Library ID resolution and documentation operations"
+    resolve:
+      _tool: resolve-library-id
+      _description: "Resolve a library name to a Context7-compatible library ID"
+      _examples:
+        - "mcp2cli context7 library resolve --library-name react --query 'hooks usage'"
+        - "mcp2cli context7 library resolve --library-name 'next.js' --query 'server side rendering'"
+    search:
+      _tool: query-docs
+      _description: "Query up-to-date documentation and code examples for a library"
+      _examples:
+        - "mcp2cli context7 library search --library-id '/vercel/next.js' --query 'How to set up authentication with JWT'"

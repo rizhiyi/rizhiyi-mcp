@@ -166,3 +166,4 @@ __pycache__/
 .mypy_cache/
 .venv/
 python/.venv/
+*.egg-info/

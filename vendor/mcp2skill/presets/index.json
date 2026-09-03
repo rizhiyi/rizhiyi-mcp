@@ -1,0 +1,276 @@
+{
+  "version": 3,
+  "updated_at": "2026-04-06T10:34:06.532859+00:00",
+  "presets": [
+    {
+      "server": "agentops-mcp",
+      "latest": "0.3.0",
+      "versions": [
+        "0.3.0"
+      ],
+      "description": "Monitor AI agent traces and spans via CLI. Use when user needs to authorize with AgentOps, retrieve trace information, or inspect span metrics.",
+      "updated_at": "2026-04-06T09:04:18.219807+00:00",
+      "tool_count": 4
+    },
+    {
+      "server": "aws-mcp",
+      "latest": "3.2.0",
+      "versions": [
+        "3.2.0"
+      ],
+      "description": "Execute and suggest AWS CLI commands across all AWS services via natural language or direct CLI syntax. Use when user needs to manage EC2, S3, IAM, Lambda, RDS, or any other AWS resource.",
+      "updated_at": "2026-04-06T09:18:44.815551+00:00",
+      "tool_count": 2
+    },
+    {
+      "server": "beads",
+      "latest": "3.2.0",
+      "versions": [
+        "3.2.0"
+      ],
+      "description": "Manage issues, track dependencies, and monitor workspace progress via CLI. Use when user needs to create/list/update issues, manage blockers, claim work, or get project stats.",
+      "updated_at": "2026-04-06T08:55:03.603079+00:00",
+      "tool_count": 15
+    },
+    {
+      "server": "bigquery-mcp",
+      "latest": "0.1.0",
+      "versions": [
+        "0.1.0"
+      ],
+      "description": "Run read-only BigQuery SQL queries via CLI. Use when user needs to query BigQuery datasets, run SQL against Google BigQuery, or retrieve data from BigQuery tables.",
+      "updated_at": "2026-04-06T09:16:47.884897+00:00",
+      "tool_count": 1
+    },
+    {
+      "server": "blender-mcp",
+      "latest": "1.27.0",
+      "versions": [
+        "1.27.0"
+      ],
+      "description": "Control Blender scenes, execute Python code, and import 3D assets from PolyHaven/Sketchfab/Hyper3D/Hunyuan3D via CLI. Use when user needs to manipulate Blender objects, generate AI 3D models, or apply textures.",
+      "updated_at": "2026-04-06T08:59:26.151477+00:00",
+      "tool_count": 22
+    },
+    {
+      "server": "browser-mcp",
+      "latest": "0.1.3",
+      "versions": [
+        "0.1.3"
+      ],
+      "description": "Automate browser navigation, element interaction, and page capture via CLI. Use when user needs to navigate URLs, click/type/select page elements, take screenshots, or extract console logs.",
+      "updated_at": "2026-04-06T09:06:23.354032+00:00",
+      "tool_count": 12
+    },
+    {
+      "server": "chrome-devtools-mcp",
+      "latest": "0.21.0",
+      "versions": [
+        "0.21.0"
+      ],
+      "description": "Automate browser interactions via Chrome DevTools — control pages, interact with DOM elements, capture screenshots/snapshots, monitor console/network, evaluate JS, and run performance/Lighthouse audits. Use when user needs to navigate websites, fill forms, take screenshots, test web apps, or analyze page performance.",
+      "updated_at": "2026-04-06T08:27:18.731315+00:00",
+      "tool_count": 29
+    },
+    {
+      "server": "cloudflare-mcp",
+      "latest": "0.4.6",
+      "versions": [
+        "0.4.6"
+      ],
+      "description": "Search Cloudflare documentation and get migration guides via CLI. Use when user needs to look up Workers, Pages, R2, D1, KV, Zero Trust, CDN, DNS, or any Cloudflare product/feature documentation.",
+      "updated_at": "2026-04-06T09:20:17.934235+00:00",
+      "tool_count": 2
+    },
+    {
+      "server": "context7",
+      "latest": "2.1.6",
+      "versions": [
+        "2.1.6"
+      ],
+      "description": "Fetch up-to-date library documentation and code examples via Context7. Use when user needs to resolve library IDs or query docs for any programming library or framework.",
+      "updated_at": "2026-04-06T08:08:51.834923+00:00",
+      "tool_count": 2
+    },
+    {
+      "server": "dayuanjiang-next-ai-draw-io",
+      "latest": "0.1.2",
+      "versions": [
+        "0.1.2"
+      ],
+      "description": "Create, edit, and export draw.io diagrams via CLI with real-time browser preview. Use when user needs to create or modify diagrams, generate mxGraphModel XML, or export diagrams as PNG/SVG.",
+      "updated_at": "2026-04-06T05:54:35.103945+00:00",
+      "tool_count": 5
+    },
+    {
+      "server": "fastmcp-demo",
+      "latest": "3.2.0",
+      "versions": [
+        "3.2.0"
+      ],
+      "description": "Ping a FastMCP demo server to check connectivity. Use when user needs to test or verify MCP server connectivity.",
+      "updated_at": "2026-04-06T08:47:29.810056+00:00",
+      "tool_count": 1
+    },
+    {
+      "server": "filesystem-mcp",
+      "latest": "0.2.0",
+      "versions": [
+        "0.2.0"
+      ],
+      "description": "Read, write, edit, move, and search files and directories via CLI. Use when user needs to access file contents, manage directory structures, or search for files by pattern.",
+      "updated_at": "2026-04-06T09:02:05.962007+00:00",
+      "tool_count": 14
+    },
+    {
+      "server": "mcp-atlassian",
+      "latest": "2.14.6",
+      "versions": [
+        "2.14.6"
+      ],
+      "description": "Manage JIRA issues, sprints, boards, and Confluence pages via CLI. Use when user needs to create/search/update JIRA tickets, manage sprints, or edit Confluence pages.",
+      "updated_at": "2026-04-05T06:27:34.288105+00:00",
+      "tool_count": 72
+    },
+    {
+      "server": "memory-mcp",
+      "latest": "0.6.3",
+      "versions": [
+        "0.6.3"
+      ],
+      "description": "Manage a persistent knowledge graph with entities, relations, and observations via CLI. Use when user needs to store, retrieve, search, or update structured memory/knowledge.",
+      "updated_at": "2026-04-06T09:13:02.739772+00:00",
+      "tool_count": 9
+    },
+    {
+      "server": "next-ai-drawio",
+      "latest": "0.1.2",
+      "versions": [
+        "0.1.2"
+      ],
+      "description": "Create, edit, and export draw.io diagrams via CLI with real-time browser preview. Use when user needs to create flowcharts, diagrams, or edit mxGraphModel XML diagrams.",
+      "updated_at": "2026-04-06T08:46:00.148330+00:00",
+      "tool_count": 5
+    },
+    {
+      "server": "openspec",
+      "latest": "1.0.0",
+      "versions": [
+        "1.0.0"
+      ],
+      "description": "Manage OpenSpec change lifecycle and project specs via CLI. Use when user needs to create/archive changes, check artifact status, validate proposals, or browse specs.",
+      "updated_at": "2026-04-06T08:23:38.339821+00:00",
+      "tool_count": 11
+    },
+    {
+      "server": "playwright-mcp",
+      "latest": "1.60.0-alpha-1774999321000",
+      "versions": [
+        "1.60.0-alpha-1774999321000"
+      ],
+      "description": "Automate browser interactions via CLI. Use when user needs to navigate websites, click elements, fill forms, take screenshots, capture accessibility snapshots, or run JavaScript in a browser.",
+      "updated_at": "2026-04-06T08:30:49.884406+00:00",
+      "tool_count": 21
+    },
+    {
+      "server": "postgres-mcp",
+      "latest": "0.1.0",
+      "versions": [
+        "0.1.0"
+      ],
+      "description": "Run read-only SQL queries against a PostgreSQL database via CLI. Use when user needs to query, inspect, or retrieve data from a Postgres database.",
+      "updated_at": "2026-04-06T09:14:59.282145+00:00",
+      "tool_count": 1
+    },
+    {
+      "server": "puppeteer-mcp",
+      "latest": "0.1.0",
+      "versions": [
+        "0.1.0"
+      ],
+      "description": "Automate browser interactions via Puppeteer CLI — navigate pages, take screenshots, click/fill/hover elements, and execute JavaScript. Use when user needs to browse URLs, capture screenshots, fill forms, or run JS in a browser.",
+      "updated_at": "2026-04-06T09:08:26.124354+00:00",
+      "tool_count": 7
+    },
+    {
+      "server": "ruflo",
+      "latest": "3.0.0",
+      "versions": [
+        "3.0.0"
+      ],
+      "description": "Manage multi-agent swarms, memory, tasks, hooks, workflows, and browser automation via CLI. Use when spawning agents, storing/searching memory, orchestrating workflows, coordinating hive-minds, or automating browser interactions.",
+      "updated_at": "2026-04-06T08:43:09.828172+00:00",
+      "tool_count": 254
+    },
+    {
+      "server": "sequential-thinking-mcp",
+      "latest": "0.2.0",
+      "versions": [
+        "0.2.0"
+      ],
+      "description": "Perform dynamic, reflective sequential reasoning for complex problem-solving. Use when user needs to break down problems step-by-step, plan with revision, or maintain multi-step reasoning context.",
+      "updated_at": "2026-04-06T09:10:03.131016+00:00",
+      "tool_count": 1
+    },
+    {
+      "server": "serena",
+      "latest": "1.26.0",
+      "versions": [
+        "1.26.0"
+      ],
+      "description": "Code editing and project management via Serena MCP. Use when user needs to read/write files, find/rename symbols, run shell commands, or manage project memory.",
+      "updated_at": "2026-04-06T08:51:52.903660+00:00",
+      "tool_count": 28
+    },
+    {
+      "server": "superpowers",
+      "latest": "4.3.0",
+      "versions": [
+        "4.3.0"
+      ],
+      "description": "List and read Superpowers skills via CLI. Use when user needs to discover available skills or load skill instructions before performing a task.",
+      "updated_at": "2026-04-06T08:07:00.687286+00:00",
+      "tool_count": 2
+    },
+    {
+      "server": "trendradar",
+      "latest": "1.16.0",
+      "versions": [
+        "1.16.0"
+      ],
+      "description": "Monitor trending news, analyze topics, aggregate cross-platform content, and send notifications via CLI. Use when user needs to get latest news, search trends, analyze sentiment, compare periods, or generate reports.",
+      "updated_at": "2026-04-06T08:21:22.666980+00:00",
+      "tool_count": 27
+    },
+    {
+      "server": "zereight-gitlab-mcp",
+      "latest": "2.0.35",
+      "versions": [
+        "2.0.35"
+      ],
+      "description": "Manage GitLab repos, MRs, issues, pipelines, deployments, and releases via CLI. Use when user needs to create/search repos, review/merge MRs, manage issues, or run pipelines.",
+      "updated_at": "2026-04-05T10:57:50.052261+00:00",
+      "tool_count": 122
+    }
+  ],
+  "aliases": {
+    "agentops": "agentops-mcp",
+    "atlassian": "mcp-atlassian",
+    "aws": "aws-mcp",
+    "bigquery": "bigquery-mcp",
+    "blender": "blender-mcp",
+    "browser": "browser-mcp",
+    "chrome-devtools": "chrome-devtools-mcp",
+    "cloudflare": "cloudflare-mcp",
+    "drawio": "next-ai-drawio",
+    "fastmcp": "fastmcp-demo",
+    "filesystem": "filesystem-mcp",
+    "gitlab": "zereight-gitlab-mcp",
+    "memory": "memory-mcp",
+    "next-ai-draw-io": "dayuanjiang-next-ai-draw-io",
+    "playwright": "playwright-mcp",
+    "postgres": "postgres-mcp",
+    "puppeteer": "puppeteer-mcp",
+    "sequential-thinking": "sequential-thinking-mcp"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "server": "fastmcp-demo",
+  "version": "3.2.0",
+  "scanned_at": "2026-04-06T08:46:13.410597+00:00",
+  "tools": [
+    {
+      "name": "ping",
+      "description": "",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      }
+    }
+  ],
+  "server_meta": {
+    "command": "bash",
+    "args": [
+      "-lc",
+      "tmp=$(mktemp -d) && cat > \"$tmp/server.py\" <<'PY'\nfrom fastmcp import FastMCP\n\nmcp = FastMCP('FastMCP Demo')\n\n\n@mcp.tool\ndef ping() -> str:\n    return 'pong'\n\n\nif __name__ == '__main__':\n    mcp.run()\nPY\nuvx --from fastmcp fastmcp run \"$tmp/server.py\""
+    ]
+  }
+}

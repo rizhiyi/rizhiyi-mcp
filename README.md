@@ -9,17 +9,44 @@
 - 这是一个面向 AI 智能体的 MCP Server 集合，目标是：在不撑爆上下文窗口的前提下，把“查日志 + 做分析 + 生成仪表盘/配置”的能力以工具形式交给智能体。
 - **核心设计点**：大结果不直接塞进对话里，而是落到 MCP 标准 `resource`，以 `resource_uri` 的形式在工具之间共享（按需读取、避免重复拉取）。
 
+## 目录结构
+
+本仓库是多语言 monorepo，TS 与 Python 两种实现平级共存：
+
+```
+rizhiyi-mcp/
+├── config/        # 共享 API schema（TS/Python 共用）
+├── ts/            # TS 实现：stdio + streamable_http
+│   ├── src/         #   源码（各 *-server.ts 入口 + modules/ 领域实现）
+│   ├── scripts/     #   http-smoke-test.mjs、setup.sh
+│   ├── package.json、tsconfig.json、.env.example
+│   └── dist/        #   构建产物（gitignore）
+├── python/        # Python 实现：仅 streamable_http
+│   ├── rizhiyi_mcp/ #   源码包
+│   ├── tests/
+│   ├── pyproject.toml、.env.example
+│   └── .venv/       #   本地虚拟环境（gitignore）
+├── skill/         # skill 交付物（SKILL.md）
+├── vendor/        # 隔离的第三方工具
+│   └── mcp2skill/  #   mcp2cli（自带 LICENSE/presets，与主代码解耦）
+└── README.md、CHANGELOG.md、LICENSE、.gitignore
+```
+
+- TS 与 Python 长期平级维护：TS 同时支持 `stdio` 与 `streamable_http`；Python 当前仅 `streamable_http`。
+- `config/` 居于仓库根，两种实现都从这里读取 API schema。
+- 所有 TS 命令须在 `ts/` 下执行（`cd ts && npm ...`）；Python 命令在 `python/` 下执行。
+
 ### 服务器一览
 
 | MCP 服务器 | 入口脚本 | 适用场景 |
 | --- | --- | --- |
-| `rizhiyi_search` | `dist/log-tools-server.js` | 日志检索、统计分析、趋势/异常、根因分析 |
-| `rizhiyi_manage` | `dist/manage-server.js` | 管理类 OpenAPI（按 tag 分层暴露，降低工具面） |
-| `rizhiyi_dashboard` | `dist/dashboard-server.js` | 仪表盘创建/更新/校验与美观度评分 |
-| `rizhiyi_parserule` | `dist/parserrule-server.js` | 解析规则（schema on write）常用操作 |
-| `rizhiyi_dynamic_field` | `dist/fieldconfig-server.js` | 动态字段（schema on read）常用操作 |
-| `rizhiyi_ingest` | `dist/ingest-server.js` | Agent 分组管理、pipeline 管理、Agent 只读状态查询 |
-| `openapi_server` | `dist/openapi_server.js` | OpenAPI 直封装（可选；未裁剪时接口过多，容易撑爆上下文） |
+| `rizhiyi_search` | `ts/dist/log-tools-server.js` | 日志检索、统计分析、趋势/异常、根因分析 |
+| `rizhiyi_manage` | `ts/dist/manage-server.js` | 管理类 OpenAPI（按 tag 分层暴露，降低工具面） |
+| `rizhiyi_dashboard` | `ts/dist/dashboard-server.js` | 仪表盘创建/更新/校验与美观度评分 |
+| `rizhiyi_parserule` | `ts/dist/parserrule-server.js` | 解析规则（schema on write）常用操作 |
+| `rizhiyi_dynamic_field` | `ts/dist/fieldconfig-server.js` | 动态字段（schema on read）常用操作 |
+| `rizhiyi_ingest` | `ts/dist/ingest-server.js` | Agent 分组管理、pipeline 管理、Agent 只读状态查询 |
+| `openapi_server` | `ts/dist/openapi_server.js` | OpenAPI 直封装（可选；未裁剪时接口过多，容易撑爆上下文） |
 
 工具明细与参数以 MCP 的 tools 自描述为准（在你的 MCP 客户端里查看 tools 列表即可）。
 
@@ -34,9 +61,10 @@
    cd rizhiyi-mcp
    ```
 
-2. 安装依赖：
+2. 安装依赖（TS 实现位于 `ts/` 子目录）：
 
    ```bash
+   cd ts
    npm install
    ```
 
@@ -45,7 +73,7 @@
    ```bash
    npm run build
    ```
-   注意：仓库默认忽略 `dist/`，使用前需先构建生成产物。
+   注意：仓库默认忽略 `ts/dist/`，使用前需先构建生成产物。
 
 ## Python 迁移版
 
@@ -87,43 +115,43 @@ rizhiyi-mcp-python
                 "rizhiyi_search": {
                     "command": "node",
                     "args": [
-                        "/path/to/your/rizhiyi-mcp/dist/log-tools-server.js"
+                        "/path/to/your/rizhiyi-mcp/ts/dist/log-tools-server.js"
                     ]
                 },
                 "rizhiyi_manage": {
                     "command": "node",
                     "args": [
-                        "/path/to/your/rizhiyi-mcp/dist/manage-server.js"
+                        "/path/to/your/rizhiyi-mcp/ts/dist/manage-server.js"
                     ]
                 },
                 "rizhiyi_dashboard": {
                     "command": "node",
                     "args": [
-                        "/path/to/your/rizhiyi-mcp/dist/dashboard-server.js"
+                        "/path/to/your/rizhiyi-mcp/ts/dist/dashboard-server.js"
                     ]
                 },
                 "rizhiyi_parserule": {
                     "command": "node",
                     "args": [
-                        "/path/to/your/rizhiyi-mcp/dist/parserrule-server.js"
+                        "/path/to/your/rizhiyi-mcp/ts/dist/parserrule-server.js"
                     ]
                 },
                 "rizhiyi_dynamic_field": {
                     "command": "node",
                     "args": [
-                        "/path/to/your/rizhiyi-mcp/dist/fieldconfig-server.js"
+                        "/path/to/your/rizhiyi-mcp/ts/dist/fieldconfig-server.js"
                     ]
                 },
                 "rizhiyi_ingest": {
                     "command": "node",
                     "args": [
-                        "/path/to/your/rizhiyi-mcp/dist/ingest-server.js"
+                        "/path/to/your/rizhiyi-mcp/ts/dist/ingest-server.js"
                     ]
                 }
             }
         }
         ```
-        请确保将 `/path/to/your/rizhiyi-mcp/dist/log-tools-server.js`、`/path/to/your/rizhiyi-mcp/dist/manage-server.js`、`/path/to/your/rizhiyi-mcp/dist/dashboard-server.js`、`/path/to/your/rizhiyi-mcp/dist/parserrule-server.js`、`/path/to/your/rizhiyi-mcp/dist/fieldconfig-server.js` 和 `/path/to/your/rizhiyi-mcp/dist/ingest-server.js` 替换为实际路径。
+        请确保将 `/path/to/your/rizhiyi-mcp/ts/dist/log-tools-server.js`、`/path/to/your/rizhiyi-mcp/ts/dist/manage-server.js`、`/path/to/your/rizhiyi-mcp/ts/dist/dashboard-server.js`、`/path/to/your/rizhiyi-mcp/ts/dist/parserrule-server.js`、`/path/to/your/rizhiyi-mcp/ts/dist/fieldconfig-server.js` 和 `/path/to/your/rizhiyi-mcp/ts/dist/ingest-server.js` 替换为实际路径。
     -   **Rizhiyi 服务器信息**：Rizhiyi 服务器需要认证连接，请在 .env 文件或环境变量中配置相应的服务器 URL 和 API Key。
 
 ### 远程 HTTP 网关
@@ -131,6 +159,7 @@ rizhiyi-mcp-python
 除了本地 `stdio` 模式，现在也支持单进程多路由的 HTTP MCP 网关：
 
 ```bash
+cd ts
 npm run start:http
 ```
 
@@ -303,8 +332,10 @@ Authorization: Basic <base64(username:password)>
 如果您想进行二次开发或贡献代码，请参考以下步骤：
 
 1. **代码结构**：
-   - `src/*-server.ts`：各 MCP server 的入口
-   - `src/http-server.ts`：统一 HTTP MCP 网关入口
-   - `src/modules/*`：各领域能力的实现（日志分析 / 仪表盘 / 解析规则 / 动态字段）
+   - `ts/src/*-server.ts`：各 MCP server 的入口
+   - `ts/src/http-server.ts`：统一 HTTP MCP 网关入口
+   - `ts/src/modules/*`：各领域能力的实现（日志分析 / 仪表盘 / 解析规则 / 动态字段）
+   - `python/rizhiyi_mcp/`：Python HTTP 迁移实现
+   - `config/`：TS 与 Python 共享的 API schema
 
 欢迎提交 Pull Request 或报告 Bug。请确保您的代码符合项目规范。

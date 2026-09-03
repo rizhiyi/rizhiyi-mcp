@@ -1,0 +1,60 @@
+server: openspec
+version: "1.0.0"
+generated_at: "2026-04-06T08:30:00Z"
+generated_by: ai
+
+server_aliases: []
+
+command_shortcuts: []
+
+commands:
+  project:
+    _description: "Project setup and maintenance"
+    init:
+      _tool: openspec_init
+      _description: "Initialize OpenSpec in your project"
+      _examples:
+        - "mcp2cli openspec project init"
+    update:
+      _tool: openspec_update
+      _description: "Update OpenSpec instruction files"
+    refresh-cache:
+      _tool: openspec_refresh_cache
+      _description: "Force refresh the cached directory listing"
+  change:
+    _description: "Change lifecycle management"
+    create:
+      _tool: openspec_new_change
+      _description: "Create a new change directory"
+      _examples:
+        - "mcp2cli openspec change create --name add-dark-mode --description 'Add dark mode support'"
+    status:
+      _tool: openspec_status
+      _description: "Display artifact completion status for a change"
+      _examples:
+        - "mcp2cli openspec change status --change-name add-dark-mode"
+    archive:
+      _tool: openspec_archive
+      _description: "Archive a completed change and update main specs"
+    instructions:
+      _tool: openspec_instructions
+      _description: "Output enriched instructions for an artifact or apply action"
+  content:
+    _description: "Content browsing and validation"
+    list:
+      _tool: openspec_list
+      _description: "List changes or specs"
+      _examples:
+        - "mcp2cli openspec content list"
+        - "mcp2cli openspec content list --specs"
+    show:
+      _tool: openspec_show
+      _description: "Show details of a change or spec"
+      _examples:
+        - "mcp2cli openspec content show --item-name add-dark-mode"
+    validate:
+      _tool: openspec_validate
+      _description: "Validate a change proposal or spec"
+    read-file:
+      _tool: openspec_read_file
+      _description: "Read any OpenSpec artifact file directly"

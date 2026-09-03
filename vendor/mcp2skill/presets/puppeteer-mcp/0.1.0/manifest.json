@@ -1,0 +1,15 @@
+{
+  "server": "puppeteer-mcp",
+  "server_version": "0.1.0",
+  "tool_count": 7,
+  "cli_hash": "3c7e9966",
+  "generated_at": "2026-04-06T09:08:26.124354+00:00",
+  "generated_by": "mcp2cli-push",
+  "files": [
+    "tools.json",
+    "cli.yaml",
+    "skills/SKILL.md",
+    "skills/reference/element.md",
+    "skills/reference/page.md"
+  ]
+}

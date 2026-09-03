@@ -1,0 +1,923 @@
+server: ruflo
+version: "3.0.0"
+generated_at: "2026-04-06T08:40:00Z"
+generated_by: ai
+
+server_aliases: []
+
+command_shortcuts: []
+
+commands:
+  agent:
+    _description: "Agent lifecycle operations"
+    spawn:
+      _tool: agent_spawn
+      _description: "Spawn a new agent with intelligent model selection"
+      _examples:
+        - "mcp2cli ruflo agent spawn --agent-type worker --model sonnet"
+        - "mcp2cli ruflo agent spawn --agent-type analyst --task 'Analyze codebase'"
+    terminate:
+      _tool: agent_terminate
+      _description: "Terminate an agent"
+    status:
+      _tool: agent_status
+      _description: "Get agent status"
+    list:
+      _tool: agent_list
+      _description: "List all agents"
+    pool:
+      _tool: agent_pool
+      _description: "Manage agent pool"
+    health:
+      _tool: agent_health
+      _description: "Check agent health"
+    update:
+      _tool: agent_update
+      _description: "Update agent status or configuration"
+
+  swarm:
+    _description: "Swarm lifecycle operations"
+    init:
+      _tool: swarm_init
+      _description: "Initialize a swarm with persistent state tracking"
+    status:
+      _tool: swarm_status
+      _description: "Get swarm status from persistent state"
+    shutdown:
+      _tool: swarm_shutdown
+      _description: "Shutdown a swarm and update persistent state"
+    health:
+      _tool: swarm_health
+      _description: "Check swarm health status"
+
+  memory:
+    _description: "In-memory vector store operations"
+    store:
+      _tool: memory_store
+      _description: "Store a value with vector embedding for semantic search"
+      _examples:
+        - "mcp2cli ruflo memory store --key mykey --value 'some data'"
+    get:
+      _tool: memory_retrieve
+      _description: "Retrieve a value from memory by key"
+    search:
+      _tool: memory_search
+      _description: "Search memory using semantic vector similarity"
+      _examples:
+        - "mcp2cli ruflo memory search --query 'authentication patterns'"
+    delete:
+      _tool: memory_delete
+      _description: "Delete a memory entry by key"
+    list:
+      _tool: memory_list
+      _description: "List memory entries with optional filtering"
+    stats:
+      _tool: memory_stats
+      _description: "Get memory storage statistics including HNSW index status"
+    migrate:
+      _tool: memory_migrate
+      _description: "Migrate from legacy JSON store to sql.js backend"
+
+  config:
+    _description: "Configuration management operations"
+    get:
+      _tool: config_get
+      _description: "Get a configuration value"
+    update:
+      _tool: config_set
+      _description: "Set a configuration value"
+    list:
+      _tool: config_list
+      _description: "List all configuration values"
+    reset:
+      _tool: config_reset
+      _description: "Reset configuration to defaults"
+    download:
+      _tool: config_export
+      _description: "Export configuration to JSON"
+    upload:
+      _tool: config_import
+      _description: "Import configuration from JSON"
+
+  hooks:
+    _description: "Hook lifecycle and intelligence operations"
+    pre-edit:
+      _tool: hooks_pre-edit
+      _description: "Get context and agent suggestions before editing a file"
+    post-edit:
+      _tool: hooks_post-edit
+      _description: "Record editing outcome for learning"
+    pre-command:
+      _tool: hooks_pre-command
+      _description: "Assess risk before executing a command"
+    post-command:
+      _tool: hooks_post-command
+      _description: "Record command execution outcome"
+    pre-task:
+      _tool: hooks_pre-task
+      _description: "Record task start and get agent suggestions"
+    post-task:
+      _tool: hooks_post-task
+      _description: "Record task completion for learning"
+    route:
+      _tool: hooks_route
+      _description: "Route task to optimal agent using semantic similarity"
+    metrics:
+      _tool: hooks_metrics
+      _description: "View learning metrics dashboard"
+    list:
+      _tool: hooks_list
+      _description: "List all registered hooks"
+    explain:
+      _tool: hooks_explain
+      _description: "Explain routing decision with full transparency"
+    pretrain:
+      _tool: hooks_pretrain
+      _description: "Analyze repository to bootstrap intelligence"
+    build-agents:
+      _tool: hooks_build-agents
+      _description: "Generate optimized agent configurations from pretrain data"
+    transfer:
+      _tool: hooks_transfer
+      _description: "Transfer learned patterns from another project"
+    notify:
+      _tool: hooks_notify
+      _description: "Send cross-agent notification"
+    init:
+      _tool: hooks_init
+      _description: "Initialize hooks in project with .claude/settings.json"
+    session:
+      _description: "Hook session lifecycle operations"
+      start:
+        _tool: hooks_session-start
+        _description: "Initialize a new session and auto-start daemon"
+      end:
+        _tool: hooks_session-end
+        _description: "End current session, stop daemon, and persist state"
+      restore:
+        _tool: hooks_session-restore
+        _description: "Restore a previous session"
+    intelligence:
+      _description: "RuVector intelligence system operations"
+      status:
+        _tool: hooks_intelligence
+        _description: "Get RuVector intelligence system status"
+      reset:
+        _tool: hooks_intelligence-reset
+        _description: "Reset intelligence learning state"
+      stats:
+        _tool: hooks_intelligence_stats
+        _description: "Get RuVector intelligence layer statistics"
+      learn:
+        _tool: hooks_intelligence_learn
+        _description: "Force immediate SONA learning cycle with EWC++ consolidation"
+      attention:
+        _tool: hooks_intelligence_attention
+        _description: "Compute attention-weighted similarity using MoE/Flash/Hyperbolic"
+      trajectory:
+        _description: "SONA reinforcement learning trajectory operations"
+        start:
+          _tool: hooks_intelligence_trajectory-start
+          _description: "Begin a SONA trajectory for reinforcement learning"
+        step:
+          _tool: hooks_intelligence_trajectory-step
+          _description: "Record a step in the trajectory for reinforcement learning"
+        end:
+          _tool: hooks_intelligence_trajectory-end
+          _description: "End trajectory and trigger SONA learning with EWC++"
+      pattern:
+        _description: "Intelligence pattern storage operations"
+        store:
+          _tool: hooks_intelligence_pattern-store
+          _description: "Store a pattern in ReasoningBank"
+        search:
+          _tool: hooks_intelligence_pattern-search
+          _description: "Search patterns using vector similarity"
+    worker:
+      _description: "Background worker management operations"
+      list:
+        _tool: hooks_worker-list
+        _description: "List all background workers with status and capabilities"
+      dispatch:
+        _tool: hooks_worker-dispatch
+        _description: "Dispatch a background worker for analysis or optimization"
+      status:
+        _tool: hooks_worker-status
+        _description: "Get status of a specific worker or all active workers"
+      detect:
+        _tool: hooks_worker-detect
+        _description: "Detect worker triggers from user prompt"
+      cancel:
+        _tool: hooks_worker-cancel
+        _description: "Cancel a running worker"
+    model:
+      _description: "Model routing operations"
+      route:
+        _tool: hooks_model-route
+        _description: "Route task to optimal Claude model based on complexity"
+      outcome:
+        _tool: hooks_model-outcome
+        _description: "Record model routing outcome for learning"
+      stats:
+        _tool: hooks_model-stats
+        _description: "Get model routing statistics"
+
+  task:
+    _description: "Task management operations"
+    create:
+      _tool: task_create
+      _description: "Create a new task"
+      _examples:
+        - "mcp2cli ruflo task create --title 'Implement feature X' --priority high"
+    status:
+      _tool: task_status
+      _description: "Get task status"
+    list:
+      _tool: task_list
+      _description: "List all tasks"
+    complete:
+      _tool: task_complete
+      _description: "Mark a task as complete"
+    update:
+      _tool: task_update
+      _description: "Update task status or progress"
+    assign:
+      _tool: task_assign
+      _description: "Assign a task to one or more agents"
+    cancel:
+      _tool: task_cancel
+      _description: "Cancel a task"
+    summary:
+      _tool: task_summary
+      _description: "Get a summary of all tasks by status"
+
+  session:
+    _description: "Session persistence operations"
+    save:
+      _tool: session_save
+      _description: "Save current session state"
+    restore:
+      _tool: session_restore
+      _description: "Restore a saved session"
+    list:
+      _tool: session_list
+      _description: "List saved sessions"
+    delete:
+      _tool: session_delete
+      _description: "Delete a saved session"
+    get:
+      _tool: session_info
+      _description: "Get detailed session information"
+
+  hive-mind:
+    _description: "Hive-mind collective intelligence operations"
+    spawn:
+      _tool: hive-mind_spawn
+      _description: "Spawn workers and automatically join them to the hive-mind"
+    init:
+      _tool: hive-mind_init
+      _description: "Initialize the hive-mind collective"
+    status:
+      _tool: hive-mind_status
+      _description: "Get hive-mind status"
+    join:
+      _tool: hive-mind_join
+      _description: "Join an agent to the hive-mind"
+    leave:
+      _tool: hive-mind_leave
+      _description: "Remove an agent from the hive-mind"
+    consensus:
+      _tool: hive-mind_consensus
+      _description: "Propose or vote on consensus with BFT, Raft, or Quorum strategies"
+    broadcast:
+      _tool: hive-mind_broadcast
+      _description: "Broadcast a message to all hive-mind workers"
+    shutdown:
+      _tool: hive-mind_shutdown
+      _description: "Shutdown the hive-mind and terminate all workers"
+    memory:
+      _tool: hive-mind_memory
+      _description: "Access hive shared memory"
+
+  workflow:
+    _description: "Workflow orchestration operations"
+    run:
+      _tool: workflow_run
+      _description: "Run a workflow from a template or file"
+      _examples:
+        - "mcp2cli ruflo workflow run --template ci-pipeline"
+    create:
+      _tool: workflow_create
+      _description: "Create a new workflow"
+    execute:
+      _tool: workflow_execute
+      _description: "Execute a workflow"
+    status:
+      _tool: workflow_status
+      _description: "Get workflow status"
+    list:
+      _tool: workflow_list
+      _description: "List all workflows"
+    pause:
+      _tool: workflow_pause
+      _description: "Pause a running workflow"
+    resume:
+      _tool: workflow_resume
+      _description: "Resume a paused workflow"
+    cancel:
+      _tool: workflow_cancel
+      _description: "Cancel a workflow"
+    delete:
+      _tool: workflow_delete
+      _description: "Delete a workflow"
+    template:
+      _tool: workflow_template
+      _description: "Save workflow as template or create from template"
+
+  analyze:
+    _description: "Code and diff analysis operations"
+    diff:
+      _description: "Git diff analysis operations"
+      analyze:
+        _tool: analyze_diff
+        _description: "Analyze git diff for change risk and classification"
+        _examples:
+          - "mcp2cli ruflo analyze diff analyze --diff-content '...'"
+      risk:
+        _tool: analyze_diff-risk
+        _description: "Quick risk assessment for git diff"
+      classify:
+        _tool: analyze_diff-classify
+        _description: "Classify git diff change type"
+      reviewers:
+        _tool: analyze_diff-reviewers
+        _description: "Suggest reviewers for git diff changes"
+      stats:
+        _tool: analyze_diff-stats
+        _description: "Get quick statistics for git diff"
+    file:
+      _description: "File-level analysis operations"
+      risk:
+        _tool: analyze_file-risk
+        _description: "Assess risk for a specific file change"
+
+  progress:
+    _description: "Implementation progress tracking operations"
+    check:
+      _tool: progress_check
+      _description: "Get current V3 implementation progress percentage and metrics"
+    sync:
+      _tool: progress_sync
+      _description: "Calculate and persist V3 progress metrics to file"
+    summary:
+      _tool: progress_summary
+      _description: "Get human-readable V3 implementation progress summary"
+    watch:
+      _tool: progress_watch
+      _description: "Get current watch status for progress monitoring"
+
+  embeddings:
+    _description: "Embedding and vector similarity operations"
+    init:
+      _tool: embeddings_init
+      _description: "Initialize the ONNX embedding subsystem with hyperbolic support"
+    generate:
+      _tool: embeddings_generate
+      _description: "Generate embeddings for text"
+      _examples:
+        - "mcp2cli ruflo embeddings generate --text 'search query'"
+    compare:
+      _tool: embeddings_compare
+      _description: "Compare semantic similarity between two texts"
+    search:
+      _tool: embeddings_search
+      _description: "Search across stored embeddings using semantic similarity"
+    neural:
+      _tool: embeddings_neural
+      _description: "Neural substrate operations via RuVector integration"
+    hyperbolic:
+      _tool: embeddings_hyperbolic
+      _description: "Hyperbolic embedding operations in Poincaré ball"
+    status:
+      _tool: embeddings_status
+      _description: "Get embeddings system status and configuration"
+
+  claims:
+    _description: "Work claim and load balancing operations"
+    claim:
+      _tool: claims_claim
+      _description: "Claim an issue for work"
+    release:
+      _tool: claims_release
+      _description: "Release a claim on an issue"
+    handoff:
+      _tool: claims_handoff
+      _description: "Request handoff of an issue to another claimant"
+    accept-handoff:
+      _tool: claims_accept-handoff
+      _description: "Accept a pending handoff"
+    update:
+      _tool: claims_status
+      _description: "Update claim status"
+    list:
+      _tool: claims_list
+      _description: "List all claims or filter by criteria"
+    mark-stealable:
+      _tool: claims_mark-stealable
+      _description: "Mark an issue as stealable by other agents"
+    steal:
+      _tool: claims_steal
+      _description: "Steal a stealable issue"
+    stealable:
+      _tool: claims_stealable
+      _description: "List all stealable issues"
+    load:
+      _tool: claims_load
+      _description: "Get agent load information"
+    board:
+      _tool: claims_board
+      _description: "Get a visual board view of all claims"
+    rebalance:
+      _tool: claims_rebalance
+      _description: "Suggest or apply load rebalancing across agents"
+
+  aidefence:
+    _description: "AI security defence and threat detection operations"
+    scan:
+      _tool: aidefence_scan
+      _description: "Scan input text for AI manipulation threats and PII"
+      _examples:
+        - "mcp2cli ruflo aidefence scan --input 'user provided text'"
+    analyze:
+      _tool: aidefence_analyze
+      _description: "Deep analysis of input for specific threat types"
+    stats:
+      _tool: aidefence_stats
+      _description: "Get AIDefence detection and learning statistics"
+    learn:
+      _tool: aidefence_learn
+      _description: "Record detection feedback to improve accuracy"
+    is-safe:
+      _tool: aidefence_is_safe
+      _description: "Quick boolean check if input is safe"
+    has-pii:
+      _tool: aidefence_has_pii
+      _description: "Check if input contains personally identifiable information"
+
+  transfer:
+    _description: "Pattern and plugin transfer operations"
+    detect-pii:
+      _tool: transfer_detect-pii
+      _description: "Detect PII in content without redacting"
+    ipfs-resolve:
+      _tool: transfer_ipfs-resolve
+      _description: "Resolve IPNS name to CID"
+    store:
+      _description: "Pattern store operations"
+      search:
+        _tool: transfer_store-search
+        _description: "Search the pattern store"
+        _examples:
+          - "mcp2cli ruflo transfer store search --query 'caching patterns'"
+      get:
+        _tool: transfer_store-info
+        _description: "Get detailed info about a pattern"
+      download:
+        _tool: transfer_store-download
+        _description: "Download a pattern from the store"
+      featured:
+        _tool: transfer_store-featured
+        _description: "Get featured patterns from the store"
+      trending:
+        _tool: transfer_store-trending
+        _description: "Get trending patterns from the store"
+    plugin:
+      _description: "Plugin store operations"
+      search:
+        _tool: transfer_plugin-search
+        _description: "Search the plugin store"
+      get:
+        _tool: transfer_plugin-info
+        _description: "Get detailed info about a plugin"
+      featured:
+        _tool: transfer_plugin-featured
+        _description: "Get featured plugins from the store"
+      official:
+        _tool: transfer_plugin-official
+        _description: "Get official plugins from the store"
+
+  system:
+    _description: "System status and management operations"
+    status:
+      _tool: system_status
+      _description: "Get overall system status"
+    metrics:
+      _tool: system_metrics
+      _description: "Get system metrics and performance data"
+    health:
+      _tool: system_health
+      _description: "Perform system health check"
+    get:
+      _tool: system_info
+      _description: "Get system information"
+    reset:
+      _tool: system_reset
+      _description: "Reset system state"
+
+  mcp:
+    _description: "MCP server operations"
+    status:
+      _tool: mcp_status
+      _description: "Get MCP server status including stdio mode detection"
+
+  terminal:
+    _description: "Terminal session management operations"
+    create:
+      _tool: terminal_create
+      _description: "Create a new terminal session"
+    execute:
+      _tool: terminal_execute
+      _description: "Execute a command in a terminal session"
+      _examples:
+        - "mcp2cli ruflo terminal execute --session-id s1 --command 'ls -la'"
+    list:
+      _tool: terminal_list
+      _description: "List all terminal sessions"
+    delete:
+      _tool: terminal_close
+      _description: "Close a terminal session"
+    history:
+      _tool: terminal_history
+      _description: "Get command history for a terminal session"
+
+  neural:
+    _description: "Neural model training and prediction operations"
+    train:
+      _tool: neural_train
+      _description: "Train a neural model"
+    predict:
+      _tool: neural_predict
+      _description: "Make predictions using a neural model"
+    patterns:
+      _tool: neural_patterns
+      _description: "Get or manage neural patterns"
+    compress:
+      _tool: neural_compress
+      _description: "Compress a neural model or embeddings"
+    status:
+      _tool: neural_status
+      _description: "Get neural system status"
+    optimize:
+      _tool: neural_optimize
+      _description: "Optimize neural model performance"
+
+  performance:
+    _description: "Performance monitoring and optimization operations"
+    report:
+      _tool: performance_report
+      _description: "Generate a performance report"
+    bottleneck:
+      _tool: performance_bottleneck
+      _description: "Detect performance bottlenecks"
+    benchmark:
+      _tool: performance_benchmark
+      _description: "Run performance benchmarks"
+    profile:
+      _tool: performance_profile
+      _description: "Profile a specific component or operation"
+    optimize:
+      _tool: performance_optimize
+      _description: "Apply performance optimizations"
+    metrics:
+      _tool: performance_metrics
+      _description: "Get detailed performance metrics"
+
+  github:
+    _description: "GitHub repository and workflow operations"
+    repo-analyze:
+      _tool: github_repo_analyze
+      _description: "Analyze a GitHub repository"
+    pr-manage:
+      _tool: github_pr_manage
+      _description: "Manage pull requests"
+    issue-track:
+      _tool: github_issue_track
+      _description: "Track and manage GitHub issues"
+    workflow:
+      _tool: github_workflow
+      _description: "Manage GitHub Actions workflows"
+    metrics:
+      _tool: github_metrics
+      _description: "Get repository metrics and statistics"
+
+  daa:
+    _description: "Decentralized autonomous agent operations"
+    agent:
+      _description: "DAA agent operations"
+      create:
+        _tool: daa_agent_create
+        _description: "Create a decentralized autonomous agent"
+      adapt:
+        _tool: daa_agent_adapt
+        _description: "Trigger agent adaptation based on feedback"
+    workflow:
+      _description: "DAA workflow operations"
+      create:
+        _tool: daa_workflow_create
+        _description: "Create an autonomous workflow"
+      execute:
+        _tool: daa_workflow_execute
+        _description: "Execute a DAA workflow"
+    knowledge-share:
+      _tool: daa_knowledge_share
+      _description: "Share knowledge between agents"
+    learning-status:
+      _tool: daa_learning_status
+      _description: "Get learning status for DAA agents"
+    cognitive-pattern:
+      _tool: daa_cognitive_pattern
+      _description: "Analyze or change cognitive patterns"
+    performance-metrics:
+      _tool: daa_performance_metrics
+      _description: "Get DAA performance metrics"
+
+  coordination:
+    _description: "Multi-agent coordination and topology operations"
+    topology:
+      _tool: coordination_topology
+      _description: "Configure swarm topology"
+    load-balance:
+      _tool: coordination_load_balance
+      _description: "Configure load balancing"
+    sync:
+      _tool: coordination_sync
+      _description: "Synchronize state across nodes"
+    node:
+      _tool: coordination_node
+      _description: "Manage coordination nodes"
+    consensus:
+      _tool: coordination_consensus
+      _description: "Manage consensus protocol with BFT, Raft, or Quorum strategies"
+    orchestrate:
+      _tool: coordination_orchestrate
+      _description: "Orchestrate multi-agent coordination"
+    metrics:
+      _tool: coordination_metrics
+      _description: "Get coordination metrics"
+
+  browser:
+    _description: "Browser automation and interaction operations"
+    open:
+      _tool: browser_open
+      _description: "Navigate browser to a URL"
+      _examples:
+        - "mcp2cli ruflo browser open --url https://example.com"
+    back:
+      _tool: browser_back
+      _description: "Navigate back in browser history"
+    forward:
+      _tool: browser_forward
+      _description: "Navigate forward in browser history"
+    reload:
+      _tool: browser_reload
+      _description: "Reload the current page"
+    close:
+      _tool: browser_close
+      _description: "Close the browser session"
+    snapshot:
+      _tool: browser_snapshot
+      _description: "Get AI-optimized accessibility tree snapshot with element refs"
+    screenshot:
+      _tool: browser_screenshot
+      _description: "Capture a screenshot of the page"
+    click:
+      _tool: browser_click
+      _description: "Click an element using ref or CSS selector"
+    fill:
+      _tool: browser_fill
+      _description: "Clear and fill an input element"
+    type:
+      _tool: browser_type
+      _description: "Type text with key events for autocomplete interaction"
+    press:
+      _tool: browser_press
+      _description: "Press a keyboard key"
+    hover:
+      _tool: browser_hover
+      _description: "Hover over an element"
+    select:
+      _tool: browser_select
+      _description: "Select an option from a dropdown"
+    check:
+      _tool: browser_check
+      _description: "Check a checkbox"
+    uncheck:
+      _tool: browser_uncheck
+      _description: "Uncheck a checkbox"
+    scroll:
+      _tool: browser_scroll
+      _description: "Scroll the page"
+    get-text:
+      _tool: browser_get-text
+      _description: "Get text content of an element"
+    get-value:
+      _tool: browser_get-value
+      _description: "Get the value of an input element"
+    get-title:
+      _tool: browser_get-title
+      _description: "Get the current page title"
+    get-url:
+      _tool: browser_get-url
+      _description: "Get the current page URL"
+    wait:
+      _tool: browser_wait
+      _description: "Wait for a condition"
+    eval:
+      _tool: browser_eval
+      _description: "Execute JavaScript in page context"
+    session-list:
+      _tool: browser_session-list
+      _description: "List active browser sessions"
+
+  agentdb:
+    _description: "AgentDB v3 controller and memory operations"
+    health:
+      _tool: agentdb_health
+      _description: "Get AgentDB v3 controller health status"
+    controllers:
+      _tool: agentdb_controllers
+      _description: "List all AgentDB v3 controllers and their initialization status"
+    feedback:
+      _tool: agentdb_feedback
+      _description: "Record task feedback for learning"
+    causal-edge:
+      _tool: agentdb_causal-edge
+      _description: "Record a causal edge between two memory entries"
+    route:
+      _tool: agentdb_route
+      _description: "Route a task via AgentDB SemanticRouter"
+    consolidate:
+      _tool: agentdb_consolidate
+      _description: "Run memory consolidation to promote entries across tiers"
+    batch:
+      _tool: agentdb_batch
+      _description: "Batch operations on memory entries"
+    semantic-route:
+      _tool: agentdb_semantic-route
+      _description: "Route an input via AgentDB SemanticRouter for intent classification"
+    context-synthesize:
+      _tool: agentdb_context-synthesize
+      _description: "Synthesize context from stored memories for a query"
+    pattern:
+      _description: "Pattern storage operations via ReasoningBank"
+      store:
+        _tool: agentdb_pattern-store
+        _description: "Store a pattern directly via ReasoningBank controller"
+      search:
+        _tool: agentdb_pattern-search
+        _description: "Search patterns via ReasoningBank with BM25 and semantic hybrid"
+    session:
+      _description: "AgentDB session operations"
+      start:
+        _tool: agentdb_session-start
+        _description: "Start a session with ReflexionMemory episodic replay"
+      end:
+        _tool: agentdb_session-end
+        _description: "End session and trigger NightlyLearner consolidation"
+    hierarchical:
+      _description: "Hierarchical memory tier operations"
+      store:
+        _tool: agentdb_hierarchical-store
+        _description: "Store to hierarchical memory with tier selection"
+      recall:
+        _tool: agentdb_hierarchical-recall
+        _description: "Recall from hierarchical memory with optional tier filter"
+
+  ruvllm:
+    _description: "RuVLLM WASM neural network operations"
+    status:
+      _tool: ruvllm_status
+      _description: "Get ruvllm-wasm availability and initialization status"
+    chat-format:
+      _tool: ruvllm_chat_format
+      _description: "Format chat messages using a model template"
+    generate-config:
+      _tool: ruvllm_generate_config
+      _description: "Create a generation configuration with tokens, temperature, and topP"
+    hnsw:
+      _description: "HNSW semantic pattern routing operations"
+      create:
+        _tool: ruvllm_hnsw_create
+        _description: "Create a WASM HNSW router for semantic pattern routing"
+      add:
+        _tool: ruvllm_hnsw_add
+        _description: "Add a pattern to an HNSW router"
+      route:
+        _tool: ruvllm_hnsw_route
+        _description: "Route a query embedding to nearest patterns in HNSW index"
+    sona:
+      _description: "SONA instant adaptation loop operations"
+      create:
+        _tool: ruvllm_sona_create
+        _description: "Create a SONA instant adaptation loop"
+      adapt:
+        _tool: ruvllm_sona_adapt
+        _description: "Run SONA instant adaptation with a quality signal"
+    microlora:
+      _description: "MicroLoRA ultra-lightweight adapter operations"
+      create:
+        _tool: ruvllm_microlora_create
+        _description: "Create a MicroLoRA adapter with ranks 1-4"
+      adapt:
+        _tool: ruvllm_microlora_adapt
+        _description: "Adapt MicroLoRA weights with quality feedback"
+
+  wasm:
+    _description: "WASM sandboxed agent operations"
+    agent:
+      _description: "WASM agent lifecycle and interaction operations"
+      create:
+        _tool: wasm_agent_create
+        _description: "Create a sandboxed WASM agent with virtual filesystem"
+        _examples:
+          - "mcp2cli ruflo wasm agent create --template Coder"
+      prompt:
+        _tool: wasm_agent_prompt
+        _description: "Send a prompt to a WASM agent and get a response"
+      tool:
+        _tool: wasm_agent_tool
+        _description: "Execute a tool on a WASM agent sandbox"
+      list:
+        _tool: wasm_agent_list
+        _description: "List all active WASM agents"
+      terminate:
+        _tool: wasm_agent_terminate
+        _description: "Terminate a WASM agent and free resources"
+      files:
+        _tool: wasm_agent_files
+        _description: "Get a WASM agent's available tools and info"
+      export:
+        _tool: wasm_agent_export
+        _description: "Export a WASM agent's full state as JSON"
+    gallery:
+      _description: "WASM agent gallery template operations"
+      list:
+        _tool: wasm_gallery_list
+        _description: "List all available WASM agent gallery templates"
+      search:
+        _tool: wasm_gallery_search
+        _description: "Search WASM agent gallery templates by query"
+      create:
+        _tool: wasm_gallery_create
+        _description: "Create a WASM agent from a gallery template"
+
+  guidance:
+    _description: "Capability discovery and workflow guidance operations"
+    capabilities:
+      _tool: guidance_capabilities
+      _description: "List all capability areas with tools, commands, agents, and skills"
+    recommend:
+      _tool: guidance_recommend
+      _description: "Recommend capability areas and workflow for a task description"
+    discover:
+      _tool: guidance_discover
+      _description: "Discover all available agents and skills from the .claude/ directory"
+    workflow:
+      _tool: guidance_workflow
+      _description: "Get a recommended workflow template for a task type"
+    quickref:
+      _tool: guidance_quickref
+      _description: "Get a quick reference card for common operations in a domain"
+
+  autopilot:
+    _description: "Autopilot persistent task completion operations"
+    status:
+      _tool: autopilot_status
+      _description: "Get autopilot state including enabled status and learning metrics"
+    enable:
+      _tool: autopilot_enable
+      _description: "Enable autopilot persistent task completion"
+    disable:
+      _tool: autopilot_disable
+      _description: "Disable autopilot to allow agents to stop"
+    config:
+      _tool: autopilot_config
+      _description: "Configure autopilot limits and task sources"
+    reset:
+      _tool: autopilot_reset
+      _description: "Reset autopilot iteration counter and restart the timer"
+    log:
+      _tool: autopilot_log
+      _description: "Retrieve the autopilot event log"
+    progress:
+      _tool: autopilot_progress
+      _description: "Get detailed task progress broken down by source"
+    learn:
+      _tool: autopilot_learn
+      _description: "Discover success patterns from past task completions"
+    history:
+      _tool: autopilot_history
+      _description: "Search past completion episodes by keyword"
+    predict:
+      _tool: autopilot_predict
+      _description: "Predict the optimal next action based on current state"

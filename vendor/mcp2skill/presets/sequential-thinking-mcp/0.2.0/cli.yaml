@@ -1,0 +1,16 @@
+server: sequential-thinking-mcp
+version: "0.2.0"
+generated_at: "2026-04-06T00:00:00Z"
+generated_by: ai
+
+server_aliases:
+  - sequential-thinking
+
+command_shortcuts: []
+
+commands:
+  think:
+    _tool: sequentialthinking
+    _description: "Perform dynamic and reflective problem-solving through sequential thoughts"
+    _examples:
+      - "mcp2cli sequential-thinking-mcp think --thought 'Break down the problem into steps' --thought-number 1 --total-thoughts 5 --next-thought-needed true"

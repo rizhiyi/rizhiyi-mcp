@@ -1,0 +1,22 @@
+server: superpowers
+version: "4.3.0"
+generated_at: "2026-04-06T08:05:43Z"
+generated_by: ai
+
+server_aliases: []
+
+command_shortcuts: []
+
+commands:
+  skill:
+    _description: "Superpowers skill operations"
+    list:
+      _tool: list_skills
+      _description: "List all available skills"
+      _examples:
+        - "mcp2cli superpowers skill list"
+    get:
+      _tool: read_skill
+      _description: "Get the full content of a skill by name"
+      _examples:
+        - "mcp2cli superpowers skill get --skill-name brainstorming"

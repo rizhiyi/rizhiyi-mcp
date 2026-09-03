@@ -1,0 +1,125 @@
+server: serena
+version: "1.26.0"
+generated_at: "2026-04-06T09:00:00Z"
+generated_by: ai
+
+server_aliases: []
+
+command_shortcuts: []
+
+commands:
+  file:
+    _description: "File system operations"
+    get:
+      _tool: read_file
+      _description: "Read a file or a chunk of it"
+      _examples:
+        - "mcp2cli serena file get --relative-path src/main.py"
+        - "mcp2cli serena file get --relative-path src/main.py --start-line 10 --end-line 50"
+    create:
+      _tool: create_text_file
+      _description: "Create or overwrite a text file"
+      _examples:
+        - "mcp2cli serena file create --relative-path src/new_file.py --content 'print(\"hello\")'"
+    list:
+      _tool: list_dir
+      _description: "List files and directories in a directory"
+      _examples:
+        - "mcp2cli serena file list --relative-path . --recursive false"
+    find:
+      _tool: find_file
+      _description: "Find files matching a file name mask"
+      _examples:
+        - "mcp2cli serena file find --file-mask '*.py' --relative-path src"
+    replace:
+      _tool: replace_content
+      _description: "Replace pattern occurrences in a file"
+    search:
+      _tool: search_for_pattern
+      _description: "Search for a regex pattern across the codebase"
+      _examples:
+        - "mcp2cli serena file search --substring-pattern 'def my_func'"
+  symbol:
+    _description: "Code symbol operations"
+    overview:
+      _tool: get_symbols_overview
+      _description: "Get a high-level overview of code symbols in a file"
+      _examples:
+        - "mcp2cli serena symbol overview --relative-path src/main.py"
+    find:
+      _tool: find_symbol
+      _description: "Find symbols by name path pattern"
+      _examples:
+        - "mcp2cli serena symbol find --name-path-pattern MyClass/my_method"
+    refs:
+      _tool: find_referencing_symbols
+      _description: "Find symbols that reference a given symbol"
+    replace:
+      _tool: replace_symbol_body
+      _description: "Replace the body of a symbol"
+    insert-after:
+      _tool: insert_after_symbol
+      _description: "Insert content after a symbol definition"
+    insert-before:
+      _tool: insert_before_symbol
+      _description: "Insert content before a symbol definition"
+    rename:
+      _tool: rename_symbol
+      _description: "Rename a symbol throughout the codebase"
+    delete:
+      _tool: safe_delete_symbol
+      _description: "Delete a symbol if it has no references"
+  memory:
+    _description: "Project memory operations"
+    write:
+      _tool: write_memory
+      _description: "Write project information to a named memory"
+      _examples:
+        - "mcp2cli serena memory write --memory-name 'auth/logic' --content 'Auth uses JWT tokens'"
+    get:
+      _tool: read_memory
+      _description: "Read the contents of a memory"
+    list:
+      _tool: list_memories
+      _description: "List available memories"
+    delete:
+      _tool: delete_memory
+      _description: "Delete a memory"
+    rename:
+      _tool: rename_memory
+      _description: "Rename or move a memory"
+    update:
+      _tool: edit_memory
+      _description: "Edit memory content using pattern replacement"
+  shell:
+    _tool: execute_shell_command
+    _description: "Execute a shell command and return its output"
+    _examples:
+      - "mcp2cli serena shell --command 'npm test'"
+  project:
+    _description: "Project management"
+    activate:
+      _tool: activate_project
+      _description: "Activate a project by name or path"
+      _examples:
+        - "mcp2cli serena project activate --project my-project"
+    check-onboarding:
+      _tool: check_onboarding_performed
+      _description: "Check whether project onboarding was performed"
+    onboarding:
+      _tool: onboarding
+      _description: "Perform project onboarding if not yet done"
+  session:
+    _description: "Agent session and configuration"
+    config:
+      _tool: get_current_config
+      _description: "Get the current agent configuration"
+    modes:
+      _tool: switch_modes
+      _description: "Switch active agent modes"
+    prepare:
+      _tool: prepare_for_new_conversation
+      _description: "Prepare the agent for a new conversation"
+    instructions:
+      _tool: initial_instructions
+      _description: "Get the Serena Instructions Manual"

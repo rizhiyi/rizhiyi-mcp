@@ -1,0 +1,21 @@
+server: cloudflare-mcp
+version: "0.4.6"
+generated_at: "2026-04-06T10:00:00Z"
+generated_by: ai
+
+server_aliases:
+  - cloudflare
+
+command_shortcuts: []
+
+commands:
+  docs:
+    _description: "Cloudflare documentation resources"
+    search:
+      _tool: search_cloudflare_documentation
+      _description: "Search Cloudflare documentation for products and features"
+      _examples:
+        - "mcp2cli cloudflare-mcp docs search --query 'Workers KV storage'"
+    migrate-guide:
+      _tool: migrate_pages_to_workers_guide
+      _description: "Get the Pages to Workers migration guide"

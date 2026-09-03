@@ -1,0 +1,54 @@
+server: memory-mcp
+version: "0.6.3"
+generated_at: "2026-04-06T00:00:00Z"
+generated_by: ai
+
+server_aliases:
+  - memory
+
+command_shortcuts: []
+
+commands:
+  entity:
+    _description: "Entity operations"
+    create:
+      _tool: create_entities
+      _description: "Create multiple new entities in the knowledge graph"
+      _examples:
+        - "mcp2cli memory-mcp entity create --entities '[{\"name\": \"Alice\", \"entityType\": \"Person\", \"observations\": [\"Likes coffee\"]}]'"
+    delete:
+      _tool: delete_entities
+      _description: "Delete multiple entities and their associated relations"
+  relation:
+    _description: "Relation operations"
+    create:
+      _tool: create_relations
+      _description: "Create multiple new relations between entities"
+      _examples:
+        - "mcp2cli memory-mcp relation create --relations '[{\"from\": \"Alice\", \"to\": \"Bob\", \"relationType\": \"knows\"}]'"
+    delete:
+      _tool: delete_relations
+      _description: "Delete multiple relations from the knowledge graph"
+  observation:
+    _description: "Observation operations"
+    add:
+      _tool: add_observations
+      _description: "Add new observations to existing entities"
+    delete:
+      _tool: delete_observations
+      _description: "Delete specific observations from entities"
+  graph:
+    _description: "Knowledge graph operations"
+    get:
+      _tool: read_graph
+      _description: "Read the entire knowledge graph"
+  node:
+    _description: "Node operations"
+    search:
+      _tool: search_nodes
+      _description: "Search for nodes based on a query"
+      _examples:
+        - "mcp2cli memory-mcp node search --query 'Alice'"
+    get:
+      _tool: open_nodes
+      _description: "Get specific nodes by their names"

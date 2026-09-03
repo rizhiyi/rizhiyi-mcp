@@ -1,0 +1,133 @@
+server: blender-mcp
+version: "1.27.0"
+generated_at: "2026-04-06T08:55:09Z"
+generated_by: ai
+
+server_aliases:
+  - blender
+
+command_shortcuts: []
+
+commands:
+  scene:
+    _description: "Blender scene and viewport operations"
+    get:
+      _tool: get_scene_info
+      _description: "Get detailed information about the current Blender scene"
+      _examples:
+        - "mcp2cli blender-mcp scene get --user-prompt 'show me the scene'"
+    object:
+      _description: "Scene object operations"
+      get:
+        _tool: get_object_info
+        _description: "Get detailed information about a specific object in the scene"
+        _examples:
+          - "mcp2cli blender-mcp scene object get --object-name Cube"
+    viewport:
+      _description: "Viewport operations"
+      screenshot:
+        _tool: get_viewport_screenshot
+        _description: "Capture a screenshot of the current 3D viewport"
+        _examples:
+          - "mcp2cli blender-mcp scene viewport screenshot --max-size 1200"
+  code:
+    _description: "Python code execution in Blender"
+    execute:
+      _tool: execute_blender_code
+      _description: "Execute arbitrary Python code in Blender"
+      _examples:
+        - "mcp2cli blender-mcp code execute --code 'bpy.ops.mesh.primitive_cube_add()'"
+  polyhaven:
+    _description: "PolyHaven asset library integration"
+    status:
+      _tool: get_polyhaven_status
+      _description: "Check if PolyHaven integration is enabled in Blender"
+    category:
+      _description: "PolyHaven category operations"
+      list:
+        _tool: get_polyhaven_categories
+        _description: "List categories for a specific PolyHaven asset type"
+        _examples:
+          - "mcp2cli blender-mcp polyhaven category list --asset-type textures"
+    asset:
+      _description: "PolyHaven asset operations"
+      search:
+        _tool: search_polyhaven_assets
+        _description: "Search for assets on PolyHaven with optional filtering"
+        _examples:
+          - "mcp2cli blender-mcp polyhaven asset search --asset-type hdris --categories 'sky,outdoor'"
+      download:
+        _tool: download_polyhaven_asset
+        _description: "Download and import a PolyHaven asset into Blender"
+        _examples:
+          - "mcp2cli blender-mcp polyhaven asset download --asset-id venice-sunset --asset-type hdris --resolution 2k"
+    texture:
+      _description: "Texture operations"
+      set:
+        _tool: set_texture
+        _description: "Apply a downloaded PolyHaven texture to a scene object"
+        _examples:
+          - "mcp2cli blender-mcp polyhaven texture set --object-name Cube --texture-id wood-plank"
+  sketchfab:
+    _description: "Sketchfab 3D model library integration"
+    status:
+      _tool: get_sketchfab_status
+      _description: "Check if Sketchfab integration is enabled in Blender"
+    model:
+      _description: "Sketchfab model operations"
+      search:
+        _tool: search_sketchfab_models
+        _description: "Search for models on Sketchfab with optional filtering"
+        _examples:
+          - "mcp2cli blender-mcp sketchfab model search --query 'wooden chair'"
+      preview:
+        _tool: get_sketchfab_model_preview
+        _description: "Get a preview thumbnail of a Sketchfab model by its UID"
+      download:
+        _tool: download_sketchfab_model
+        _description: "Download and import a Sketchfab model into Blender"
+        _examples:
+          - "mcp2cli blender-mcp sketchfab model download --uid abc123 --target-size 1.0"
+  hyper3d:
+    _description: "Hyper3D Rodin AI 3D model generation integration"
+    status:
+      _tool: get_hyper3d_status
+      _description: "Check if Hyper3D Rodin integration is enabled in Blender"
+    model:
+      _description: "Hyper3D model generation and import operations"
+      generate-from-text:
+        _tool: generate_hyper3d_model_via_text
+        _description: "Generate a 3D model from a text description using Hyper3D"
+        _examples:
+          - "mcp2cli blender-mcp hyper3d model generate-from-text --text-prompt 'a wooden barrel'"
+      generate-from-images:
+        _tool: generate_hyper3d_model_via_images
+        _description: "Generate a 3D model from reference images using Hyper3D"
+      import:
+        _tool: import_generated_asset
+        _description: "Import a completed Hyper3D generated asset into Blender"
+    job:
+      _description: "Hyper3D generation job operations"
+      poll:
+        _tool: poll_rodin_job_status
+        _description: "Check the status of a Hyper3D Rodin generation job"
+  hunyuan3d:
+    _description: "Hunyuan3D AI 3D model generation integration"
+    status:
+      _tool: get_hunyuan3d_status
+      _description: "Check if Hunyuan3D integration is enabled in Blender"
+    model:
+      _description: "Hunyuan3D model generation and import operations"
+      generate:
+        _tool: generate_hunyuan3d_model
+        _description: "Generate a 3D model using Hunyuan3D from text or image input"
+        _examples:
+          - "mcp2cli blender-mcp hunyuan3d model generate --text-prompt 'a ceramic vase'"
+      import:
+        _tool: import_generated_asset_hunyuan
+        _description: "Import a completed Hunyuan3D generated asset into Blender"
+    job:
+      _description: "Hunyuan3D generation job operations"
+      poll:
+        _tool: poll_hunyuan_job_status
+        _description: "Check the status of a Hunyuan3D generation job"

@@ -1,0 +1,17 @@
+{
+  "server": "playwright-mcp",
+  "server_version": "1.60.0-alpha-1774999321000",
+  "tool_count": 21,
+  "cli_hash": "2905aebc",
+  "generated_at": "2026-04-06T08:30:49.884406+00:00",
+  "generated_by": "mcp2cli-push",
+  "files": [
+    "tools.json",
+    "cli.yaml",
+    "skills/SKILL.md",
+    "skills/reference/browser-interact.md",
+    "skills/reference/browser-misc.md",
+    "skills/reference/browser-navigate.md",
+    "skills/reference/browser-page.md"
+  ]
+}

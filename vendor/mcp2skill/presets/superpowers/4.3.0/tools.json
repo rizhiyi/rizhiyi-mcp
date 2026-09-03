@@ -1,0 +1,39 @@
+{
+  "server": "superpowers",
+  "version": "4.3.0",
+  "scanned_at": "2026-04-06T08:05:43.104662+00:00",
+  "tools": [
+    {
+      "name": "list_skills",
+      "description": "List all available Superpowers skills with their names and descriptions. Use this to discover which skills are available before loading one.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "read_skill",
+      "description": "Read the full content of a Superpowers skill by name. The skill content contains instructions, checklists, and patterns to follow. Read a skill before attempting the task it covers.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "skill_name": {
+            "type": "string",
+            "description": "Name of the skill to read (e.g. \"brainstorming\", \"test-driven-development\", \"systematic-debugging\")"
+          }
+        },
+        "required": [
+          "skill_name"
+        ]
+      }
+    }
+  ],
+  "server_meta": {
+    "command": "npx",
+    "args": [
+      "-y",
+      "superpowers-mcp"
+    ]
+  }
+}

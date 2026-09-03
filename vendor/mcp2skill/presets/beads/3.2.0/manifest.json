@@ -1,0 +1,15 @@
+{
+  "server": "beads",
+  "server_version": "3.2.0",
+  "tool_count": 15,
+  "cli_hash": "07387276",
+  "generated_at": "2026-04-06T08:55:03.603079+00:00",
+  "generated_by": "mcp2cli-push",
+  "files": [
+    "tools.json",
+    "cli.yaml",
+    "skills/SKILL.md",
+    "skills/reference/issue.md",
+    "skills/reference/workspace.md"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "server": "openspec",
+  "server_version": "1.0.0",
+  "tool_count": 11,
+  "cli_hash": "9c6172a4",
+  "generated_at": "2026-04-06T08:23:38.339821+00:00",
+  "generated_by": "mcp2cli-push",
+  "files": [
+    "tools.json",
+    "cli.yaml",
+    "skills/SKILL.md",
+    "skills/reference/change.md",
+    "skills/reference/content.md",
+    "skills/reference/project.md"
+  ]
+}

@@ -1,0 +1,40 @@
+server: puppeteer-mcp
+version: "0.1.0"
+generated_at: "2026-04-06T09:00:00Z"
+generated_by: ai
+
+server_aliases:
+  - puppeteer
+
+command_shortcuts: []
+
+commands:
+  page:
+    _description: "Page-level browser operations"
+    navigate:
+      _tool: puppeteer_navigate
+      _description: "Navigate to a URL"
+      _examples:
+        - "mcp2cli puppeteer-mcp page navigate --url https://example.com"
+    screenshot:
+      _tool: puppeteer_screenshot
+      _description: "Take a screenshot of the current page or a specific element"
+      _examples:
+        - "mcp2cli puppeteer-mcp page screenshot --name my-screenshot"
+    evaluate:
+      _tool: puppeteer_evaluate
+      _description: "Execute JavaScript in the browser console"
+  element:
+    _description: "Element interaction operations"
+    click:
+      _tool: puppeteer_click
+      _description: "Click an element on the page"
+    fill:
+      _tool: puppeteer_fill
+      _description: "Fill out an input field"
+    select:
+      _tool: puppeteer_select
+      _description: "Select an option in a select element"
+    hover:
+      _tool: puppeteer_hover
+      _description: "Hover over an element on the page"

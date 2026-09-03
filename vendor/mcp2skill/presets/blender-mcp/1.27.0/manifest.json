@@ -1,0 +1,19 @@
+{
+  "server": "blender-mcp",
+  "server_version": "1.27.0",
+  "tool_count": 22,
+  "cli_hash": "38cd7cf1",
+  "generated_at": "2026-04-06T08:59:26.151477+00:00",
+  "generated_by": "mcp2cli-push",
+  "files": [
+    "tools.json",
+    "cli.yaml",
+    "skills/SKILL.md",
+    "skills/reference/code.md",
+    "skills/reference/hunyuan3d.md",
+    "skills/reference/hyper3d.md",
+    "skills/reference/polyhaven.md",
+    "skills/reference/scene.md",
+    "skills/reference/sketchfab.md"
+  ]
+}

@@ -1,0 +1,2412 @@
+[
+  {
+    "name": "superpowers",
+    "package": "superpowers-mcp",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "superpowers-mcp"
+    ]
+  },
+  {
+    "name": "context7",
+    "package": "@upstash/context7-mcp",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "@upstash/context7-mcp"
+    ]
+  },
+  {
+    "name": "trendradar",
+    "package": "git+https://github.com/sansan0/TrendRadar",
+    "type": "pip",
+    "command": "uvx",
+    "args": [
+      "--from",
+      "git+https://github.com/sansan0/TrendRadar",
+      "trendradar-mcp"
+    ]
+  },
+  {
+    "name": "mindsdb",
+    "package": "mcp-remote",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "mcp-remote",
+      "http://127.0.0.1:47334/mcp",
+      "--allow-http",
+      "--transport",
+      "http-only"
+    ]
+  },
+  {
+    "name": "openspec",
+    "package": "@igor-olikh/openspec-mcp-server",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "@igor-olikh/openspec-mcp-server"
+    ]
+  },
+  {
+    "name": "chrome-devtools-mcp",
+    "package": "chrome-devtools-mcp",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "chrome-devtools-mcp@latest"
+    ]
+  },
+  {
+    "name": "playwright-mcp",
+    "package": "@playwright/mcp",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "@playwright/mcp"
+    ]
+  },
+  {
+    "name": "ruflo",
+    "package": "ruflo",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "ruflo@latest",
+      "mcp",
+      "start"
+    ]
+  },
+  {
+    "name": "github-mcp-server",
+    "package": "ghcr.io/github/github-mcp-server",
+    "type": "docker",
+    "command": "docker",
+    "args": [
+      "run",
+      "-i",
+      "--rm",
+      "-e",
+      "GITHUB_PERSONAL_ACCESS_TOKEN",
+      "ghcr.io/github/github-mcp-server"
+    ],
+    "env": {
+      "GITHUB_PERSONAL_ACCESS_TOKEN": {
+        "description": "GitHub personal access token",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      }
+    }
+  },
+  {
+    "name": "task-master",
+    "package": "task-master-ai",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "task-master-ai"
+    ],
+    "env": {
+      "OPENAI_API_KEY": {
+        "example": "sk-...",
+        "required": false,
+        "sensitive": true,
+        "description": "OpenAI API key"
+      },
+      "ANTHROPIC_API_KEY": {
+        "example": "sk-ant-...",
+        "required": false,
+        "sensitive": true,
+        "description": "Anthropic API key"
+      },
+      "GOOGLE_API_KEY": {
+        "example": "AIza...",
+        "required": false,
+        "sensitive": true,
+        "description": "Google API key"
+      },
+      "PERPLEXITY_API_KEY": {
+        "example": "pplx-...",
+        "required": false,
+        "sensitive": true,
+        "description": "Perplexity API key"
+      }
+    }
+  },
+  {
+    "name": "gpt-researcher",
+    "package": "https://github.com/assafelovic/gptr-mcp",
+    "type": "source",
+    "command": "bash",
+    "args": [
+      "-lc",
+      "tmp=$(mktemp -d) && git clone --depth 1 https://github.com/assafelovic/gptr-mcp.git \"$tmp\" >/dev/null && cd \"$tmp\" && MCP_TRANSPORT=stdio uv run --with-requirements requirements.txt server.py"
+    ]
+  },
+  {
+    "name": "next-ai-drawio",
+    "package": "@next-ai-drawio/mcp-server",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "@next-ai-drawio/mcp-server@latest"
+    ]
+  },
+  {
+    "name": "graphiti",
+    "package": "https://github.com/getzep/graphiti",
+    "type": "source",
+    "command": "bash",
+    "args": [
+      "-lc",
+      "tmp=$(mktemp -d) && git clone --depth 1 https://github.com/getzep/graphiti.git \"$tmp\" >/dev/null && cd \"$tmp/mcp_server\" && uv run --isolated --project . main.py --transport stdio"
+    ],
+    "env": {
+      "NEO4J_URI": {
+        "description": "Neo4j URI",
+        "example": "bolt://localhost:7687",
+        "required": false,
+        "sensitive": false
+      },
+      "NEO4J_USER": {
+        "description": "Neo4j username",
+        "example": "neo4j",
+        "required": false,
+        "sensitive": false
+      },
+      "NEO4J_PASSWORD": {
+        "description": "Neo4j password",
+        "example": "password",
+        "required": false,
+        "sensitive": true
+      },
+      "OPENAI_API_KEY": {
+        "description": "OpenAI API key",
+        "example": "",
+        "required": false,
+        "sensitive": true
+      },
+      "MODEL_NAME": {
+        "description": "Model name",
+        "example": "gpt-5-mini",
+        "required": false,
+        "sensitive": false
+      }
+    }
+  },
+  {
+    "name": "fastmcp-demo",
+    "package": "fastmcp",
+    "type": "pip",
+    "command": "bash",
+    "args": [
+      "-lc",
+      "tmp=$(mktemp -d) && cat > \"$tmp/server.py\" <<'PY'\nfrom fastmcp import FastMCP\n\nmcp = FastMCP('FastMCP Demo')\n\n\n@mcp.tool\ndef ping() -> str:\n    return 'pong'\n\n\nif __name__ == '__main__':\n    mcp.run()\nPY\nuvx --from fastmcp fastmcp run \"$tmp/server.py\""
+    ]
+  },
+  {
+    "name": "serena",
+    "package": "serena-agent",
+    "type": "pip",
+    "command": "uvx",
+    "args": [
+      "--from",
+      "serena-agent",
+      "serena-mcp-server"
+    ]
+  },
+  {
+    "name": "beads",
+    "package": "beads-mcp",
+    "type": "pip",
+    "command": "uvx",
+    "args": [
+      "--from",
+      "beads-mcp",
+      "beads-mcp"
+    ]
+  },
+  {
+    "name": "blender-mcp",
+    "package": "blender-mcp",
+    "type": "pip",
+    "command": "uvx",
+    "args": [
+      "blender-mcp"
+    ],
+    "env": {
+      "BLENDER_HOST": {
+        "description": "Blender host",
+        "example": "localhost",
+        "required": false,
+        "sensitive": false
+      },
+      "BLENDER_PORT": {
+        "description": "Blender port",
+        "example": "9876",
+        "required": false,
+        "sensitive": false
+      },
+      "DISABLE_TELEMETRY": {
+        "description": "disable telemetry",
+        "example": "0",
+        "required": false,
+        "sensitive": false
+      }
+    },
+    "source_url": "https://github.com/ahujasid/blender-mcp",
+    "notes": "Community Blender MCP server. It requires the paired Blender addon or bridge to be installed in Blender, while BLENDER_HOST and BLENDER_PORT point the local MCP process at that bridge."
+  },
+  {
+    "name": "n8n-mcp",
+    "package": "n8n-mcp",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "n8n-mcp"
+    ],
+    "env": {
+      "MCP_MODE": {
+        "description": "mcp mode",
+        "example": "stdio",
+        "required": false,
+        "sensitive": false
+      }
+    }
+  },
+  {
+    "name": "filesystem-mcp",
+    "package": "@modelcontextprotocol/server-filesystem",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "@modelcontextprotocol/server-filesystem",
+      "/Users/mengxiangyu/PythonProjects/mcp2cli"
+    ]
+  },
+  {
+    "name": "cognee",
+    "package": "https://github.com/topoteretes/cognee",
+    "type": "source",
+    "command": "bash",
+    "args": [
+      "-lc",
+      "tmp=$(mktemp -d) && git clone --depth 1 https://github.com/topoteretes/cognee.git \"$tmp\" >/dev/null && cd \"$tmp/cognee-mcp\" && uv sync --dev --all-extras --reinstall && uv run python src/server.py"
+    ],
+    "env": {
+      "LLM_API_KEY": {
+        "description": "llm api key",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      }
+    }
+  },
+  {
+    "name": "inbox-zero",
+    "package": "@inbox-zero/api",
+    "type": "approximation",
+    "command": "npx",
+    "args": [
+      "-y",
+      "@inbox-zero/api",
+      "openapi",
+      "--json"
+    ],
+    "env": {
+      "INBOX_ZERO_API_KEY": {
+        "description": "inbox zero api key",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      }
+    }
+  },
+  {
+    "name": "pipedream-mcp",
+    "package": "@pipedream/mcp",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "@pipedream/mcp",
+      "stdio",
+      "--app",
+      "slack"
+    ]
+  },
+  {
+    "name": "figma-mcp",
+    "package": "figma-developer-mcp",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "figma-developer-mcp",
+      "--stdio"
+    ],
+    "env": {
+      "FIGMA_API_KEY": {
+        "description": "figma api key",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      }
+    }
+  },
+  {
+    "name": "google-apis-mcp-toolbox",
+    "package": "@toolbox-sdk/server",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "@toolbox-sdk/server",
+      "--config",
+      "/Users/mengxiangyu/PythonProjects/mcp2cli/mcp-toolbox.tools.yaml"
+    ]
+  },
+  {
+    "name": "agentops-mcp",
+    "package": "agentops-mcp",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "agentops-mcp"
+    ],
+    "env": {
+      "AGENTOPS_API_KEY": {
+        "description": "agentops api key",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      }
+    }
+  },
+  {
+    "name": "agentql-mcp",
+    "package": "agentql-mcp",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "agentql-mcp"
+    ],
+    "env": {
+      "AGENTQL_API_KEY": {
+        "description": "agentql api key",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      }
+    }
+  },
+  {
+    "name": "browser-mcp",
+    "package": "@browsermcp/mcp",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "@browsermcp/mcp@latest"
+    ]
+  },
+  {
+    "name": "puppeteer-mcp",
+    "package": "@modelcontextprotocol/server-puppeteer",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "@modelcontextprotocol/server-puppeteer"
+    ]
+  },
+  {
+    "name": "firecrawl-mcp",
+    "package": "firecrawl-mcp",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "firecrawl-mcp"
+    ],
+    "env": {
+      "FIRECRAWL_API_KEY": {
+        "description": "firecrawl api key",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      }
+    }
+  },
+  {
+    "name": "brave-search-mcp",
+    "package": "@modelcontextprotocol/server-brave-search",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "@modelcontextprotocol/server-brave-search"
+    ],
+    "env": {
+      "BRAVE_API_KEY": {
+        "description": "brave api key",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      }
+    }
+  },
+  {
+    "name": "perplexity-mcp",
+    "package": "perplexity-mcp",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "perplexity-mcp"
+    ],
+    "env": {
+      "PERPLEXITY_API_KEY": {
+        "description": "Perplexity API key",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      }
+    }
+  },
+  {
+    "name": "sequential-thinking-mcp",
+    "package": "@modelcontextprotocol/server-sequential-thinking",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "@modelcontextprotocol/server-sequential-thinking"
+    ]
+  },
+  {
+    "name": "memory-mcp",
+    "package": "@modelcontextprotocol/server-memory",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "@modelcontextprotocol/server-memory"
+    ],
+    "env": {
+      "MEMORY_FILE_PATH": {
+        "description": "memory file path",
+        "example": "/Users/mengxiangyu/PythonProjects/mcp2cli/memory.jsonl",
+        "required": false,
+        "sensitive": true
+      }
+    }
+  },
+  {
+    "name": "redis-mcp",
+    "package": "@modelcontextprotocol/server-redis",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "@modelcontextprotocol/server-redis"
+    ],
+    "env": {
+      "REDIS_URL": {
+        "description": "redis url",
+        "example": "redis://127.0.0.1:6379",
+        "required": false,
+        "sensitive": false
+      }
+    }
+  },
+  {
+    "name": "postgres-mcp",
+    "package": "@modelcontextprotocol/server-postgres",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "@modelcontextprotocol/server-postgres",
+      "postgresql://127.0.0.1/postgres"
+    ]
+  },
+  {
+    "name": "sqlite-mcp",
+    "package": "sqlite-mcp-server",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "sqlite-mcp-server",
+      "--db_path",
+      "/Users/mengxiangyu/PythonProjects/mcp2cli/sqlite.db"
+    ]
+  },
+  {
+    "name": "supabase-mcp",
+    "package": "mcp-remote",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "mcp-remote",
+      "http://127.0.0.1:54321/mcp",
+      "--allow-http",
+      "--transport",
+      "http-only"
+    ]
+  },
+  {
+    "name": "mysql-mcp",
+    "package": "mysql-mcp",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "mysql-mcp"
+    ],
+    "env": {
+      "MYSQL_HOST": {
+        "description": "mysql host",
+        "example": "127.0.0.1",
+        "required": false,
+        "sensitive": false
+      },
+      "MYSQL_PORT": {
+        "description": "mysql port",
+        "example": "3306",
+        "required": false,
+        "sensitive": false
+      },
+      "MYSQL_DATABASE": {
+        "description": "mysql database",
+        "example": "test",
+        "required": false,
+        "sensitive": false
+      },
+      "MYSQL_USER": {
+        "description": "mysql user",
+        "example": "root",
+        "required": false,
+        "sensitive": false
+      },
+      "MYSQL_PASSWORD": {
+        "description": "mysql password",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      }
+    }
+  },
+  {
+    "name": "snowflake-mcp",
+    "package": "mcp_snowflake_server",
+    "type": "pip",
+    "command": "uvx",
+    "args": [
+      "--python=3.12",
+      "mcp_snowflake_server"
+    ],
+    "env": {
+      "SNOWFLAKE_USER": {
+        "description": "snowflake user",
+        "example": "",
+        "required": true,
+        "sensitive": false
+      },
+      "SNOWFLAKE_ACCOUNT": {
+        "description": "snowflake account",
+        "example": "",
+        "required": true,
+        "sensitive": false
+      },
+      "SNOWFLAKE_ROLE": {
+        "description": "snowflake role",
+        "example": "",
+        "required": true,
+        "sensitive": false
+      },
+      "SNOWFLAKE_DATABASE": {
+        "description": "snowflake database",
+        "example": "",
+        "required": true,
+        "sensitive": false
+      },
+      "SNOWFLAKE_SCHEMA": {
+        "description": "snowflake schema",
+        "example": "",
+        "required": true,
+        "sensitive": false
+      },
+      "SNOWFLAKE_WAREHOUSE": {
+        "description": "snowflake warehouse",
+        "example": "",
+        "required": true,
+        "sensitive": false
+      },
+      "SNOWFLAKE_PASSWORD": {
+        "description": "snowflake password",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      }
+    }
+  },
+  {
+    "name": "bigquery-mcp",
+    "package": "@ergut/mcp-bigquery-server",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "@ergut/mcp-bigquery-server",
+      "--project-id",
+      "your-project-id",
+      "--location",
+      "us-central1"
+    ],
+    "env": {
+      "GOOGLE_APPLICATION_CREDENTIALS": {
+        "example": "/path/to/service-account-key.json",
+        "required": false,
+        "sensitive": false,
+        "description": "google application credentials"
+      }
+    }
+  },
+  {
+    "name": "aws-mcp",
+    "package": "awslabs.aws-api-mcp-server",
+    "type": "pip",
+    "command": "uvx",
+    "args": [
+      "awslabs.aws-api-mcp-server@latest"
+    ],
+    "env": {
+      "AWS_REGION": {
+        "description": "aws region",
+        "example": "us-east-1",
+        "required": false,
+        "sensitive": false
+      },
+      "AWS_API_MCP_PROFILE_NAME": {
+        "description": "aws api mcp profile name",
+        "example": "default",
+        "required": false,
+        "sensitive": false
+      }
+    }
+  },
+  {
+    "name": "cloudflare-mcp",
+    "package": "mcp-remote",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "mcp-remote",
+      "https://docs.mcp.cloudflare.com/mcp"
+    ]
+  },
+  {
+    "name": "vercel-mcp",
+    "package": "mcp-remote",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "mcp-remote",
+      "https://mcp.vercel.com"
+    ]
+  },
+  {
+    "name": "edgeone-pages-mcp",
+    "package": "edgeone-pages-mcp-fullstack",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "edgeone-pages-mcp-fullstack@latest"
+    ],
+    "env": {
+      "EDGEONE_PAGES_API_TOKEN": {
+        "example": "eo_pat_xxx",
+        "required": true,
+        "sensitive": true,
+        "description": "edgeone pages api token"
+      },
+      "EDGEONE_PAGES_PROJECT_NAME": {
+        "example": "my-pages-project",
+        "required": true,
+        "sensitive": false,
+        "description": "edgeone pages project name"
+      }
+    }
+  },
+  {
+    "name": "docker-mcp",
+    "package": "https://github.com/docker/hub-mcp",
+    "type": "source",
+    "command": "bash",
+    "args": [
+      "-lc",
+      "tmp=$(mktemp -d) && git clone --depth 1 https://github.com/docker/hub-mcp.git \"$tmp\" >/dev/null && cd \"$tmp\" && npm install >/dev/null && npm run build >/dev/null && node dist/index.js --transport=stdio"
+    ],
+    "env": {
+      "HUB_PAT_TOKEN": {
+        "description": "hub pat token",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      }
+    }
+  },
+  {
+    "name": "kubernetes-mcp",
+    "package": "kubernetes-mcp-server",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "kubernetes-mcp-server@latest"
+    ]
+  },
+  {
+    "name": "terraform-mcp",
+    "package": "hashicorp/terraform-mcp-server",
+    "type": "docker",
+    "command": "docker",
+    "args": [
+      "run",
+      "-i",
+      "--rm",
+      "hashicorp/terraform-mcp-server:0.5.0"
+    ],
+    "env": {
+      "TFE_TOKEN": {
+        "description": "tfe token",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      }
+    }
+  },
+  {
+    "name": "gitlab-mcp",
+    "package": "@zereight/mcp-gitlab",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "@zereight/mcp-gitlab"
+    ],
+    "env": {
+      "GITLAB_PERSONAL_ACCESS_TOKEN": {
+        "description": "gitlab personal access token",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      },
+      "GITLAB_API_URL": {
+        "description": "gitlab api url",
+        "example": "https://gitlab.com/api/v4",
+        "required": false,
+        "sensitive": false
+      }
+    }
+  },
+  {
+    "name": "bitbucket-mcp",
+    "package": "bitbucket-mcp",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "bitbucket-mcp@latest"
+    ],
+    "env": {
+      "BITBUCKET_URL": {
+        "description": "bitbucket url",
+        "example": "https://api.bitbucket.org/2.0",
+        "required": false,
+        "sensitive": false
+      },
+      "BITBUCKET_WORKSPACE": {
+        "description": "bitbucket workspace",
+        "example": "your-workspace",
+        "required": false,
+        "sensitive": false
+      },
+      "BITBUCKET_TOKEN": {
+        "description": "bitbucket token",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      }
+    }
+  },
+  {
+    "name": "slack-mcp",
+    "package": "@modelcontextprotocol/server-slack",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "@modelcontextprotocol/server-slack"
+    ],
+    "env": {
+      "SLACK_BOT_TOKEN": {
+        "description": "slack bot token",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      },
+      "SLACK_TEAM_ID": {
+        "description": "slack team id",
+        "example": "",
+        "required": true,
+        "sensitive": false
+      },
+      "SLACK_CHANNEL_IDS": {
+        "description": "slack channel ids",
+        "example": "",
+        "required": true,
+        "sensitive": false
+      }
+    }
+  },
+  {
+    "name": "discord-mcp",
+    "package": "@pasympa/discord-mcp",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "@pasympa/discord-mcp"
+    ],
+    "env": {
+      "DISCORD_TOKEN": {
+        "description": "discord token",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      }
+    },
+    "source_url": "https://github.com/PaSympa/discord-mcp",
+    "notes": "Community-maintained Discord MCP server with broad guild/channel/message tooling. Requires a Discord bot token with the needed bot permissions and intents."
+  },
+  {
+    "name": "gmail",
+    "package": "@gongrzhe/server-gmail-autoauth-mcp",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "@gongrzhe/server-gmail-autoauth-mcp"
+    ],
+    "env": {
+      "GMAIL_OAUTH_PATH": {
+        "description": "gmail oauth path",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      },
+      "GMAIL_CREDENTIALS_PATH": {
+        "description": "gmail credentials path",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      }
+    },
+    "source_url": "https://github.com/gongrzhe/server-gmail-autoauth-mcp",
+    "notes": "Community-maintained Gmail MCP server with browser OAuth auto-auth. If env is omitted it falls back to ~/.gmail-mcp/gcp-oauth.keys.json and ~/.gmail-mcp/credentials.json."
+  },
+  {
+    "name": "google-drive",
+    "package": "@piotr-agier/google-drive-mcp",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "@piotr-agier/google-drive-mcp"
+    ],
+    "env": {
+      "GOOGLE_DRIVE_OAUTH_CREDENTIALS": {
+        "description": "Google drive oauth credentials",
+        "example": "",
+        "required": true,
+        "sensitive": false
+      },
+      "GOOGLE_DRIVE_MCP_TOKEN_PATH": {
+        "description": "Google drive MCP token path",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      }
+    },
+    "source_url": "https://github.com/piotr-agier/google-drive-mcp",
+    "notes": "Feature-rich Google Drive/Docs/Sheets/Slides/Calendar MCP server. Standard local setup uses OAuth credentials plus token storage; the project also supports service-account and external-token auth modes."
+  },
+  {
+    "name": "notion-mcp-server",
+    "package": "@notionhq/notion-mcp-server",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "@notionhq/notion-mcp-server"
+    ],
+    "env": {
+      "NOTION_TOKEN": {
+        "description": "notion token",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      }
+    },
+    "source_url": "https://github.com/makenotion/notion-mcp-server",
+    "notes": "Official local Notion MCP server for the Notion API. Notion now prioritizes its remote MCP offering, but this local package remains the official npm server."
+  },
+  {
+    "name": "airtable-mcp-server",
+    "package": "airtable-mcp-server",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "airtable-mcp-server"
+    ],
+    "env": {
+      "AIRTABLE_API_KEY": {
+        "description": "airtable API key",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      }
+    },
+    "source_url": "https://github.com/domdomegg/airtable-mcp-server",
+    "notes": "Community-maintained Airtable MCP server. Requires an Airtable personal access token with schema and record scopes for the target bases."
+  },
+  {
+    "name": "hubspot-mcp-server",
+    "package": "@hubspot/mcp-server",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "@hubspot/mcp-server"
+    ],
+    "env": {
+      "PRIVATE_APP_ACCESS_TOKEN": {
+        "description": "private app access token",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      }
+    },
+    "source_url": "https://developers.hubspot.com/mcp",
+    "notes": "Official HubSpot beta MCP server. Requires a HubSpot private app access token with the scopes needed by the CRM tools you want to expose."
+  },
+  {
+    "name": "salesforce-mcp",
+    "package": "@salesforce/mcp",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "@salesforce/mcp",
+      "--orgs",
+      "DEFAULT_TARGET_ORG",
+      "--toolsets",
+      "all"
+    ],
+    "source_url": "https://github.com/salesforcecli/mcp",
+    "notes": "Official Salesforce DX MCP server. It does not require API-key env vars by default, but it does require you to have already authorized the target Salesforce org locally with the Salesforce CLI."
+  },
+  {
+    "name": "stripe-mcp",
+    "package": "@stripe/mcp",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "@stripe/mcp"
+    ],
+    "env": {
+      "STRIPE_SECRET_KEY": {
+        "description": "Stripe secret key",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      }
+    },
+    "source_url": "https://github.com/stripe/ai/tree/main/tools/modelcontextprotocol",
+    "notes": "Official Stripe MCP server. A restricted API key is recommended so the enabled tools match the permissions you actually want to grant."
+  },
+  {
+    "name": "shopify-mcp",
+    "package": "@kockatoos/shopify-mcp",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "@kockatoos/shopify-mcp"
+    ],
+    "env": {
+      "SHOPIFY_STORE_NAME": {
+        "description": "Shopify store name",
+        "example": "",
+        "required": true,
+        "sensitive": false
+      },
+      "SHOPIFY_CLIENT_ID": {
+        "description": "Shopify client ID",
+        "example": "",
+        "required": true,
+        "sensitive": false
+      },
+      "SHOPIFY_CLIENT_SECRET": {
+        "description": "Shopify client secret",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      },
+      "SHOPIFY_API_VERSION": {
+        "description": "Shopify API version",
+        "example": "2026-01",
+        "required": false,
+        "sensitive": false
+      }
+    },
+    "source_url": "https://github.com/untitled-developers/shopify-mcp",
+    "notes": "Community-maintained Shopify Admin API MCP server with broad store-management coverage. Uses Shopify client_credentials auth rather than an interactive browser flow."
+  },
+  {
+    "name": "paypal-mcp",
+    "package": "@paypal/mcp",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "@paypal/mcp",
+      "--tools=all"
+    ],
+    "env": {
+      "PAYPAL_ACCESS_TOKEN": {
+        "description": "Paypal access token",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      },
+      "PAYPAL_ENVIRONMENT": {
+        "description": "Paypal environment",
+        "example": "SANDBOX",
+        "required": false,
+        "sensitive": false
+      }
+    },
+    "source_url": "https://www.npmjs.com/package/@paypal/mcp",
+    "notes": "Official PayPal MCP server. Requires a PayPal access token; set PAYPAL_ENVIRONMENT to SANDBOX or PRODUCTION depending on the token source."
+  },
+  {
+    "name": "algolia-mcp",
+    "package": "https://github.com/algolia/mcp",
+    "type": "source",
+    "command": "bash",
+    "args": [
+      "-lc",
+      "tmp=$(mktemp -d) && git clone --depth 1 https://github.com/algolia/mcp.git \"$tmp\" >/dev/null && cd \"$tmp/cmd/mcp\" && go run ."
+    ],
+    "env": {
+      "ALGOLIA_APP_ID": {
+        "description": "Algolia app ID",
+        "example": "",
+        "required": true,
+        "sensitive": false
+      },
+      "ALGOLIA_INDEX_NAME": {
+        "description": "Algolia index name",
+        "example": "",
+        "required": true,
+        "sensitive": false
+      },
+      "ALGOLIA_API_KEY": {
+        "description": "Algolia API key",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      },
+      "ALGOLIA_WRITE_API_KEY": {
+        "description": "Algolia write API key",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      },
+      "MCP_ENABLED_TOOLS": {
+        "description": "MCP enabled tools",
+        "example": "",
+        "required": true,
+        "sensitive": false
+      },
+      "MCP_SERVER_TYPE": {
+        "description": "MCP server type",
+        "example": "stdio",
+        "required": false,
+        "sensitive": false
+      },
+      "MCP_SSE_PORT": {
+        "description": "MCP SSE port",
+        "example": "8080",
+        "required": false,
+        "sensitive": false
+      }
+    },
+    "source_url": "https://github.com/algolia/mcp",
+    "notes": "Official but experimental Algolia MCP server from Algolia's Go repository. Requires Go locally and at least read credentials; write operations additionally require ALGOLIA_WRITE_API_KEY."
+  },
+  {
+    "name": "elasticsearch-mcp",
+    "package": "@tocharianou/elasticsearch-mcp",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "@tocharianou/elasticsearch-mcp"
+    ],
+    "env": {
+      "ES_URL": {
+        "description": "es URL",
+        "example": "",
+        "required": true,
+        "sensitive": false
+      },
+      "ES_API_KEY": {
+        "description": "es API key",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      },
+      "ES_USERNAME": {
+        "description": "es username",
+        "example": "",
+        "required": true,
+        "sensitive": false
+      },
+      "ES_PASSWORD": {
+        "description": "es password",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      },
+      "ES_CA_CERT": {
+        "description": "es ca cert",
+        "example": "",
+        "required": true,
+        "sensitive": false
+      },
+      "NODE_TLS_REJECT_UNAUTHORIZED": {
+        "description": "node TLS reject unauthorized",
+        "example": "0",
+        "required": false,
+        "sensitive": false
+      }
+    },
+    "source_url": "https://github.com/TocharianOU/elasticsearch-mcp",
+    "notes": "Community-maintained Elasticsearch MCP server with broad API coverage and version detection across ES 5.x-9.x. Use either ES_API_KEY or ES_USERNAME/ES_PASSWORD."
+  },
+  {
+    "name": "jina-mcp-tools",
+    "package": "jina-mcp-tools",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "jina-mcp-tools",
+      "--transport",
+      "stdio",
+      "--tokens-per-page",
+      "15000",
+      "--search-endpoint",
+      "standard"
+    ],
+    "env": {
+      "JINA_API_KEY": {
+        "description": "Jina API key",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      }
+    },
+    "source_url": "https://github.com/PsychArch/jina-mcp-tools",
+    "notes": "Community MCP wrapper around Jina AI Reader and Search APIs. JINA_API_KEY is optional for reader-only usage, but search features expect it."
+  },
+  {
+    "name": "weaviate-docs-mcp",
+    "package": "mcp-remote",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "mcp-remote",
+      "https://weaviate-docs.mcp.kapa.ai"
+    ],
+    "source_url": "https://docs.weaviate.io/weaviate/mcp/docs-mcp-server",
+    "notes": "Official Weaviate documentation MCP endpoint proxied through mcp-remote for stdio-compatible clients. This entry targets the public docs server rather than a self-hosted Weaviate data plane."
+  },
+  {
+    "name": "pinecone-mcp",
+    "package": "@pinecone-database/mcp",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "@pinecone-database/mcp"
+    ],
+    "env": {
+      "PINECONE_API_KEY": {
+        "description": "pinecone API key",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      }
+    },
+    "source_url": "https://github.com/pinecone-io/pinecone-mcp",
+    "notes": "Official Pinecone Developer MCP server. Without PINECONE_API_KEY it can still search docs, but index management and record operations require the API key."
+  },
+  {
+    "name": "qdrant-mcp",
+    "package": "mad-mcp-qdrant",
+    "type": "pip",
+    "command": "uvx",
+    "args": [
+      "mad-mcp-qdrant"
+    ],
+    "env": {
+      "QDRANT_URL": {
+        "description": "Qdrant URL",
+        "example": "",
+        "required": true,
+        "sensitive": false
+      },
+      "QDRANT_API_KEY": {
+        "description": "Qdrant API key",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      },
+      "COLLECTION_NAME": {
+        "description": "collection name",
+        "example": "",
+        "required": true,
+        "sensitive": false
+      },
+      "QDRANT_VECTOR_NAME": {
+        "description": "Qdrant vector name",
+        "example": "",
+        "required": true,
+        "sensitive": false
+      },
+      "QDRANT_LOCAL_PATH": {
+        "description": "Qdrant local path",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      },
+      "EMBEDDING_PROVIDER": {
+        "description": "embedding provider",
+        "example": "fastembed",
+        "required": false,
+        "sensitive": false
+      },
+      "EMBEDDING_MODEL": {
+        "description": "embedding model",
+        "example": "sentence-transformers/all-MiniLM-L6-v2",
+        "required": false,
+        "sensitive": false
+      },
+      "EMBEDDING_VECTOR_SIZE": {
+        "description": "embedding vector size",
+        "example": "",
+        "required": true,
+        "sensitive": false
+      },
+      "OPENAI_API_KEY": {
+        "description": "Openai API key",
+        "example": "",
+        "required": false,
+        "sensitive": true
+      },
+      "OPENAI_BASE_URL": {
+        "description": "Openai base URL",
+        "example": "",
+        "required": true,
+        "sensitive": false
+      }
+    },
+    "source_url": "https://pypi.org/project/mad-mcp-qdrant/",
+    "notes": "Community-maintained but feature-complete Qdrant MCP server. Use QDRANT_URL for a remote cluster or QDRANT_LOCAL_PATH for embedded local storage; semantic search and write tools need embedding configuration."
+  },
+  {
+    "name": "milvus-mcp",
+    "package": "mcp-server-milvus",
+    "type": "pip",
+    "command": "uvx",
+    "args": [
+      "mcp-server-milvus@latest",
+      "--milvus-uri",
+      "http://127.0.0.1:19530"
+    ],
+    "env": {
+      "MILVUS_URI": {
+        "description": "Milvus URI",
+        "example": "http://127.0.0.1:19530",
+        "required": false,
+        "sensitive": false
+      },
+      "MILVUS_TOKEN": {
+        "description": "Milvus token",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      },
+      "MILVUS_DB": {
+        "description": "Milvus DB",
+        "example": "default",
+        "required": false,
+        "sensitive": false
+      }
+    },
+    "source_url": "https://github.com/danchev/mcp-server-milvus",
+    "notes": "Community-maintained Milvus MCP server, based on the earlier Zilliz implementation and packaged for uvx. You can keep the URI in args or rely on MILVUS_URI from env."
+  },
+  {
+    "name": "neo4j-mcp",
+    "package": "https://github.com/neo4j/mcp",
+    "type": "source",
+    "command": "bash",
+    "args": [
+      "-lc",
+      "tmp=$(mktemp -d) && git clone --depth 1 https://github.com/neo4j/mcp.git \"$tmp\" >/dev/null && cd \"$tmp\" && go run ./cmd/neo4j-mcp"
+    ],
+    "env": {
+      "NEO4J_URI": {
+        "description": "Neo4J URI",
+        "example": "bolt://localhost:7687",
+        "required": false,
+        "sensitive": false
+      },
+      "NEO4J_USERNAME": {
+        "description": "Neo4J username",
+        "example": "neo4j",
+        "required": false,
+        "sensitive": false
+      },
+      "NEO4J_PASSWORD": {
+        "description": "Neo4J password",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      },
+      "NEO4J_DATABASE": {
+        "description": "Neo4J database",
+        "example": "neo4j",
+        "required": false,
+        "sensitive": false
+      },
+      "NEO4J_READ_ONLY": {
+        "description": "Neo4J read only",
+        "example": "true",
+        "required": false,
+        "sensitive": false
+      },
+      "NEO4J_TELEMETRY": {
+        "description": "Neo4J telemetry",
+        "example": "true",
+        "required": false,
+        "sensitive": false
+      },
+      "NEO4J_TRANSPORT_MODE": {
+        "description": "Neo4J transport mode",
+        "example": "stdio",
+        "required": false,
+        "sensitive": false
+      }
+    },
+    "source_url": "https://github.com/neo4j/mcp",
+    "notes": "Official Neo4j MCP server. STDIO mode validates connectivity and APOC availability at startup, so the target Neo4j instance must already be reachable and have APOC installed."
+  },
+  {
+    "name": "arangodb-mcp",
+    "package": "arangodb/mcp-arangodb",
+    "type": "docker",
+    "command": "docker",
+    "args": [
+      "run",
+      "-i",
+      "--rm",
+      "--network",
+      "host",
+      "-e",
+      "ARANGO_HOSTS",
+      "-e",
+      "ARANGO_ROOT_USERNAME",
+      "-e",
+      "ARANGO_ROOT_PASSWORD",
+      "-e",
+      "ARANGO_DEFAULT_DB_NAME",
+      "-e",
+      "ARANGO_VERIFY_SSL",
+      "-e",
+      "ARANGO_SSL_CERT_PATH",
+      "arangodb/mcp-arangodb:latest"
+    ],
+    "env": {
+      "ARANGO_HOSTS": {
+        "description": "arango hosts",
+        "example": "http://localhost:8529",
+        "required": false,
+        "sensitive": false
+      },
+      "ARANGO_ROOT_USERNAME": {
+        "description": "arango root username",
+        "example": "root",
+        "required": false,
+        "sensitive": false
+      },
+      "ARANGO_ROOT_PASSWORD": {
+        "description": "arango root password",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      },
+      "ARANGO_DEFAULT_DB_NAME": {
+        "description": "arango default DB name",
+        "example": "_system",
+        "required": false,
+        "sensitive": false
+      },
+      "ARANGO_VERIFY_SSL": {
+        "description": "arango verify SSL",
+        "example": "false",
+        "required": false,
+        "sensitive": false
+      },
+      "ARANGO_SSL_CERT_PATH": {
+        "description": "arango SSL cert path",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      }
+    },
+    "source_url": "https://docs.arango.ai/ecosystem/arangodb-mcp-server/",
+    "notes": "Official ArangoDB MCP server is currently distributed as a Docker image. For HTTPS deployments, set ARANGO_VERIFY_SSL=true and mount the CA file path into the container for ARANGO_SSL_CERT_PATH."
+  },
+  {
+    "name": "clickhouse-mcp",
+    "package": "mcp-clickhouse",
+    "type": "pip",
+    "command": "uvx",
+    "args": [
+      "--from",
+      "mcp-clickhouse",
+      "mcp-clickhouse"
+    ],
+    "env": {
+      "CLICKHOUSE_HOST": {
+        "description": "Clickhouse host",
+        "example": "",
+        "required": true,
+        "sensitive": false
+      },
+      "CLICKHOUSE_PORT": {
+        "description": "Clickhouse port",
+        "example": "8443",
+        "required": false,
+        "sensitive": false
+      },
+      "CLICKHOUSE_USER": {
+        "description": "Clickhouse user",
+        "example": "",
+        "required": true,
+        "sensitive": false
+      },
+      "CLICKHOUSE_PASSWORD": {
+        "description": "Clickhouse password",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      },
+      "CLICKHOUSE_ROLE": {
+        "description": "Clickhouse role",
+        "example": "",
+        "required": true,
+        "sensitive": false
+      },
+      "CLICKHOUSE_SECURE": {
+        "description": "Clickhouse secure",
+        "example": "true",
+        "required": false,
+        "sensitive": false
+      },
+      "CLICKHOUSE_VERIFY": {
+        "description": "Clickhouse verify",
+        "example": "true",
+        "required": false,
+        "sensitive": false
+      },
+      "CLICKHOUSE_CONNECT_TIMEOUT": {
+        "description": "Clickhouse connect timeout",
+        "example": "30",
+        "required": false,
+        "sensitive": false
+      },
+      "CLICKHOUSE_SEND_RECEIVE_TIMEOUT": {
+        "description": "Clickhouse send receive timeout",
+        "example": "30",
+        "required": false,
+        "sensitive": false
+      },
+      "CLICKHOUSE_ALLOW_WRITE_ACCESS": {
+        "description": "Clickhouse allow write access",
+        "example": "false",
+        "required": false,
+        "sensitive": false
+      },
+      "CLICKHOUSE_ALLOW_DROP": {
+        "description": "Clickhouse allow drop",
+        "example": "false",
+        "required": false,
+        "sensitive": false
+      },
+      "CHDB_ENABLED": {
+        "description": "chdb enabled",
+        "example": "false",
+        "required": false,
+        "sensitive": false
+      },
+      "CLICKHOUSE_ENABLED": {
+        "description": "Clickhouse enabled",
+        "example": "true",
+        "required": false,
+        "sensitive": false
+      }
+    },
+    "source_url": "https://github.com/ClickHouse/mcp-clickhouse",
+    "notes": "Official ClickHouse MCP server from ClickHouse. Defaulting write and drop access to false matches the safer read-only posture described in the README."
+  },
+  {
+    "name": "kafka-mcp-server",
+    "package": "https://github.com/tuannvm/kafka-mcp-server",
+    "type": "source",
+    "command": "bash",
+    "args": [
+      "-lc",
+      "tmp=$(mktemp -d) && git clone --depth 1 https://github.com/tuannvm/kafka-mcp-server.git \"$tmp\" >/dev/null && cd \"$tmp\" && go run ./cmd"
+    ],
+    "env": {
+      "KAFKA_BROKERS": {
+        "description": "Kafka brokers",
+        "example": "localhost:9092",
+        "required": false,
+        "sensitive": false
+      },
+      "KAFKA_CLIENT_ID": {
+        "description": "Kafka client ID",
+        "example": "kafka-mcp-server",
+        "required": false,
+        "sensitive": false
+      },
+      "MCP_TRANSPORT": {
+        "description": "MCP transport",
+        "example": "stdio",
+        "required": false,
+        "sensitive": false
+      },
+      "KAFKA_SASL_MECHANISM": {
+        "description": "Kafka sasl mechanism",
+        "example": "",
+        "required": true,
+        "sensitive": false
+      },
+      "KAFKA_SASL_USER": {
+        "description": "Kafka sasl user",
+        "example": "",
+        "required": true,
+        "sensitive": false
+      },
+      "KAFKA_SASL_PASSWORD": {
+        "description": "Kafka sasl password",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      },
+      "KAFKA_TLS_ENABLE": {
+        "description": "Kafka TLS enable",
+        "example": "false",
+        "required": false,
+        "sensitive": false
+      }
+    },
+    "source_url": "https://github.com/tuannvm/kafka-mcp-server",
+    "notes": "Community Kafka MCP server implemented in Go with stdio and HTTP transports. The documented startup path is a built binary, so this entry uses a temporary source clone plus go run for one-shot execution."
+  },
+  {
+    "name": "rabbitmq-mcp",
+    "package": "amq-mcp-server-rabbitmq",
+    "type": "pip",
+    "command": "uvx",
+    "args": [
+      "amq-mcp-server-rabbitmq@latest",
+      "--allow-mutative-tools"
+    ],
+    "source_url": "https://github.com/amazon-mq/mcp-server-rabbitmq",
+    "notes": "RabbitMQ MCP server re-homed under amazon-mq and published on PyPI. Broker connection details are supplied during tool usage rather than through mandatory startup env vars."
+  },
+  {
+    "name": "temporal-mcp",
+    "package": "temporal-mcp",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "temporal-mcp"
+    ],
+    "env": {
+      "TEMPORAL_MCP_CONFIG": {
+        "description": "Temporal MCP config",
+        "example": "",
+        "required": true,
+        "sensitive": false
+      },
+      "TEMPORAL_API_KEY": {
+        "description": "Temporal API key",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      }
+    },
+    "source_url": "https://github.com/stevekinney/temporal-mcp",
+    "notes": "Community Temporal MCP server with a strong read-only operational focus. Set TEMPORAL_API_KEY only for Temporal Cloud profiles; self-hosted clusters can be configured entirely through the JSON config file."
+  },
+  {
+    "name": "airflow-mcp-server",
+    "package": "airflow-mcp-server",
+    "type": "pip",
+    "command": "uvx",
+    "args": [
+      "airflow-mcp-server",
+      "--safe",
+      "--base-url",
+      "http://localhost:8080",
+      "--auth-token",
+      ""
+    ],
+    "env": {
+      "AIRFLOW_MCP_RESOURCES_DIR": {
+        "description": "Airflow MCP resources dir",
+        "example": "",
+        "required": true,
+        "sensitive": false
+      }
+    },
+    "source_url": "https://github.com/abhishekbhakat/airflow-mcp-server",
+    "notes": "Community Airflow 3 MCP server. Authentication is primarily passed via CLI args, and Airflow 3 only supports JWT auth in this server; AIRFLOW_MCP_RESOURCES_DIR is optional for local Markdown resources."
+  },
+  {
+    "name": "prefect-mcp",
+    "package": "prefect-mcp",
+    "type": "pip",
+    "command": "uvx",
+    "args": [
+      "--from",
+      "prefect-mcp",
+      "prefect-mcp-server"
+    ],
+    "env": {
+      "PREFECT_API_URL": {
+        "description": "Prefect API URL",
+        "example": "",
+        "required": true,
+        "sensitive": false
+      },
+      "PREFECT_API_KEY": {
+        "description": "Prefect API key",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      }
+    },
+    "source_url": "https://github.com/PrefectHQ/prefect-mcp-server",
+    "notes": "Official Prefect MCP server. It can inherit credentials from a local Prefect profile, but explicit PREFECT_API_URL and PREFECT_API_KEY are the most portable batch configuration."
+  },
+  {
+    "name": "dagster-mcp",
+    "package": "mcp-server-dagster",
+    "type": "pip",
+    "command": "uvx",
+    "args": [
+      "--from",
+      "mcp-server-dagster",
+      "mcp-dagster"
+    ],
+    "env": {
+      "DAGSTER_GRAPHQL_URL": {
+        "description": "Dagster graphql URL",
+        "example": "http://localhost:3000/graphql",
+        "required": false,
+        "sensitive": false
+      }
+    },
+    "source_url": "https://github.com/kyryl-opens-ml/mcp-server-dagster",
+    "notes": "Community Dagster MCP server focused on Dagster GraphQL operations. The upstream README documents localhost:3000/graphql as the default connection target, so this env key is included as the practical override point."
+  },
+  {
+    "name": "metabase-mcp",
+    "package": "@takeokunn/metabase-mcp",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "@takeokunn/metabase-mcp"
+    ],
+    "env": {
+      "METABASE_URL": {
+        "description": "Metabase URL",
+        "example": "",
+        "required": true,
+        "sensitive": false
+      },
+      "METABASE_API_TOKEN": {
+        "description": "Metabase API token",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      }
+    },
+    "source_url": "https://github.com/takeokunn/metabase-mcp",
+    "notes": "Community Metabase MCP server with broad Metabase OSS API coverage and clearly documented token-based auth. Requires a Metabase API token rather than an email/password login flow."
+  },
+  {
+    "name": "superset-mcp",
+    "package": "superset-mcp",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "superset-mcp"
+    ],
+    "env": {
+      "SUPERSET_BASE_URL": {
+        "description": "Superset base URL",
+        "example": "",
+        "required": false,
+        "sensitive": false
+      },
+      "SUPERSET_USERNAME": {
+        "description": "Superset username",
+        "example": "",
+        "required": true,
+        "sensitive": false
+      },
+      "SUPERSET_PASSWORD": {
+        "description": "Superset password",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      },
+      "SUPERSET_ACCESS_TOKEN": {
+        "description": "Superset access token",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      }
+    },
+    "source_url": "https://github.com/winding2020/superset-mcp",
+    "notes": "Community Apache Superset MCP server. Use either username/password or SUPERSET_ACCESS_TOKEN; token auth is the cleaner option when your Superset deployment supports it."
+  },
+  {
+    "name": "tableau-mcp",
+    "package": "@tableau/mcp-server",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "@tableau/mcp-server@latest"
+    ],
+    "env": {
+      "SERVER": {
+        "description": "server",
+        "example": "",
+        "required": false,
+        "sensitive": false
+      },
+      "SITE_NAME": {
+        "description": "site name",
+        "example": "",
+        "required": false,
+        "sensitive": false
+      },
+      "PAT_NAME": {
+        "description": "PAT name",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      },
+      "PAT_VALUE": {
+        "description": "PAT value",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      }
+    },
+    "source_url": "https://github.com/tableau/tableau-mcp",
+    "notes": "Official Tableau MCP server. PAT auth is the documented standard config for local MCP clients, so the batch entry uses SERVER, SITE_NAME, PAT_NAME, and PAT_VALUE."
+  },
+  {
+    "name": "powerbi-mcp",
+    "package": "github:AjvoGod/powerbi-mcp",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "github:AjvoGod/powerbi-mcp"
+    ],
+    "env": {
+      "POWERBI_PBIX_ROOT": {
+        "description": "Powerbi PBIX root",
+        "example": "",
+        "required": false,
+        "sensitive": false
+      },
+      "AZURE_TENANT_ID": {
+        "description": "azure tenant ID",
+        "example": "",
+        "required": true,
+        "sensitive": false
+      },
+      "AZURE_CLIENT_ID": {
+        "description": "azure client ID",
+        "example": "",
+        "required": true,
+        "sensitive": false
+      },
+      "AZURE_CLIENT_SECRET": {
+        "description": "azure client secret",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      },
+      "LOG_LEVEL": {
+        "description": "log level",
+        "example": "info",
+        "required": false,
+        "sensitive": false
+      }
+    },
+    "source_url": "https://github.com/AjvoGod/powerbi-mcp",
+    "notes": "Community Power BI MCP server. Local PBIX analysis works with only POWERBI_PBIX_ROOT; Azure credentials are additionally required for cloud workspace, dataset, and export operations."
+  },
+  {
+    "name": "minimax-mcp-js",
+    "package": "minimax-mcp-js",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "minimax-mcp-js"
+    ],
+    "env": {
+      "MINIMAX_API_HOST": {
+        "description": "Minimax API host",
+        "example": "https://api.minimaxi.chat",
+        "required": false,
+        "sensitive": false
+      },
+      "MINIMAX_API_KEY": {
+        "description": "Minimax API key",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      },
+      "MINIMAX_MCP_BASE_PATH": {
+        "description": "Minimax MCP base path",
+        "example": "",
+        "required": false,
+        "sensitive": true
+      },
+      "MINIMAX_RESOURCE_MODE": {
+        "description": "Minimax resource mode",
+        "example": "url",
+        "required": false,
+        "sensitive": false
+      }
+    },
+    "source_url": "https://github.com/MiniMax-AI/MiniMax-MCP-JS",
+    "notes": "Official MiniMax MCP JavaScript implementation. The API host must match the region of the API key, and MINIMAX_RESOURCE_MODE controls whether generated assets are returned as URLs or downloaded locally."
+  },
+  {
+    "name": "openai-mcp-server",
+    "package": "openai-mcp-server",
+    "type": "npm",
+    "command": "bash",
+    "args": [
+      "-lc",
+      "npx -y openai-mcp-server \"$OPENAI_API_KEY\""
+    ],
+    "env": {
+      "OPENAI_API_KEY": {
+        "description": "Openai API key",
+        "example": "",
+        "required": false,
+        "sensitive": true
+      }
+    },
+    "source_url": "https://www.npmjs.com/package/openai-mcp-server",
+    "notes": "Community OpenAI MCP wrapper. I did not find an official standalone OpenAI stdio MCP package for this slot, so this entry uses the simplest maintained community server and passes the API key through an env-expanded wrapper."
+  },
+  {
+    "name": "claude-code-mcp",
+    "package": "@anthropic-ai/claude-code",
+    "type": "approximation",
+    "command": "claude",
+    "args": [
+      "mcp",
+      "serve"
+    ],
+    "env": {
+      "ANTHROPIC_API_KEY": {
+        "description": "Anthropic API key",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      }
+    },
+    "source_url": "https://github.com/anthropics/claude-code",
+    "notes": "Official Anthropic option for exposing Claude Code capabilities as an MCP server. Anthropic does not publish a separate generic 'Anthropic tools' server package here, so this uses the built-in `claude mcp serve` command."
+  },
+  {
+    "name": "gemini-mcp",
+    "package": "@fre4x/gemini",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "@fre4x/gemini"
+    ],
+    "env": {
+      "GEMINI_API_KEY": {
+        "description": "Gemini API key",
+        "example": "",
+        "required": false,
+        "sensitive": true
+      },
+      "MOCK": {
+        "description": "mock",
+        "example": "false",
+        "required": false,
+        "sensitive": false
+      }
+    },
+    "source_url": "https://www.npmjs.com/package/@fre4x/gemini",
+    "notes": "Community Gemini MCP server with multimodal analysis plus Imagen and Veo generation support. Google's official Gemini CLI documents MCP client support, but not a dedicated Gemini stdio server package for this slot."
+  },
+  {
+    "name": "huggingface-mcp",
+    "package": "mcp-remote",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "mcp-remote",
+      "https://huggingface.co/mcp"
+    ],
+    "env": {
+      "HF_TOKEN": {
+        "description": "hf token",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      }
+    },
+    "source_url": "https://github.com/huggingface/hf-mcp-server",
+    "notes": "Official Hugging Face MCP server proxied through mcp-remote for stdio-compatible clients. The hosted endpoint prefers an Authorization bearer token; HF_TOKEN is the practical credential to supply when your client cannot complete the interactive login flow."
+  },
+  {
+    "name": "replicate-mcp",
+    "package": "replicate-mcp",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "replicate-mcp"
+    ],
+    "env": {
+      "REPLICATE_API_TOKEN": {
+        "description": "Replicate API token",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      }
+    },
+    "source_url": "https://replicate.com/docs/reference/mcp",
+    "notes": "Official Replicate MCP server. Replicate's docs standardize authentication around REPLICATE_API_TOKEN, so this batch entry keeps only that required credential."
+  },
+  {
+    "name": "stability-ai-mcp",
+    "package": "mcp-server-stability-ai",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "mcp-server-stability-ai"
+    ],
+    "env": {
+      "STABILITY_AI_API_KEY": {
+        "description": "stability ai API key",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      }
+    },
+    "source_url": "https://www.npmjs.com/package/mcp-server-stability-ai",
+    "notes": "Community Stability AI MCP server. The README documents STABILITY_AI_API_KEY as the minimal required configuration for Stability's hosted image APIs."
+  },
+  {
+    "name": "elevenlabs-mcp",
+    "package": "elevenlabs-mcp",
+    "type": "pip",
+    "command": "uvx",
+    "args": [
+      "elevenlabs-mcp"
+    ],
+    "env": {
+      "ELEVENLABS_API_KEY": {
+        "description": "Elevenlabs API key",
+        "example": "",
+        "required": false,
+        "sensitive": true
+      },
+      "ELEVENLABS_MCP_BASE_PATH": {
+        "description": "Elevenlabs MCP base path",
+        "example": "",
+        "required": false,
+        "sensitive": true
+      },
+      "ELEVENLABS_MCP_OUTPUT_MODE": {
+        "description": "Elevenlabs MCP output mode",
+        "example": "url",
+        "required": false,
+        "sensitive": false
+      },
+      "ELEVENLABS_API_RESIDENCY": {
+        "description": "Elevenlabs API residency",
+        "example": "",
+        "required": false,
+        "sensitive": false
+      }
+    },
+    "source_url": "https://github.com/elevenlabs/elevenlabs-mcp",
+    "notes": "Official ElevenLabs MCP server. ELEVENLABS_MCP_BASE_PATH controls local file output, ELEVENLABS_MCP_OUTPUT_MODE controls URL vs local-path style responses, and ELEVENLABS_API_RESIDENCY is only needed for residency-specific accounts."
+  },
+  {
+    "name": "whisper-mcp",
+    "package": "whisper-mcp",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "whisper-mcp"
+    ],
+    "source_url": "https://github.com/jwulff/whisper-mcp",
+    "notes": "Community Whisper MCP server for local transcription. It typically depends on local ffmpeg plus whisper.cpp, so there are no required API-key env vars to preload here."
+  },
+  {
+    "name": "tts-mcp",
+    "package": "tts-mcp",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-p",
+      "tts-mcp",
+      "tts-mcp-server",
+      "--voice",
+      "nova",
+      "--model",
+      "gpt-4o-mini-tts"
+    ],
+    "env": {
+      "OPENAI_API_KEY": {
+        "description": "Openai API key",
+        "example": "",
+        "required": false,
+        "sensitive": true
+      }
+    },
+    "source_url": "https://github.com/nakamurau1/tts-mcp",
+    "notes": "Community generic TTS MCP server backed by OpenAI text-to-speech models. The package README documents both OPENAI_API_KEY and direct server flags such as --voice and --model."
+  },
+  {
+    "name": "image-generation-mcp",
+    "package": "@r16t/multimodal-mcp",
+    "type": "approximation",
+    "command": "npx",
+    "args": [
+      "-y",
+      "@r16t/multimodal-mcp@latest"
+    ],
+    "env": {
+      "OPENAI_API_KEY": {
+        "description": "Openai API key",
+        "example": "",
+        "required": false,
+        "sensitive": true
+      },
+      "GEMINI_API_KEY": {
+        "description": "Gemini API key",
+        "example": "",
+        "required": false,
+        "sensitive": true
+      },
+      "GOOGLE_API_KEY": {
+        "description": "Google API key",
+        "example": "",
+        "required": false,
+        "sensitive": true
+      },
+      "BFL_API_KEY": {
+        "description": "bfl API key",
+        "example": "",
+        "required": false,
+        "sensitive": true
+      },
+      "MEDIA_OUTPUT_DIR": {
+        "description": "media output dir",
+        "example": "",
+        "required": false,
+        "sensitive": false
+      }
+    },
+    "source_url": "https://github.com/rsmdt/multimodal-mcp",
+    "notes": "Category-level image generation entry using a multi-provider MCP server. The README requires at least one provider key and documents MEDIA_OUTPUT_DIR for where generated assets are saved."
+  },
+  {
+    "name": "video-generation-mcp",
+    "package": "@r16t/multimodal-mcp",
+    "type": "approximation",
+    "command": "npx",
+    "args": [
+      "-y",
+      "@r16t/multimodal-mcp@latest"
+    ],
+    "env": {
+      "OPENAI_API_KEY": {
+        "description": "Openai API key",
+        "example": "",
+        "required": false,
+        "sensitive": true
+      },
+      "GEMINI_API_KEY": {
+        "description": "Gemini API key",
+        "example": "",
+        "required": false,
+        "sensitive": true
+      },
+      "GOOGLE_API_KEY": {
+        "description": "Google API key",
+        "example": "",
+        "required": false,
+        "sensitive": true
+      },
+      "MEDIA_OUTPUT_DIR": {
+        "description": "media output dir",
+        "example": "",
+        "required": false,
+        "sensitive": false
+      }
+    },
+    "source_url": "https://github.com/rsmdt/multimodal-mcp",
+    "notes": "Category-level video generation entry using the same multimodal MCP server. OpenAI and Gemini are the relevant documented providers here, with MEDIA_OUTPUT_DIR controlling local output placement."
+  },
+  {
+    "name": "unity-mcp-server",
+    "package": "@akiojin/unity-mcp-server",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "@akiojin/unity-mcp-server@latest",
+      "--no-telemetry"
+    ],
+    "env": {
+      "UNITY_MCP_SKIP_NATIVE_BUILD": {
+        "description": "Unity MCP skip native build",
+        "example": "0",
+        "required": false,
+        "sensitive": false
+      }
+    },
+    "source_url": "https://github.com/akiojin/unity-mcp-server",
+    "notes": "Community Unity MCP server with a Unity Editor bridge package. The documented npx entry works directly, --no-telemetry disables telemetry, and UNITY_MCP_SKIP_NATIVE_BUILD is an optional troubleshooting switch when native preload fails."
+  },
+  {
+    "name": "ue-mcp",
+    "package": "ue-mcp",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "ue-mcp"
+    ],
+    "source_url": "https://github.com/db-lyon/ue-mcp",
+    "notes": "Community Unreal Engine MCP server. In practice you usually run `npx ue-mcp init` once inside the Unreal project to deploy the bridge plugin before using the stdio server."
+  },
+  {
+    "name": "obs-mcp",
+    "package": "obs-mcp",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "obs-mcp@latest"
+    ],
+    "env": {
+      "OBS_WEBSOCKET_URL": {
+        "description": "OBS websocket URL",
+        "example": "ws://localhost:4455",
+        "required": false,
+        "sensitive": false
+      },
+      "OBS_WEBSOCKET_PASSWORD": {
+        "description": "OBS websocket password",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      }
+    },
+    "source_url": "https://www.npmjs.com/package/obs-mcp",
+    "notes": "Community OBS Studio MCP server. It talks to OBS through the built-in WebSocket interface, so OBS Studio must be running locally with WebSocket enabled."
+  },
+  {
+    "name": "mcp-ffmpeg",
+    "package": "mcp-ffmpeg",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "--yes",
+      "mcp-ffmpeg"
+    ],
+    "source_url": "https://github.com/bitscorp-mcp/mcp-ffmpeg",
+    "notes": "Community FFmpeg MCP server. It does not document required env vars, but it does require a working ffmpeg binary on PATH before the server can process media."
+  },
+  {
+    "name": "zoom-mcp-server",
+    "package": "zoom-mcp-server",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "zoom-mcp-server"
+    ],
+    "env": {
+      "ZOOM_ACCOUNT_ID": {
+        "description": "Zoom account ID",
+        "example": "",
+        "required": true,
+        "sensitive": false
+      },
+      "ZOOM_CLIENT_ID": {
+        "description": "Zoom client ID",
+        "example": "",
+        "required": true,
+        "sensitive": false
+      },
+      "ZOOM_CLIENT_SECRET": {
+        "description": "Zoom client secret",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      }
+    },
+    "source_url": "https://github.com/JavaProgrammerLB/zoom-mcp-server",
+    "notes": "Community Zoom MCP server. The README expects a Zoom Server-to-Server OAuth app with Meeting scopes, then passes the Account ID, Client ID, and Client Secret through env."
+  },
+  {
+    "name": "google-meet-mcp",
+    "package": "google-meet-mcp",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "-y",
+      "google-meet-mcp"
+    ],
+    "env": {
+      "GOOGLE_CLIENT_ID": {
+        "description": "Google client ID",
+        "example": "",
+        "required": true,
+        "sensitive": false
+      },
+      "GOOGLE_CLIENT_SECRET": {
+        "description": "Google client secret",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      },
+      "GOOGLE_REFRESH_TOKEN": {
+        "description": "Google refresh token",
+        "example": "",
+        "required": true,
+        "sensitive": true
+      }
+    },
+    "source_url": "https://www.npmjs.com/package/google-meet-mcp",
+    "notes": "Community Google Meet MCP server. The published package's stdio entry reads GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_REFRESH_TOKEN directly from env, then creates and manages Meet-backed Calendar events."
+  },
+  {
+    "name": "google-calendar-mcp",
+    "package": "@cocal/google-calendar-mcp",
+    "type": "npm",
+    "command": "npx",
+    "args": [
+      "@cocal/google-calendar-mcp"
+    ],
+    "env": {
+      "GOOGLE_OAUTH_CREDENTIALS": {
+        "description": "Google oauth credentials",
+        "example": "",
+        "required": false,
+        "sensitive": false
+      },
+      "GOOGLE_CALENDAR_MCP_TOKEN_PATH": {
+        "description": "Google calendar MCP token path",
+        "example": "",
+        "required": false,
+        "sensitive": true
+      },
+      "ENABLED_TOOLS": {
+        "description": "enabled tools",
+        "example": "",
+        "required": false,
+        "sensitive": false
+      }
+    },
+    "source_url": "https://github.com/nspady/google-calendar-mcp",
+    "notes": "Community Google Calendar MCP server with fuller documentation than the simpler alternatives. For npx usage the README explicitly requires GOOGLE_OAUTH_CREDENTIALS, while GOOGLE_CALENDAR_MCP_TOKEN_PATH and ENABLED_TOOLS are optional operational controls."
+  }
+]

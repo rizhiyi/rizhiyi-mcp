@@ -1,0 +1,68 @@
+server: filesystem-mcp
+version: "0.2.0"
+generated_at: "2026-04-06T00:00:00Z"
+generated_by: ai
+
+server_aliases:
+  - filesystem
+
+command_shortcuts: []
+
+commands:
+  file:
+    _description: "File operations"
+    get:
+      _tool: read_text_file
+      _description: "Read the complete text contents of a file"
+      _examples:
+        - "mcp2cli filesystem-mcp file get --path /path/to/file.txt"
+        - "mcp2cli filesystem-mcp file get --path /path/to/file.txt --head 50"
+    get-media:
+      _tool: read_media_file
+      _description: "Read an image or audio file as base64-encoded data"
+    get-multiple:
+      _tool: read_multiple_files
+      _description: "Read contents of multiple files simultaneously"
+      _examples:
+        - "mcp2cli filesystem-mcp file get-multiple --paths '[\"file1.txt\",\"file2.txt\"]'"
+    read:
+      _tool: read_file
+      _description: "Read file contents as text (deprecated, use get instead)"
+    info:
+      _tool: get_file_info
+      _description: "Get detailed metadata about a file or directory"
+    write:
+      _tool: write_file
+      _description: "Create a new file or overwrite an existing file with content"
+      _examples:
+        - "mcp2cli filesystem-mcp file write --path /path/to/file.txt --content 'Hello World'"
+    edit:
+      _tool: edit_file
+      _description: "Make line-based edits to a text file"
+    move:
+      _tool: move_file
+      _description: "Move or rename a file or directory"
+    search:
+      _tool: search_files
+      _description: "Recursively search for files and directories matching a glob pattern"
+      _examples:
+        - "mcp2cli filesystem-mcp file search --path /project --pattern '**/*.py'"
+  directory:
+    _description: "Directory operations"
+    create:
+      _tool: create_directory
+      _description: "Create a new directory or ensure it exists"
+    list:
+      _tool: list_directory
+      _description: "List all files and directories in a path"
+      _examples:
+        - "mcp2cli filesystem-mcp directory list --path /project"
+    list-sizes:
+      _tool: list_directory_with_sizes
+      _description: "List files and directories with size information"
+    tree:
+      _tool: directory_tree
+      _description: "Get a recursive tree view of files and directories"
+    list-allowed:
+      _tool: list_allowed_directories
+      _description: "List directories that this server is allowed to access"

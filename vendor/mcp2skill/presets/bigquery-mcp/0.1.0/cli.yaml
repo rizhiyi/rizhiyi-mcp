@@ -1,0 +1,16 @@
+server: bigquery-mcp
+version: "0.1.0"
+generated_at: "2026-04-06T00:00:00Z"
+generated_by: ai
+
+server_aliases:
+  - bigquery
+
+command_shortcuts: []
+
+commands:
+  query:
+    _tool: query
+    _description: "Run a read-only BigQuery SQL query"
+    _examples:
+      - "mcp2cli bigquery-mcp query --sql 'SELECT * FROM dataset.table LIMIT 10'"

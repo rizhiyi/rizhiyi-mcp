@@ -1,0 +1,18 @@
+{
+  "server": "memory-mcp",
+  "server_version": "0.6.3",
+  "tool_count": 9,
+  "cli_hash": "c015fc36",
+  "generated_at": "2026-04-06T09:13:02.739772+00:00",
+  "generated_by": "mcp2cli-push",
+  "files": [
+    "tools.json",
+    "cli.yaml",
+    "skills/SKILL.md",
+    "skills/reference/entity.md",
+    "skills/reference/graph.md",
+    "skills/reference/node.md",
+    "skills/reference/observation.md",
+    "skills/reference/relation.md"
+  ]
+}

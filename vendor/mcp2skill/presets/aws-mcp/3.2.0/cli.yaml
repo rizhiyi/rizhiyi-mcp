@@ -1,0 +1,23 @@
+server: aws-mcp
+version: "3.2.0"
+generated_at: "2026-04-06T09:17:00Z"
+generated_by: ai
+
+server_aliases:
+  - aws
+
+command_shortcuts: []
+
+commands:
+  suggest:
+    _tool: suggest_aws_commands
+    _description: "Suggest AWS CLI commands based on a natural language query"
+    _examples:
+      - "mcp2cli aws-mcp suggest --query 'List all running EC2 instances in us-east-1'"
+      - "mcp2cli aws-mcp suggest --query 'Create a new S3 bucket with versioning enabled'"
+  call:
+    _tool: call_aws
+    _description: "Execute AWS CLI commands with validation and error handling"
+    _examples:
+      - "mcp2cli aws-mcp call --cli-command 'aws s3api list-buckets --region us-east-1'"
+      - "mcp2cli aws-mcp call --cli-command 'aws ec2 describe-instances --region us-east-1'"

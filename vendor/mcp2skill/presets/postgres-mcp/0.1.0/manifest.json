@@ -1,0 +1,14 @@
+{
+  "server": "postgres-mcp",
+  "server_version": "0.1.0",
+  "tool_count": 1,
+  "cli_hash": "04fa3686",
+  "generated_at": "2026-04-06T09:14:59.282145+00:00",
+  "generated_by": "mcp2cli-push",
+  "files": [
+    "tools.json",
+    "cli.yaml",
+    "skills/SKILL.md",
+    "skills/reference/query.md"
+  ]
+}

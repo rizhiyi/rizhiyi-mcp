@@ -1,0 +1,23 @@
+{
+  "server": "trendradar",
+  "server_version": "1.16.0",
+  "tool_count": 27,
+  "cli_hash": "e137b324",
+  "generated_at": "2026-04-06T08:21:22.666980+00:00",
+  "generated_by": "mcp2cli-push",
+  "files": [
+    "tools.json",
+    "cli.yaml",
+    "skills/SKILL.md",
+    "skills/reference/analyze.md",
+    "skills/reference/article.md",
+    "skills/reference/date.md",
+    "skills/reference/news.md",
+    "skills/reference/notification.md",
+    "skills/reference/report.md",
+    "skills/reference/rss.md",
+    "skills/reference/storage.md",
+    "skills/reference/system.md",
+    "skills/reference/trending.md"
+  ]
+}

@@ -1,0 +1,14 @@
+server: fastmcp-demo
+version: "3.2.0"
+generated_at: "2026-04-06T00:00:00Z"
+generated_by: ai
+
+server_aliases:
+  - fastmcp
+
+command_shortcuts: []
+
+commands:
+  ping:
+    _tool: ping
+    _description: "Ping the server to check connectivity"

@@ -1,0 +1,158 @@
+server: trendradar
+version: "1.16.0"
+generated_at: "2026-04-06T08:00:00Z"
+generated_by: ai
+
+server_aliases: []
+
+command_shortcuts: []
+
+commands:
+  news:
+    _description: "News data operations"
+    get:
+      _tool: get_latest_news
+      _description: "Get the latest batch of crawled news"
+      _examples:
+        - "mcp2cli trendradar news get --platforms zhihu weibo --limit 50"
+    by-date:
+      _tool: get_news_by_date
+      _description: "Get news by date range for historical analysis"
+      _examples:
+        - "mcp2cli trendradar news by-date --date-range '{\"start\": \"2025-01-01\", \"end\": \"2025-01-07\"}'"
+    search:
+      _tool: search_news
+      _description: "Search news with multiple search modes"
+      _examples:
+        - "mcp2cli trendradar news search --query 'AI'"
+        - "mcp2cli trendradar news search --query '特斯拉' --include-rss true"
+    find-related:
+      _tool: find_related_news
+      _description: "Find news related to a reference title"
+      _examples:
+        - "mcp2cli trendradar news find-related --reference-title '特斯拉降价'"
+    aggregate:
+      _tool: aggregate_news
+      _description: "Aggregate cross-platform news by deduplication"
+
+  trending:
+    _description: "Trending topic statistics"
+    list:
+      _tool: get_trending_topics
+      _description: "List trending topics by frequency"
+      _examples:
+        - "mcp2cli trendradar trending list --top-n 20 --extract-mode auto_extract"
+
+  rss:
+    _description: "RSS feed operations"
+    list:
+      _tool: get_latest_rss
+      _description: "Get latest RSS subscription data"
+      _examples:
+        - "mcp2cli trendradar rss list --days 7 --feeds hacker-news 36kr"
+    search:
+      _tool: search_rss
+      _description: "Search RSS data by keyword"
+      _examples:
+        - "mcp2cli trendradar rss search --keyword 'machine learning' --days 14"
+    status:
+      _tool: get_rss_feeds_status
+      _description: "Get RSS feed status and statistics"
+
+  analyze:
+    _description: "Data analysis operations"
+    trend:
+      _tool: analyze_topic_trend
+      _description: "Analyze topic trend with multiple analysis modes"
+      _examples:
+        - "mcp2cli trendradar analyze trend --topic 'AI' --analysis-type trend"
+        - "mcp2cli trendradar analyze trend --topic '特斯拉' --analysis-type lifecycle"
+    insights:
+      _tool: analyze_data_insights
+      _description: "Analyze data insights across platforms"
+      _examples:
+        - "mcp2cli trendradar analyze insights --insight-type platform_compare --topic '人工智能'"
+    sentiment:
+      _tool: analyze_sentiment
+      _description: "Analyze news sentiment and heat trends"
+      _examples:
+        - "mcp2cli trendradar analyze sentiment --topic 'AI'"
+    compare:
+      _tool: compare_periods
+      _description: "Compare news data between two time periods"
+      _examples:
+        - "mcp2cli trendradar analyze compare --period1 last_week --period2 this_week"
+
+  report:
+    _description: "Report generation"
+    generate:
+      _tool: generate_summary_report
+      _description: "Generate daily or weekly summary report"
+      _examples:
+        - "mcp2cli trendradar report generate --report-type daily"
+        - "mcp2cli trendradar report generate --report-type weekly"
+
+  article:
+    _description: "Article reading operations"
+    read:
+      _tool: read_article
+      _description: "Read article content at a URL in Markdown format"
+      _examples:
+        - "mcp2cli trendradar article read --url 'https://example.com/news/123'"
+    batch-read:
+      _tool: read_articles_batch
+      _description: "Batch read multiple article URLs"
+
+  notification:
+    _description: "Notification channel operations"
+    send:
+      _tool: send_notification
+      _description: "Send notification to configured channels"
+      _examples:
+        - "mcp2cli trendradar notification send --message '**测试消息**' --channels feishu dingtalk"
+    channels:
+      _tool: get_notification_channels
+      _description: "List all configured notification channels"
+    format-guide:
+      _tool: get_channel_format_guide
+      _description: "Get format guide for notification channels"
+
+  system:
+    _description: "System management"
+    status:
+      _tool: get_system_status
+      _description: "Get system running status and health info"
+    config:
+      _tool: get_current_config
+      _description: "Get current system configuration"
+    version:
+      _tool: check_version
+      _description: "Check for version updates"
+    crawl:
+      _tool: trigger_crawl
+      _description: "Manually trigger a crawl task"
+      _examples:
+        - "mcp2cli trendradar system crawl --platforms zhihu"
+    dates:
+      _tool: list_available_dates
+      _description: "List available date ranges in local and remote storage"
+
+  storage:
+    _description: "Storage management"
+    status:
+      _tool: get_storage_status
+      _description: "Get storage configuration and status"
+    sync:
+      _tool: sync_from_remote
+      _description: "Sync data from remote storage to local"
+      _examples:
+        - "mcp2cli trendradar storage sync --days 30"
+
+  date:
+    _description: "Date utility"
+    resolve:
+      _tool: resolve_date_range
+      _description: "Resolve natural language date expression to a standard date range"
+      _examples:
+        - "mcp2cli trendradar date resolve --expression '本周'"
+        - "mcp2cli trendradar date resolve --expression 'last 7 days'"

@@ -1,0 +1,14 @@
+{
+  "server": "bigquery-mcp",
+  "server_version": "0.1.0",
+  "tool_count": 1,
+  "cli_hash": "ec2935ab",
+  "generated_at": "2026-04-06T09:16:47.884897+00:00",
+  "generated_by": "mcp2cli-push",
+  "files": [
+    "tools.json",
+    "cli.yaml",
+    "skills/SKILL.md",
+    "skills/reference/query.md"
+  ]
+}

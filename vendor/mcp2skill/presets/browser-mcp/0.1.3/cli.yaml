@@ -1,0 +1,61 @@
+server: browser-mcp
+version: "0.1.3"
+generated_at: "2026-04-06T09:04:22Z"
+generated_by: ai
+
+server_aliases:
+  - browser
+
+command_shortcuts: []
+
+commands:
+  navigate:
+    _description: "Browser navigation operations"
+    go:
+      _tool: browser_navigate
+      _description: "Navigate to a URL"
+      _examples:
+        - "mcp2cli browser-mcp navigate go --url https://example.com"
+    back:
+      _tool: browser_go_back
+      _description: "Go back to the previous page"
+    forward:
+      _tool: browser_go_forward
+      _description: "Go forward to the next page"
+  interact:
+    _description: "Browser element interaction operations"
+    click:
+      _tool: browser_click
+      _description: "Click on a web page element"
+      _examples:
+        - "mcp2cli browser-mcp interact click --element 'Submit button' --ref e123"
+    hover:
+      _tool: browser_hover
+      _description: "Hover over a page element"
+    type:
+      _tool: browser_type
+      _description: "Type text into an editable element"
+      _examples:
+        - "mcp2cli browser-mcp interact type --element 'Search box' --ref e456 --text 'hello' --submit true"
+    select-option:
+      _tool: browser_select_option
+      _description: "Select an option in a dropdown"
+    press-key:
+      _tool: browser_press_key
+      _description: "Press a key on the keyboard"
+  page:
+    _description: "Page state and capture operations"
+    snapshot:
+      _tool: browser_snapshot
+      _description: "Capture accessibility snapshot of the current page"
+      _examples:
+        - "mcp2cli browser-mcp page snapshot"
+    screenshot:
+      _tool: browser_screenshot
+      _description: "Take a screenshot of the current page"
+    console-logs:
+      _tool: browser_get_console_logs
+      _description: "Get console logs from the browser"
+    wait:
+      _tool: browser_wait
+      _description: "Wait for a specified time in seconds"

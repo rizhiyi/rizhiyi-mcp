@@ -1,0 +1,33 @@
+server: agentops-mcp
+version: "0.3.0"
+generated_at: "2026-04-06T09:00:00Z"
+generated_by: ai
+
+server_aliases:
+  - agentops
+
+command_shortcuts: []
+
+commands:
+  auth:
+    _tool: auth
+    _description: "Authorize using the AgentOps API key"
+    _examples:
+      - "mcp2cli agentops-mcp auth --api-key YOUR_API_KEY"
+
+  trace:
+    _description: "Trace operations"
+    get:
+      _tool: get_trace
+      _description: "Get trace information and metrics by ID"
+      _examples:
+        - "mcp2cli agentops-mcp trace get --trace-id abc123"
+    get-complete:
+      _tool: get_complete_trace
+      _description: "Get complete trace information and all data by ID"
+
+  span:
+    _description: "Span operations"
+    get:
+      _tool: get_span
+      _description: "Get span information and metrics by ID"

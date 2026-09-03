@@ -1,0 +1,21 @@
+{
+  "server": "chrome-devtools-mcp",
+  "server_version": "0.21.0",
+  "tool_count": 29,
+  "cli_hash": "41e39489",
+  "generated_at": "2026-04-06T08:27:18.731315+00:00",
+  "generated_by": "mcp2cli-push",
+  "files": [
+    "tools.json",
+    "cli.yaml",
+    "skills/SKILL.md",
+    "skills/reference/capture.md",
+    "skills/reference/console.md",
+    "skills/reference/dialog.md",
+    "skills/reference/element.md",
+    "skills/reference/network.md",
+    "skills/reference/page.md",
+    "skills/reference/performance.md",
+    "skills/reference/script.md"
+  ]
+}

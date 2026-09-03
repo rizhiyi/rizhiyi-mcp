@@ -1,0 +1,64 @@
+server: beads
+version: "3.2.0"
+generated_at: "2026-04-06T09:00:00Z"
+generated_by: ai
+
+server_aliases: []
+
+command_shortcuts: []
+
+commands:
+  issue:
+    _description: "Issue operations"
+    create:
+      _tool: create
+      _description: "Create a new issue"
+      _examples:
+        - "mcp2cli beads issue create --title 'Fix memory leak' --issue-type bug"
+        - "mcp2cli beads issue create --title 'Add login page' --issue-type feature --assignee alice"
+    list:
+      _tool: list
+      _description: "List all issues with optional filters"
+      _examples:
+        - "mcp2cli beads issue list --status open --assignee alice"
+    get:
+      _tool: show
+      _description: "Get detailed information about a specific issue"
+    update:
+      _tool: update
+      _description: "Update an existing issue's fields"
+    close:
+      _tool: close
+      _description: "Close (complete) an issue"
+    reopen:
+      _tool: reopen
+      _description: "Reopen one or more closed issues"
+    claim:
+      _tool: claim
+      _description: "Atomically claim an issue for work"
+    ready:
+      _tool: ready
+      _description: "Find issues that have no blockers and are ready to be worked on"
+    blocked:
+      _tool: blocked
+      _description: "Get issues that are blocked by unresolved dependencies"
+  dep:
+    _tool: dep
+    _description: "Add a dependency between issues"
+  stats:
+    _tool: stats
+    _description: "Get issue statistics including counts and average lead time"
+  context:
+    _tool: context
+    _description: "Manage workspace context for beads operations"
+  admin:
+    _tool: admin
+    _description: "Administrative and diagnostic operations"
+  tool:
+    _description: "Tool discovery operations"
+    list:
+      _tool: discover_tools
+      _description: "List available beads tools with brief descriptions"
+    get:
+      _tool: get_tool_info
+      _description: "Get detailed information about a specific tool"

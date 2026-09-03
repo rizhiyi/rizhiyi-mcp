@@ -1,0 +1,27 @@
+{
+  "server": "postgres-mcp",
+  "version": "0.1.0",
+  "scanned_at": "2026-04-06T09:13:39.702503+00:00",
+  "tools": [
+    {
+      "name": "query",
+      "description": "Run a read-only SQL query",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sql": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  ],
+  "server_meta": {
+    "command": "npx",
+    "args": [
+      "-y",
+      "@modelcontextprotocol/server-postgres",
+      "postgresql://127.0.0.1/postgres"
+    ]
+  }
+}
