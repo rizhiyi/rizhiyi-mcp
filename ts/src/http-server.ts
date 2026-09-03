@@ -28,7 +28,11 @@ const sessionStore = new Map<string, SessionEntry>();
 
 function buildRequestContext(req: Request): ServerContext {
     const runtimeConfig = getRuntimeConfig();
-    const authContext = buildAuthContextFromAuthorization(req.header('authorization'));
+    // 如果 LOGEASE_USERNAME 环境变量设置了，用它显式指定（优先于从 apikey 里拆分的 username）
+    const authContext = buildAuthContextFromAuthorization(
+        req.header('authorization'),
+        runtimeConfig.logeaseUsername
+    );
 
     return {
         runtimeConfig,

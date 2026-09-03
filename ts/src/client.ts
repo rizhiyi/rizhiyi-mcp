@@ -4,6 +4,7 @@ import { HttpClientConfig, ApiResponse } from './types.js';
 
 export class LogEaseClient {
     private client: AxiosInstance;
+    private username?: string;
 
     constructor(config: HttpClientConfig) {
         this.client = axios.create({
@@ -11,6 +12,7 @@ export class LogEaseClient {
             headers: config.headers,
             httpsAgent: config.httpsAgent || new https.Agent({ rejectUnauthorized: false })
         });
+        this.username = config.username;
     }
 
     private hasHeader(headers: Record<string, any> | undefined, name: string): boolean {
@@ -36,6 +38,14 @@ export class LogEaseClient {
 
         nextOptions.headers = nextHeaders;
         return nextOptions;
+    }
+
+    private mergeUsernameIntoParams(params?: Record<string, any>): Record<string, any> {
+        const merged = { ...(params || {}) };
+        if (this.username && !merged.username) {
+            merged.username = this.username;
+        }
+        return merged;
     }
 
     private buildTransportError<T>(error: any): ApiResponse<T> {
@@ -97,7 +107,7 @@ export class LogEaseClient {
             const response: AxiosResponse<T> = await this.client.get(
                 path,
                 {
-                    params,
+                    params: this.mergeUsernameIntoParams(params),
                     ...this.withDefaultHeaders(options, { Accept: 'application/json' })
                 }
             );
@@ -120,7 +130,7 @@ export class LogEaseClient {
                 path,
                 data,
                 {
-                    params,
+                    params: this.mergeUsernameIntoParams(params),
                     ...this.withDefaultHeaders(options, {
                         Accept: 'application/json',
                         'Content-Type': 'application/json;charset=UTF-8'
@@ -146,7 +156,7 @@ export class LogEaseClient {
                 path,
                 data,
                 {
-                    params,
+                    params: this.mergeUsernameIntoParams(params),
                     ...this.withDefaultHeaders(options, {
                         Accept: 'application/json',
                         'Content-Type': 'application/json;charset=UTF-8'
@@ -170,7 +180,7 @@ export class LogEaseClient {
         try {
             const response: AxiosResponse<T> = await this.client.delete(
                 path,
-                { params, ...this.withDefaultHeaders(undefined, { Accept: 'application/json' }) }
+                { params: this.mergeUsernameIntoParams(params), ...this.withDefaultHeaders(undefined, { Accept: 'application/json' }) }
             );
             return {
                 status: response.status,

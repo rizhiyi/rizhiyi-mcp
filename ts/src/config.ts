@@ -7,6 +7,7 @@ dotenv.config({ path: ['.env.local', '.env'] });
 
 export interface RuntimeConfig {
     logeaseBaseURL: string;
+    logeaseUsername?: string;
     rejectUnauthorized: boolean;
     httpHost: string;
     httpPort: number;
@@ -44,6 +45,7 @@ function normalizeBasePath(rawPath: string | undefined): string {
 
 export function getRuntimeConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig {
     const logeaseBaseURL = env.LOGEASE_BASE_URL ?? 'http://127.0.0.1:8090';
+    const logeaseUsername = env.LOGEASE_USERNAME;
     const rejectUnauthorized = parseBooleanEnv(env.LOGEASE_TLS_REJECT_UNAUTHORIZED, false);
     const httpHost = env.MCP_HTTP_HOST || '0.0.0.0';
     const httpPort = Number(env.MCP_HTTP_PORT || 3000);
@@ -55,6 +57,7 @@ export function getRuntimeConfig(env: NodeJS.ProcessEnv = process.env): RuntimeC
 
     return {
         logeaseBaseURL,
+        logeaseUsername,
         rejectUnauthorized,
         httpHost,
         httpPort: Number.isFinite(httpPort) ? httpPort : 3000,
@@ -72,7 +75,8 @@ export function createHttpClientConfig(context: ServerContext): HttpClientConfig
     return {
         baseURL: context.runtimeConfig.logeaseBaseURL,
         headers: context.authContext.headers,
-        httpsAgent: createHttpsAgent(context.runtimeConfig)
+        httpsAgent: createHttpsAgent(context.runtimeConfig),
+        username: context.authContext.username
     };
 }
 

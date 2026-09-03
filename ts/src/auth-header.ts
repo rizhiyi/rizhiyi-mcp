@@ -3,6 +3,7 @@ export type ParsedAuthorization =
           kind: 'apikey';
           rawAuthorization: string;
           apiKeyPreview: string;
+          username?: string;
       }
     | {
           kind: 'basic';
@@ -51,10 +52,28 @@ function parseApiKeyAuthorization(rawAuthorization: string, apiKey: string): Par
         throw new Error('apikey 认证缺少 key。');
     }
 
+    // 尝试拆分 username:secret 格式。冒号之后的 secret 不能包含冒号，
+    // 但 username 可以包含中文等非 ASCII 字符。
+    let username: string | undefined;
+    let secretValue = normalizedApiKey;
+    const separatorIndex = normalizedApiKey.indexOf(':');
+    if (separatorIndex > 0) {
+        const parsedUser = normalizedApiKey.slice(0, separatorIndex).trim();
+        username = parsedUser || undefined;
+        secretValue = normalizedApiKey.slice(separatorIndex + 1).trim();
+        if (!secretValue) {
+            throw new Error('apikey 认证缺少 secret 部分。');
+        }
+    }
+
+    // header 里只放 secret（避免中文 username 无法写入 HTTP header）
+    const rewritten = `apikey ${secretValue}`;
+
     return {
         kind: 'apikey',
-        rawAuthorization,
-        apiKeyPreview: maskValue(normalizedApiKey)
+        rawAuthorization: rewritten,
+        apiKeyPreview: maskValue(secretValue),
+        username
     };
 }
 
@@ -88,5 +107,6 @@ export function describeAuthorization(auth: ParsedAuthorization): string {
         return `basic:${auth.username}`;
     }
 
-    return `apikey:${auth.apiKeyPreview}`;
+    const userPart = auth.username ? `${auth.username}:` : '';
+    return `apikey:${userPart}${auth.apiKeyPreview}`;
 }
