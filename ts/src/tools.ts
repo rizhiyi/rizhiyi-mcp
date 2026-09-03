@@ -2028,11 +2028,122 @@ export const ingestServerTools: ToolDefinition[] = [
     ...withOutputControls(ingestTools)
 ];
 
+const chatSplTools: ToolDefinition[] = [
+    {
+        name: 'chat_spl',
+        description: '自然语言生成 SPL：将自然语言描述转换为 SPL 查询语句。通过 ChatSPL 智能分析，自动理解查询意图并生成对应的 SPL。支持深度思考模式，可处理复杂查询场景。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                content: {
+                    type: 'string',
+                    description: '自然语言描述，例如："检索今天的错误日志"、"统计最近1小时各appname的日志量"'
+                },
+                deep_think: {
+                    type: 'boolean',
+                    description: '是否启用深度思考模式，适用于复杂查询场景，默认 false',
+                    default: false
+                },
+                lang: {
+                    type: 'string',
+                    description: '语言偏好，zh_CN=中文，en_US=英文，默认 zh_CN',
+                    default: 'zh_CN',
+                    enum: ['zh_CN', 'en_US']
+                }
+            },
+            required: ['content']
+        }
+    },
+    {
+        name: 'list_chatspl_rules',
+        description: '列出所有 ChatSPL 知识库规则，展示自然语言与 SPL 的映射关系。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                page: {
+                    type: 'integer',
+                    description: '页码，从 1 开始，默认 1',
+                    default: 1
+                },
+                size: {
+                    type: 'integer',
+                    description: '每页条数，默认 100',
+                    default: 100
+                }
+            }
+        }
+    },
+    {
+        name: 'create_chatspl_rule',
+        description: '创建 ChatSPL 知识库规则，添加自然语言到 SPL 的映射。规则会被 ChatSPL 引擎用于生成更准确的 SPL。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                knowledge_text: {
+                    type: 'string',
+                    description: '规则内容，JSON 字符串格式: {"input":"自然语言描述","output":"SPL语句"}。例如: {"input":"华为交换机","output":"appname:huawei_switch"}'
+                }
+            },
+            required: ['knowledge_text']
+        }
+    },
+    {
+        name: 'update_chatspl_rule',
+        description: '更新指定的 ChatSPL 知识库规则。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                id: {
+                    type: 'integer',
+                    description: '规则 ID'
+                },
+                knowledge_text: {
+                    type: 'string',
+                    description: '规则内容，JSON 字符串格式: {"input":"自然语言描述","output":"SPL语句"}'
+                }
+            },
+            required: ['id', 'knowledge_text']
+        }
+    },
+    {
+        name: 'delete_chatspl_rule',
+        description: '删除单条 ChatSPL 知识库规则。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                id: {
+                    type: 'integer',
+                    description: '规则 ID'
+                }
+            },
+            required: ['id']
+        }
+    },
+    {
+        name: 'delete_chatspl_rules_batch',
+        description: '批量删除 ChatSPL 知识库规则。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                ids: {
+                    type: 'array',
+                    items: { type: 'integer' },
+                    description: '规则 ID 列表，例如 [1, 2, 3]'
+                }
+            },
+            required: ['ids']
+        }
+    }
+];
+
+export const chatSplServerTools: ToolDefinition[] = chatSplTools;
+
 // 所有工具
 export const allTools: ToolDefinition[] = [
     ...searchTools,
     ...dashboardServerTools,
     ...parserRuleServerTools,
     ...fieldConfigServerTools,
-    ...ingestServerTools
+    ...ingestServerTools,
+    ...chatSplServerTools
 ];
