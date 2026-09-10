@@ -30,6 +30,20 @@ class RuntimeConfig(BaseSettings):
     log_tools_result_max_file_bytes: int = 5 * 1024 * 1024
     upstream_timeout_seconds: float = 30.0
 
+    # ----- OAuth2 Bearer 认证（默认关闭） -----
+    oauth_enable: bool = False
+    oauth_issuer: str | None = None
+    oauth_client_id: str | None = None
+    oauth_client_secret: str | None = None
+    oauth_introspect_endpoint: str | None = None
+    oauth_token_endpoint: str | None = None
+    oauth_token_exchange_audience: str = "logease"
+    oauth_skip_exchange: bool = False
+    oauth_jwt_refresh_ahead_seconds: int = 60
+    # 日志易 JWT 登录端点配置（不同实例可能不同，默认按 OpenAPI 中的 token/verify 推断）
+    logease_login_endpoint: str = "/api/v3/login/token/verify/"
+    logease_login_token_field: str = "token"
+
     @field_validator("mcp_http_base_path", mode="before")
     @classmethod
     def normalize_base_path(cls, value: str | None) -> str:

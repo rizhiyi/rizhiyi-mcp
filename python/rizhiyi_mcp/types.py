@@ -91,7 +91,15 @@ class BasicAuthorization:
     username: str
 
 
-ParsedAuthorization = ApiKeyAuthorization | BasicAuthorization
+@dataclass(slots=True)
+class BearerAuthorization:
+    kind: Literal["bearer"]
+    raw_authorization: str
+    token_preview: str
+    username: str | None = None
+
+
+ParsedAuthorization = ApiKeyAuthorization | BasicAuthorization | BearerAuthorization
 
 
 @dataclass(slots=True)

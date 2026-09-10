@@ -9,6 +9,12 @@ export type ParsedAuthorization =
           kind: 'basic';
           rawAuthorization: string;
           username: string;
+      }
+    | {
+          kind: 'bearer';
+          rawAuthorization: string;
+          tokenPreview: string;
+          username?: string;
       };
 
 function maskValue(value: string): string {
@@ -77,6 +83,20 @@ function parseApiKeyAuthorization(rawAuthorization: string, apiKey: string): Par
     };
 }
 
+function parseBearerAuthorization(rawAuthorization: string, token: string): ParsedAuthorization {
+    const normalizedToken = token.trim();
+    if (!normalizedToken) {
+        throw new Error('Bearer Auth 缺少 access_token。');
+    }
+    // Bearer 只放 token（原始 Authorization 已经是 Bearer xxx）；username 由后端 OAuth introspect 过程填充。
+    return {
+        kind: 'bearer',
+        rawAuthorization,
+        tokenPreview: maskValue(normalizedToken),
+        username: undefined,
+    };
+}
+
 export function parseAuthorizationHeader(authorizationHeader: string | undefined): ParsedAuthorization {
     const rawAuthorization = authorizationHeader?.trim();
     if (!rawAuthorization) {
@@ -99,12 +119,20 @@ export function parseAuthorizationHeader(authorizationHeader: string | undefined
         return parseBasicAuthorization(rawAuthorization, credentials);
     }
 
-    throw new Error('仅支持 apikey 和 Basic 两种 Authorization 格式。');
+    if (scheme === 'bearer') {
+        return parseBearerAuthorization(rawAuthorization, credentials);
+    }
+
+    throw new Error('仅支持 apikey、Basic、Bearer 三种 Authorization 格式。');
 }
 
 export function describeAuthorization(auth: ParsedAuthorization): string {
     if (auth.kind === 'basic') {
         return `basic:${auth.username}`;
+    }
+    if (auth.kind === 'bearer') {
+        const userPart = auth.username ? `${auth.username}:` : '';
+        return `bearer:${userPart}${auth.tokenPreview}`;
     }
 
     const userPart = auth.username ? `${auth.username}:` : '';

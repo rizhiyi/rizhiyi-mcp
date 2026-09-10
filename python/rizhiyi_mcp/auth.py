@@ -3,7 +3,13 @@ from __future__ import annotations
 import base64
 import binascii
 
-from .types import ApiKeyAuthorization, AuthContext, BasicAuthorization, ParsedAuthorization
+from .types import (
+    ApiKeyAuthorization,
+    AuthContext,
+    BasicAuthorization,
+    BearerAuthorization,
+    ParsedAuthorization,
+)
 
 
 def _mask_value(value: str) -> str:
@@ -61,6 +67,19 @@ def _parse_apikey_authorization(raw_authorization: str, api_key: str) -> ApiKeyA
     )
 
 
+def _parse_bearer_authorization(raw_authorization: str, token: str) -> BearerAuthorization:
+    normalized_token = token.strip()
+    if not normalized_token:
+        raise ValueError("bearer 认证缺少 access_token。")
+
+    return BearerAuthorization(
+        kind="bearer",
+        raw_authorization=f"Bearer {normalized_token}",
+        token_preview=_mask_value(normalized_token),
+        username=None,
+    )
+
+
 def parse_authorization_header(authorization_header: str | None) -> ParsedAuthorization:
     raw_authorization = (authorization_header or "").strip()
     if not raw_authorization:
@@ -77,12 +96,17 @@ def parse_authorization_header(authorization_header: str | None) -> ParsedAuthor
         return _parse_apikey_authorization(raw_authorization, credentials)
     if scheme == "basic":
         return _parse_basic_authorization(raw_authorization, credentials)
-    raise ValueError("仅支持 apikey 和 Basic 两种 Authorization 格式。")
+    if scheme == "bearer":
+        return _parse_bearer_authorization(raw_authorization, credentials)
+    raise ValueError("仅支持 apikey、Basic、Bearer 三种 Authorization 格式。")
 
 
 def describe_authorization(auth: ParsedAuthorization) -> str:
     if auth.kind == "basic":
         return f"basic:{auth.username}"
+    if auth.kind == "bearer":
+        user_part = f"{auth.username}:" if auth.username else ""
+        return f"bearer:{user_part}{auth.token_preview}"
     user_part = f"{auth.username}:" if auth.username else ""
     return f"apikey:{user_part}{auth.api_key_preview}"
 
@@ -104,10 +128,19 @@ def build_auth_context_from_authorization(
             username = authorization.username
         elif authorization.kind == "apikey":
             username = authorization.username
+        elif authorization.kind == "bearer":
+            username = authorization.username  # 通常为 None，后续 JWTSession 从 introspect 回填
+
+    # Bearer 方案不直接把原始 token 写入上游 Authorization；
+    # 真正请求日志易的 Authorization 将在 JWTSession 阶段回填为日志易 JWT。
+    if authorization.kind == "bearer":
+        upstream_headers: dict[str, str] = {}
+    else:
+        upstream_headers = {"Authorization": authorization.raw_authorization}
 
     return AuthContext(
         authorization=authorization,
-        headers={"Authorization": authorization.raw_authorization},
+        headers=upstream_headers,
         username=username,
     )
 

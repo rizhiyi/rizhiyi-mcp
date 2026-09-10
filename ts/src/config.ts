@@ -12,6 +12,19 @@ export interface RuntimeConfig {
     httpHost: string;
     httpPort: number;
     httpBasePath: string;
+    // OAuth2 / 统一 SSO（可选，默认关闭）
+    oauthEnable: boolean;
+    oauthIssuer?: string;
+    oauthClientId?: string;
+    oauthClientSecret?: string;
+    oauthIntrospectEndpoint?: string;
+    oauthTokenEndpoint?: string;
+    oauthTokenExchangeAudience?: string;
+    oauthSkipExchange: boolean;
+    oauthJwtRefreshAheadSeconds: number;
+    // 日志易 JWT 登录端点配置
+    logeaseLoginEndpoint?: string;
+    logeaseLoginTokenField?: string;
 }
 
 export interface RequestMeta {
@@ -51,8 +64,28 @@ export function getRuntimeConfig(env: NodeJS.ProcessEnv = process.env): RuntimeC
     const httpPort = Number(env.MCP_HTTP_PORT || 3000);
     const httpBasePath = normalizeBasePath(env.MCP_HTTP_BASE_PATH);
 
+    // OAuth2 / 统一 SSO
+    const oauthEnable = parseBooleanEnv(env.OAUTH_ENABLE, false);
+    const oauthIssuer = env.OAUTH_ISSUER;
+    const oauthClientId = env.OAUTH_CLIENT_ID;
+    const oauthClientSecret = env.OAUTH_CLIENT_SECRET;
+    const oauthIntrospectEndpoint = env.OAUTH_INTROSPECT_ENDPOINT;
+    const oauthTokenEndpoint = env.OAUTH_TOKEN_ENDPOINT;
+    const oauthTokenExchangeAudience = env.OAUTH_TOKEN_EXCHANGE_AUDIENCE;
+    const oauthSkipExchange = parseBooleanEnv(env.OAUTH_SKIP_EXCHANGE, false);
+    const oauthJwtRefreshAheadSeconds = Number(env.OAUTH_JWT_REFRESH_AHEAD_SECONDS || 60);
+
+    const logeaseLoginEndpoint = env.LOGEASE_LOGIN_ENDPOINT;
+    const logeaseLoginTokenField = env.LOGEASE_LOGIN_TOKEN_FIELD || 'token';
+
     if (!env.LOGEASE_BASE_URL) {
         console.warn('LOGEASE_BASE_URL 未设置，默认使用 http://127.0.0.1:8090');
+    }
+
+    if (oauthEnable && (!oauthIssuer || !oauthClientId || !oauthClientSecret)) {
+        console.warn(
+            'OAUTH_ENABLE=true 但 OAUTH_ISSUER / OAUTH_CLIENT_ID / OAUTH_CLIENT_SECRET 未完整配置，OAuth 链路可能失败。',
+        );
     }
 
     return {
@@ -61,7 +94,18 @@ export function getRuntimeConfig(env: NodeJS.ProcessEnv = process.env): RuntimeC
         rejectUnauthorized,
         httpHost,
         httpPort: Number.isFinite(httpPort) ? httpPort : 3000,
-        httpBasePath
+        httpBasePath,
+        oauthEnable,
+        oauthIssuer,
+        oauthClientId,
+        oauthClientSecret,
+        oauthIntrospectEndpoint,
+        oauthTokenEndpoint,
+        oauthTokenExchangeAudience,
+        oauthSkipExchange,
+        oauthJwtRefreshAheadSeconds: Number.isFinite(oauthJwtRefreshAheadSeconds) ? oauthJwtRefreshAheadSeconds : 60,
+        logeaseLoginEndpoint,
+        logeaseLoginTokenField,
     };
 }
 

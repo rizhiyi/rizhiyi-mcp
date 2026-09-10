@@ -6,7 +6,7 @@ from contextvars import ContextVar, Token
 import inspect
 import json
 from dataclasses import asdict, dataclass, field
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from mcp import types as mcp_types
 from mcp.server.fastmcp import FastMCP
@@ -26,6 +26,10 @@ from .shared_result_store import (
 )
 from .types import ResourceDefinition, ServerContext, SharedResultSummary, ToolCallResult, ToolDefinition
 
+if TYPE_CHECKING:
+    from .jwt_session import LogEaseJWTSession
+    from .types import AuthContext
+
 _CURRENT_SERVER_CONTEXT: ContextVar[ServerContext | None] = ContextVar("rizhiyi_mcp_server_context", default=None)
 _CURRENT_SERVICE_STATE: ContextVar["ServiceRuntimeState | None"] = ContextVar("rizhiyi_mcp_service_state", default=None)
 
@@ -36,6 +40,15 @@ class ServiceRuntimeState:
     session_auth: dict[str, str] = field(default_factory=dict)
     initialize_params: dict[str, dict[str, Any]] = field(default_factory=dict)
     initialized_sessions: set[str] = field(default_factory=set)
+    # OAuth Bearer 方案：session_id -> LogEaseJWTSession，生命周期与 session_auth 一致
+    session_jwt_sessions: dict[str, "LogEaseJWTSession"] = field(default_factory=dict)
+    # 【关键】session 级可变 AuthContext 缓存：
+    # 由于 MCP SDK StreamableHTTP 模式会在每个请求内 restore initialize 时刻的 contextvars 快照，
+    # 后续请求通过 ContextVar.set() 注入的新 ServerContext 会被覆盖。
+    # 因此我们把 AuthContext 对象本身以 session 为粒度缓存，并在后续请求中"就地修改" headers/username，
+    # 这样 SDK restore 回来的旧快照里的 ServerContext.auth_context 仍然指向同一个可变对象，
+    # 原地修改对 tool 函数可见。
+    session_auth_contexts: dict[str, "AuthContext"] = field(default_factory=dict)
 
 
 class McpServerError(Exception):
