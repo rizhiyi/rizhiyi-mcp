@@ -16,6 +16,7 @@
 | 管理解析规则（schema on write） | `rizhiyi_parserule`     | `create_parserule`、`verify_parserule`、`list_parserules`                                            |
 | 管理动态字段（schema on read）  | `rizhiyi_dynamic_field` | `create_fieldconfig`、`list_fieldconfigs`、`apply_fieldconfig`                                       |
 | 管理采集 Agent、pipeline     | `rizhiyi_ingest`        | `list_agent_groups`、`assign_agent_to_group`、`list_pipelines`、`query_agent_status`                  |
+| 管理监控 / 告警配置（关键字/字段统计/SPL/流式/联合） | `rizhiyi_alert`     | `create_keyword_alert` 等 8 个按类型创建工具、`update_alert`、`preview_alert`、`testrun_alert`、`list_alerts`、`get_alert_category_reference` |
 | 管理类通用 OpenAPI           | `rizhiyi_manage`        | 按 tag 分类的增删改查工具（面较小，上下文友好）                                                                         |
 | 完整 OpenAPI 直通（慎用）       | `openapi_server`        | 直接把 API schema 暴露为工具（接口多，易撑爆上下文）                                                                   |
 
@@ -41,12 +42,12 @@ npm run build     # 构建产物到 ts/dist/，必须先执行
 
 ```bash
 cd python
-/usr/local/bin/python3.11 -m venv .venv
+/usr/local/bin/python3 -m venv .venv  # 需 Python ≥ 3.10
 source .venv/bin/activate
 pip install -e '.[dev]'
 ```
 
-> 要求 Python ≥ 3.11。
+> 要求 Python ≥ 3.10。
 
 ### 第 2 步：配置日志易服务器地址和凭据
 
@@ -69,40 +70,64 @@ cp python/.env.example python/.env  # Python 版
 
 ### 第 3 步：启动并接入你的 AI 平台
 
-两种部署模式，二选一：
+两种部署模式，二选一。每种模式的**完整客户端配置示例**已放在仓库根目录，复制后替换占位符即可直接用：
 
-- **stdio 模式**：AI 客户端（如 Claude Desktop、Trae、Cursor）直接起子进程调用，最简单
+- **stdio 模式**（TS only，推荐）：AI 客户端（如 Claude Desktop、Trae、Cursor）直接起子进程调用，最简单 → [`mcp-stdio.json.example`](mcp-stdio.json.example)
 
-- **HTTP 模式**：独立网关进程，支持多会话、多客户端、远程调用
+- **HTTP 模式**（TS + Python）：独立网关进程，支持多会话、多客户端、远程调用 → [`mcp-http.json.example`](mcp-http.json.example)
 
 ***
 
-## 模式一：stdio 本地接入（TS only）
+## 模式一：stdio 本地接入（TS only，推荐）
 
-在你的 MCP 客户端配置文件（通常是 `claude_desktop_config.json` 或平台对应的 mcpServers 配置）中，按需要添加服务器：
+`mcp-stdio.json.example` 已包含全部 9 个服务器的完整配置，直接拿来改：
+
+```bash
+cp mcp-stdio.json.example mcp.json   # 然后编辑 mcp.json
+```
+
+只需替换三处占位符：
+
+| 占位符                      | 替换成                                             |
+| ----------------------- | ---------------------------------------------- |
+| `/CHANGE/ME/rizhiyi-mcp` | 仓库在你机器上的**绝对路径**（记得先 `cd ts && npm run build`）    |
+| `http://<LOGEASE_BASE_URL>` | 日志易实例地址，例如 `https://your-logease.example.com`      |
+| `<USERNAME>:<API_KEY>`  | 日志易 API 凭据，格式 `用户名:密钥`（支持中文用户名，见第 2 步变量说明）      |
+
+改完把 `mcp.json` 里的 `mcpServers` 合并进你 MCP 客户端的配置文件即可，例如 Claude Desktop：
 
 ```json
 {
   "mcpServers": {
     "rizhiyi_search": {
       "command": "node",
-      "args": ["/path/to/rizhiyi-mcp/ts/dist/log-tools-server.js"]
-      "environment": {
-        "LOGEASE_BASE_URL": "http://<YOTTAWEB>",
-        "LOGEASE_API_KEY": "<USER>:<API_KEY>",
-        "LOGEASE_TLS_REJECT_UNAUTHORIZED": "false"
+      "args": ["<你的绝对路径>/rizhiyi-mcp/ts/dist/log-tools-server.js"],
+      "env": {
+        "LOGEASE_BASE_URL": "https://your-logease.example.com",
+        "LOGEASE_API_KEY": "<USER>:<API_KEY>"
       }
-    },
-    "rizhiyi_dashboard": {
-      "command": "node",
-      "args": ["/path/to/rizhiyi-mcp/ts/dist/dashboard-server.js"]
     }
-    ...
   }
 }
 ```
 
-> 别忘了把 `/path/to/rizhiyi-mcp/` 换成你机器上的实际绝对路径，并确认已经 `npm run build` 过。
+> **要点**
+>
+> - 每个服务器是独立子进程：配几个 server 就拉起几个 `node` 进程。不需要的（例如接口量巨大的 `openapi_server`）整段删除即可。
+> - 认证写在配置的 `env` 里最可靠——子进程的工作目录不一定是仓库目录，别依赖 `.env` 自动加载；`.env` 只在手工命令行启动时生效。
+> - 各 server 的 `args` 入口见下表，`mcp-stdio.json.example` 里已是最终写法：
+
+| 配置里的 key              | 启动入口（`ts/dist/*.js`）          |
+| --------------------- | ------------------------------ |
+| `rizhiyi_search`      | `log-tools-server.js`          |
+| `rizhiyi_chatspl`     | `chatspl-server.js`            |
+| `rizhiyi_dashboard`   | `dashboard-server.js`          |
+| `rizhiyi_parserule`   | `parserrule-server.js`         |
+| `rizhiyi_dynamic_field` | `fieldconfig-server.js`        |
+| `rizhiyi_ingest`      | `ingest-server.js`             |
+| `rizhiyi_alert`       | `alert-server.js`              |
+| `rizhiyi_manage`      | `manage-server.js`             |
+| `openapi_server`      | `openapi_server.js`            |
 
 配置完成后，重启 AI 客户端，就能在工具列表里看到上述服务器提供的所有工具了。
 
@@ -135,7 +160,34 @@ rizhiyi-mcp-python
 | `/mcp/{serverName}` | POST   | MCP 请求入口（initialize / tools/list / tools/call 等） |
 | `/mcp/{serverName}` | DELETE | 关闭指定 session                                     |
 
-可用的 `{serverName}`：`log-tools`、`chatspl`、`dashboard`、`manage`、`parserule`、`fieldconfig`、`ingest`、`openapi`。
+可用的 `{serverName}`：`log-tools`、`chatspl`、`dashboard`、`manage`、`parserule`、`fieldconfig`、`ingest`、`openapi`、`alert`。
+
+
+
+### 客户端接入配置
+
+仓库根目录的 [`mcp-http.json.example`](mcp-http.json.example) 已写好全部 9 个 server 的 HTTP 接入配置，复制后替换两个占位符即可：
+
+| 占位符                   | 替换成                                            |
+| -------------------- | ---------------------------------------------- |
+| `<MCP_HTTP_HOST>`      | 网关所在主机，本机部署就是 `127.0.0.1`                     |
+| `<USERNAME>:<API_KEY>` | 每个请求都要带的身份凭据，写入 `headers.Authorization`（见下方「HTTP 鉴权」） |
+
+```json
+{
+  "mcpServers": {
+    "rizhiyi_search": {
+      "type": "http",
+      "url": "http://127.0.0.1:3000/mcp/log-tools",
+      "headers": {
+        "Authorization": "apikey <USER>:<API_KEY>"
+      }
+    }
+  }
+}
+```
+
+> URL 末尾的路径段（`log-tools`、`chatspl` …）就是上面的 `{serverName}`，与网关路由一一对应。`type: "http"` 是流式 HTTP（Streamable HTTP）传输；部分客户端写作 `"type": "streamable-http"`，效果相同。
 
 环境变量：
 
@@ -231,8 +283,6 @@ A：`Accept` 请求头没有包含 `text/event-stream`。官方 Streamable HTTP 
 ## TODO
 
 以下能力属于复杂 JSON body 配置类功能，计划以独立 MCP Server 方式提供：
-
-- `rizhiyi_alert`：监控/告警配置（alerts）
 
 - `rizhiyi_agent_config`：采集/Agent 配置（agent）
 

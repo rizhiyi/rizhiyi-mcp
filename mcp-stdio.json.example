@@ -1,0 +1,76 @@
+{
+  "mcpServers": {
+    "rizhiyi_search": {
+      "command": "node",
+      "args": ["/CHANGE/ME/rizhiyi-mcp/ts/dist/log-tools-server.js"],
+      "env": {
+        "LOGEASE_BASE_URL": "http://<LOGEASE_BASE_URL>",
+        "LOGEASE_API_KEY": "<USERNAME>:<API_KEY>"
+      }
+    },
+    "rizhiyi_chatspl": {
+      "command": "node",
+      "args": ["/CHANGE/ME/rizhiyi-mcp/ts/dist/chatspl-server.js"],
+      "env": {
+        "LOGEASE_BASE_URL": "http://<LOGEASE_BASE_URL>",
+        "LOGEASE_API_KEY": "<USERNAME>:<API_KEY>"
+      }
+    },
+    "rizhiyi_dashboard": {
+      "command": "node",
+      "args": ["/CHANGE/ME/rizhiyi-mcp/ts/dist/dashboard-server.js"],
+      "env": {
+        "LOGEASE_BASE_URL": "http://<LOGEASE_BASE_URL>",
+        "LOGEASE_API_KEY": "<USERNAME>:<API_KEY>"
+      }
+    },
+    "rizhiyi_parserule": {
+      "command": "node",
+      "args": ["/CHANGE/ME/rizhiyi-mcp/ts/dist/parserrule-server.js"],
+      "env": {
+        "LOGEASE_BASE_URL": "http://<LOGEASE_BASE_URL>",
+        "LOGEASE_API_KEY": "<USERNAME>:<API_KEY>"
+      }
+    },
+    "rizhiyi_dynamic_field": {
+      "command": "node",
+      "args": ["/CHANGE/ME/rizhiyi-mcp/ts/dist/fieldconfig-server.js"],
+      "env": {
+        "LOGEASE_BASE_URL": "http://<LOGEASE_BASE_URL>",
+        "LOGEASE_API_KEY": "<USERNAME>:<API_KEY>"
+      }
+    },
+    "rizhiyi_ingest": {
+      "command": "node",
+      "args": ["/CHANGE/ME/rizhiyi-mcp/ts/dist/ingest-server.js"],
+      "env": {
+        "LOGEASE_BASE_URL": "http://<LOGEASE_BASE_URL>",
+        "LOGEASE_API_KEY": "<USERNAME>:<API_KEY>"
+      }
+    },
+    "rizhiyi_alert": {
+      "command": "node",
+      "args": ["/CHANGE/ME/rizhiyi-mcp/ts/dist/alert-server.js"],
+      "env": {
+        "LOGEASE_BASE_URL": "http://<LOGEASE_BASE_URL>",
+        "LOGEASE_API_KEY": "<USERNAME>:<API_KEY>"
+      }
+    },
+    "rizhiyi_manage": {
+      "command": "node",
+      "args": ["/CHANGE/ME/rizhiyi-mcp/ts/dist/manage-server.js"],
+      "env": {
+        "LOGEASE_BASE_URL": "http://<LOGEASE_BASE_URL>",
+        "LOGEASE_API_KEY": "<USERNAME>:<API_KEY>"
+      }
+    },
+    "openapi_server": {
+      "command": "node",
+      "args": ["/CHANGE/ME/rizhiyi-mcp/ts/dist/openapi_server.js"],
+      "env": {
+        "LOGEASE_BASE_URL": "http://<LOGEASE_BASE_URL>",
+        "LOGEASE_API_KEY": "<USERNAME>:<API_KEY>"
+      }
+    }
+  }
+}

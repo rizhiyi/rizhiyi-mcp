@@ -6,7 +6,7 @@ from typing import Any
 from .config import RuntimeConfig
 from .servers import ServiceRuntimeState, create_tool_server
 from .service_tooling import BaseServiceModule, ServiceToolRuntime, with_output_controls
-from .types import ToolDefinition
+from .types import ApiResponse, ToolDefinition
 
 SERVER_LEVEL_INSTRUCTIONS = """使用说明:
 1. 这是 parserrule 专用入口，只处理字段提取 / 解析规则，也就是 schema on write，不处理动态字段 fieldconfigs。

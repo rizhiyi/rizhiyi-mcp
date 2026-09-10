@@ -2138,6 +2138,335 @@ const chatSplTools: ToolDefinition[] = [
 
 export const chatSplServerTools: ToolDefinition[] = chatSplTools;
 
+const commonCreateProperties: Record<string, any> = {
+    name: { type: 'string', description: '监控名称，必填。' },
+    description: { type: 'string', description: '监控描述。' },
+    enabled: { type: 'boolean', description: '是否启用，默认 true。' },
+    check_interval: { type: 'integer', description: '检查间隔（秒）。建议与 check_condition.timerange（或 window）匹配：timerange=-5min 时 ≤300s，timerange=-1h 时 ≤3600s。' },
+    interval_unit: { type: 'integer', description: '间隔单位：0=秒，1=分钟，默认 0。' },
+    window: { type: 'string', description: '查询时间窗口，如 "-5min"；流式聚合（category=6）用 "10m"（不带 - 前缀）。' },
+    dataset_ids: { type: 'array', items: { type: 'object', additionalProperties: true }, description: '数据源 ID 列表，如 [{"dataset_id": 1}] 或 [{"dataset_id": 14, "node_id": 8}]；也可传 JSON 字符串。' },
+    extend_dataset_ids: { type: 'array', items: { type: 'object', additionalProperties: true }, description: '扩展数据源 ID 列表；也可传 JSON 字符串。' },
+    extend_query: { type: 'string', description: '扩展搜索语句（字符串，不做 JSON 序列化）。支持 {{alert.result.hits.0.fieldname}} 模板变量引用主搜索结果，及 [[ ... ]] SPL 内嵌子查询。' },
+    extend_conf: { type: 'object', additionalProperties: true, description: '固定键值元数据，会被 JSON 序列化传上游；也可传 JSON 字符串。' },
+    segmentation_field: { type: 'string', description: '分组/切分字段（stats...by 或分割），避免高基数字段（如 raw_message、session_id）。' },
+    graph_enabled: { type: 'boolean', description: '是否开启图形。' },
+    timezone: { type: 'string', description: '时区，如 "Asia/Shanghai"。' },
+    use_spark: { type: 'boolean', description: '主查询是否启用高基 spark。' },
+    check_condition_group: { type: 'object', additionalProperties: true, description: '多条件组（OR/AND 组合）条件；也可传 JSON 字符串。' },
+    extra: { type: 'object', additionalProperties: true, description: '兜底：其他未单独列出的写字段（snake_case）可放这里，本工具会合并进监控 body（白名单过滤）。' },
+};
+
+const checkConditionProperty: Record<string, any> = {
+    check_condition: {
+        type: 'object',
+        additionalProperties: true,
+        description: '检查条件对象（snake_case 键）。结构随类型不同而异，参考对应类型描述；也可传合法 JSON 字符串。'
+    }
+};
+
+function createTypedAlertTools(): ToolDefinition[] {
+    function tool(name: string, desc: string, required: string[], extraProperties?: Record<string, any>): ToolDefinition {
+        const properties: Record<string, any> = { ...commonCreateProperties, ...checkConditionProperty, ...(extraProperties ?? {}) };
+        const schema: any = { type: 'object', properties };
+        if (required.length > 0) schema.required = required;
+        return { name, description: desc, inputSchema: schema };
+    }
+
+    return [
+        tool(
+            'create_keyword_alert',
+            '创建【关键字监控】（category=0）：基于搜索关键字 + 时间窗口 count 的最基础告警，适用于"某时间段内某类日志超过 N 条"类场景。check_condition.function=count（不含 field），statistics_field 必须留空（传了会被拦截）。',
+            ['name', 'query', 'check_condition'],
+            {
+                query: { type: 'string', description: '查询/检索语句，必填。此处为原生查询字符串，不包含 stats 聚合。' },
+            }
+        ),
+        tool(
+            'create_field_stat_alert',
+            '创建【字段统计监控】（category=1）：对指定数值字段做聚合统计告警（avg/sum/max/min 等）。check_condition.field 必填（数值字段名如 apache.req_time），check_condition.function 指定聚合函数。query 可含 stats...by 做分组，此时 segmentation_field 设为分组字段。',
+            ['name', 'query', 'check_condition'],
+            {
+                query: { type: 'string', description: '查询/检索语句，必填。可含 stats ... by 分组语句。' },
+                statistics_field: { type: 'string', description: '要聚合统计的字段名；与 check_condition.field 配合。' },
+            }
+        ),
+        tool(
+            'create_baseline_alert',
+            '创建【连续统计监控】（category=2）：基于基线值对比的连续统计告警，常见于"业务调用高耗时统计"等场景。check_condition 必须含 base_value（基线值）和 base_comparator（比较运算符，如 >），可含 field 指定统计字段。',
+            ['name', 'query', 'check_condition'],
+            {
+                query: { type: 'string', description: '查询/检索语句，必填。' },
+            }
+        ),
+        tool(
+            'create_surge_alert',
+            '创建【突变异常监控】（category=3）：基于时间窗口基线对比的突变检测告警，适用于"某字段值突然飙升"类场景。check_condition 必须含 base_timerange（基线时间范围，如 now-2m,now-1m），可含 field 指定监控字段，threshold 含百分比格式（如 info:50%;high:200%）。',
+            ['name', 'query', 'check_condition'],
+            {
+                query: { type: 'string', description: '查询/检索语句，必填。' },
+            }
+        ),
+        tool(
+            'create_spl_alert',
+            '创建【SPL 统计监控】（category=4）：query 传入完整 SPL（含 stats/inputlookup 等）做复杂聚合，dataset_ids 一般为 []。check_condition.field = stats 输出列（如 cnt）。仅当查询需要完整 SPL 语法时才用本类型；简单计数请用 create_keyword_alert。',
+            ['name', 'query', 'check_condition'],
+            {
+                query: { type: 'string', description: '完整 SPL 查询语句（含 stats/inputlookup 等），必填。结果需产生 check_condition.field 指定的输出列。' },
+            }
+        ),
+        tool(
+            'create_stream_lookup_alert',
+            '创建【流式 lookup 监控】（category=5）：基于 lookup 关联 + 流式计算的实时告警。需 topic 指定流式数据源（如 raw_message），query 含 lookup...on...| where 做关联过滤。check_condition.timerange 通常为 "m"；check_interval/interval_unit 通常为 0（由流式驱动）。',
+            ['name', 'query', 'topic', 'check_condition'],
+            {
+                query: { type: 'string', description: '查询/检索语句，必填。此处含 lookup...on... 与 where 过滤。' },
+                topic: { type: 'string', description: '流式数据源（如 raw_message），必填。' },
+            }
+        ),
+        tool(
+            'create_stream_agg_alert',
+            '创建【流式聚合监控】（category=6）：基于流式计算 + stats 聚合的实时告警。需 topic 指定流式数据源（如 raw_message），query 含 stats...by+where 做流式聚合统计（区别于 cat=5 的 lookup+where）。check_condition 通常仅 threshold；check_interval/interval_unit 通常为 0；window 不带 - 前缀（如 "10m"）。',
+            ['name', 'query', 'topic'],
+            {
+                query: { type: 'string', description: '查询/检索语句，必填。此处含 stats ... by 与 where 做流式聚合。' },
+                topic: { type: 'string', description: '流式数据源（如 raw_message），必填。' },
+            }
+        ),
+        tool(
+            'create_composite_alert',
+            '创建【联合监控】（category=19）：组合多个子监控的联合告警。composite_info 必填（operator=or/and + children 数组，每项含 alert_uuid 和 watched_level）。query 通常为 *，check_condition.threshold=auto 典型；check_interval/interval_unit 通常为 0。',
+            ['name', 'composite_info'],
+            {
+                query: { type: 'string', description: '通常传 "*"。' },
+                composite_info: {
+                    type: 'object',
+                    additionalProperties: true,
+                    description: '联合监控定义，必填。结构：{"operator": "or|and", "children": [{"alert_uuid": "<子监控UUID>", "watched_level": ["info","low","mid","high"], "children": null}]}；也可传 JSON 字符串。'
+                },
+            }
+        ),
+    ];
+}
+
+export const alertTools: ToolDefinition[] = [
+    {
+        name: 'list_alerts',
+        description: '获取监控/告警配置列表。默认返回 id,name,category,enabled,check_interval,window,app_id 轻量字段，可通过 fields 自定义列；支持按 category（0=关键字，1=字段统计，2=连续统计，3=突变异常，4=SPL 统计，5=流式 lookup，6=流式聚合，19=联合监控）、enabled、name、app_id、rt_ids 等过滤；支持 page/size 分页和 sort 排序。创建/更新监控前建议先 get_alert_category_reference 看类别差异。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                fields: { type: 'string', description: '自定义返回字段列表（逗号分隔）。默认返回 id,name,category,enabled,check_interval,window,app_id，不带大段 JSON。' },
+                permits: { type: 'string', description: '是否返回权限集合，默认 true。' },
+                page: { type: 'integer', description: '页码，从 0 开始，默认 0。' },
+                size: { type: 'integer', description: '每页条数，默认 10。' },
+                id: { type: 'integer', description: '按监控 ID 精确过滤。' },
+                name: { type: 'string', description: '按监控名称过滤。' },
+                domain_id: { type: 'integer', description: '按 domain_id 过滤。' },
+                executor_id: { type: 'integer', description: '按执行人 ID 过滤。' },
+                creator_id: { type: 'integer', description: '按创建人 ID 过滤。' },
+                description: { type: 'string', description: '按描述关键字过滤。' },
+                crontab: { type: 'string', description: '按 crontab 表达式过滤。' },
+                query: { type: 'string', description: '按主查询字符串过滤。' },
+                extend_query: { type: 'string', description: '按 extend_query 字符串过滤。' },
+                graph_enabled: { type: 'boolean', description: '按是否开启图形过滤。' },
+                use_spark: { type: 'boolean', description: '按主查询是否启用高基 spark 过滤。' },
+                extend_use_spark: { type: 'boolean', description: '按 extend 是否启用高基 spark 过滤。' },
+                extend_conf: { type: 'string', description: '按 extend_conf 子串过滤。' },
+                segmentation_field: { type: 'string', description: '按切分字段名过滤。' },
+                alert_line_send: { type: 'boolean', description: '按是否启用线路发送过滤。' },
+                hosted_flag: { type: 'boolean', description: '按是否托管（流式匹配）过滤。' },
+                category: { type: 'integer', description: '按监控类别过滤：0=关键字 1=字段统计 2=连续统计 3=突变异常 4=SPL统计 5=流式lookup 6=流式聚合 19=联合监控。' },
+                app_id: { type: 'integer', description: '按所属应用 app_id 过滤。' },
+                rt_ids: { type: 'string', description: '按资源标签过滤，多个标签 ID 用逗号分隔。' },
+                sort: { type: 'string', description: '排序规则，可选 check_interval/continuous_trigger_value/crontab/enabled/group_suppress_field/id/name/restrain_interval/segmentation_field，前缀 - 表示降序，默认 -id。' }
+            }
+        }
+    },
+    {
+        name: 'get_alert_detail',
+        description: '获取单个监控的完整配置详情（含只读字段 id, create_time, update_timestamp, last_run_timestamp, last_trigger_timestamp, alert_metas, rt_list 等）。通常在 update 前调用，读取当前 body 作为 changes 起点；或在 create 后读取确认字段。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                id: { type: 'integer', description: '监控 ID。' },
+                fields: { type: 'string', description: '可选，指定返回字段列表。' },
+                permit: { type: 'string', description: '可选，是否返回权限集合。' }
+            },
+            required: ['id']
+        }
+    },
+    {
+        name: 'get_alerts_batch',
+        description: '批量按 ID 集合获取多个监控详情（/alerts/set/ 接口）。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                ids: {
+                    type: 'array',
+                    items: { type: 'integer' },
+                    description: '监控 ID 数组，例如 [1178,1180,214]；也兼容传入逗号字符串 "1178,1180,214"（会在内部转换）。'
+                },
+                id_list: { type: 'string', description: '兼容字段：逗号分隔的 ID 列表，例如 "214,1178"。当 ids 缺省时读取此字段。' },
+                fields: { type: 'string', description: '自定义返回字段。' },
+                permits: { type: 'string', description: '是否返回权限集合。' }
+            }
+        }
+    },
+    ...createTypedAlertTools(),
+    {
+        name: 'update_alert',
+        description: '更新单个监控。**必须先调用 get_alert_detail(id) 读取该监控当前完整配置，再组装 changes 对象**（只传要改的字段），切勿凭记忆重写整段配置。changes 为对象（推荐）或合法 JSON 字符串；JSON 字段自动序列化、category 冲突校验（只校验 changes 中存在的 category）逻辑生效。若当前监控是 category=19 联合监控，变更 composite_info 需谨慎。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                id: { type: 'integer', description: '监控 ID，必填。' },
+                changes: {
+                    type: 'object',
+                    additionalProperties: true,
+                    description: '待更新字段（snake_case），属性与各 create_* 工具的同名字段一致；也可直接传合法 JSON 对象字符串，内部会自动解析为对象。建议先 get_alert_detail 读取当前配置后做局部修改。'
+                }
+            },
+            required: ['id', 'changes']
+        }
+    },
+    {
+        name: 'update_alerts_batch',
+        description: '批量更新多个监控（/alerts/set/）。每个 item 必须包含 id；其余字段走与 update_alert 相同的 JSON 预处理。items 支持对象数组，也兼容合法 JSON 字符串数组（内部自动解析）。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                items: {
+                    type: 'array',
+                    items: { type: 'object', additionalProperties: true },
+                    description: '批量更新的 items 数组，每个对象包含 id 及变更字段；也兼容传入可解析为对象数组的 JSON 字符串（内部自动转换）。'
+                },
+                payload: {
+                    type: 'array',
+                    items: { type: 'object', additionalProperties: true },
+                    description: '兼容字段：与 items 语义相同，当 items 缺省时读取 payload；也可传入可解析的 JSON 字符串。'
+                }
+            }
+        }
+    },
+    {
+        name: 'delete_alert',
+        description: '删除单个监控。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                id: { type: 'integer', description: '监控 ID，必填。' }
+            },
+            required: ['id']
+        }
+    },
+    {
+        name: 'delete_alerts_batch',
+        description: '批量删除多个监控（/alerts/set/）。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                ids: {
+                    type: 'array',
+                    items: { type: 'integer' },
+                    description: '监控 ID 数组，例如 [214, 1178]；也兼容传入逗号字符串 "214,1178"（内部自动转换）。'
+                },
+                id_list: { type: 'string', description: '兼容字段：逗号分隔的 ID 列表，例如 "214,1178"；当 ids 缺省时读取此字段。' }
+            }
+        }
+    },
+    {
+        name: 'preview_alert',
+        description: '告警发送预览：提交 alert 草稿（模型按目标监控类型的字段结构拼装，类型差异见 get_alert_category_reference）和可选 alert_meta/plugin_id/timeout，返回 sid。预览并不会真的触发创建，而是跑一遍条件匹配和通知渠道渲染。拿到 sid 后，再用 get_alert_pretest_result(sid) 轮询最终输出（正文/错误等）。alert 字段支持 snake_case（本工具自动转换为上游需要的 camelCase）。alert 支持对象或合法 JSON 字符串两种写法，alert_meta 也支持对象或 JSON 字符串，内部统一处理，category 与字段冲突、非法 JSON 会本地拦截。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                alert: {
+                    type: 'object',
+                    additionalProperties: true,
+                    description: '必填，监控草稿（snake_case 或 camelCase 皆可）；也可传入合法 JSON 对象字符串，内部自动解析。按目标监控类型（0/1/2/3/4/5/6/19）的字段结构拼装。'
+                },
+                alert_meta: {
+                    type: 'object',
+                    additionalProperties: true,
+                    description: '可选，通知渠道元数据；结构按上游 alerts plugin 的格式。也支持传入合法 JSON 对象字符串。'
+                },
+                plugin_id: { type: 'number', description: '可选，插件 ID。' },
+                timeout: { type: 'number', description: '可选，超时（毫秒）。' }
+            },
+            required: ['alert']
+        }
+    },
+    {
+        name: 'testrun_alert',
+        description: '告警测试运行：比 preview 更接近真实触发，会按实际的查询与窗口/统计跑一遍后尝试通知。参数、字段转换、JSON 预处理、sid 轮询方式与 preview_alert 完全相同。建议在正式 create/update 前至少跑一次 testrun。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                alert: {
+                    type: 'object',
+                    additionalProperties: true,
+                    description: '必填，监控草稿对象；也可传入合法 JSON 对象字符串，内部自动解析。'
+                },
+                alert_meta: {
+                    type: 'object',
+                    additionalProperties: true,
+                    description: '可选，通知渠道元数据对象；也可传入合法 JSON 对象字符串。'
+                },
+                plugin_id: { type: 'number', description: '可选，插件 ID。' },
+                timeout: { type: 'number', description: '可选，超时（毫秒）。' }
+            },
+            required: ['alert']
+        }
+    },
+    {
+        name: 'get_alert_pretest_result',
+        description: '按 sid 获取 preview_alert / testrun_alert 的执行结果。如果结果尚未就绪，返回时会带 _not_ready_hint 提示，建议数秒后用相同 sid 再次调用；或直接传 max_wait_ms 做客户端轮询等待。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                sid: { type: 'string', description: 'preview_alert 或 testrun_alert 返回的会话 sid，必填。' },
+                max_wait_ms: { type: 'integer', description: '客户端轮询最大等待毫秒数。默认 0=只查一次。' },
+                poll_interval_ms: { type: 'integer', description: '轮询间隔毫秒，默认 1000ms。' }
+            },
+            required: ['sid']
+        }
+    },
+    {
+        name: 'get_alert_references',
+        description: '获取联合告警关联关系引用（/api/v3/alerts/references/）。用于拼装 category=5 联合监控的 composite_info 时确认被引用监控。',
+        inputSchema: {
+            type: 'object',
+            properties: {}
+        }
+    },
+    {
+        name: 'get_alert_category_reference',
+        description: '本地参考工具（不调用外网）：返回 8 类监控（category=0/1/2/3/4/5/6/19）的用途、必填字段、特有字段、最小 check_condition JSON 示例和最小 sampleBody 示例。不传 category 时返回全部 8 类；传 category 时返回对应类别（支持数字/数字字符串/名称如"关键字监控"，兼容 type/cat 别名）。任何 create/update 前强烈建议先看一次对应类别的 sampleBody。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                category: {
+                    type: 'string',
+                    description: '可选：指定类别。支持数字 0-5、数字字符串 "1"、或类别名称如 "SPL统计监控"。当传入数字类型值会自动在内部转换为字符串处理。'
+                },
+                type: {
+                    type: 'string',
+                    description: '兼容字段：category 的别名，用法同上。'
+                },
+                cat: {
+                    type: 'string',
+                    description: '兼容字段：category 的别名，用法同上。'
+                }
+            }
+        }
+    }
+];
+
+export const alertServerTools: ToolDefinition[] = [
+    ...withOutputControls(alertTools)
+];
+
 // 所有工具
 export const allTools: ToolDefinition[] = [
     ...searchTools,
@@ -2145,5 +2474,6 @@ export const allTools: ToolDefinition[] = [
     ...parserRuleServerTools,
     ...fieldConfigServerTools,
     ...ingestServerTools,
-    ...chatSplServerTools
+    ...chatSplServerTools,
+    ...alertServerTools
 ];

@@ -24,7 +24,7 @@ _OPENAPI_SCHEMA_FILE = "Api_5.3_schema.yaml"
 
 _MANAGE_EXCLUDED_MODULE_SERVER_MAP: dict[str, str] = {
     "agent": "ingest",
-    "alerts": "manage",
+    "alerts": "rizhiyi_alert",
     "parserrules": "parserrule",
     "fieldconfigs": "fieldconfig",
     "dashboard": "dashboard",

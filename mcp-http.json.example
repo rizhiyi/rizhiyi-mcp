@@ -1,0 +1,67 @@
+{
+  "mcpServers": {
+    "rizhiyi_search": {
+      "type": "http",
+      "url": "http://<MCP_HTTP_HOST>:3000/mcp/log-tools",
+      "headers": {
+        "Authorization": "apikey <USERNAME>:<API_KEY>"
+      }
+    },
+    "rizhiyi_chatspl": {
+      "type": "http",
+      "url": "http://<MCP_HTTP_HOST>:3000/mcp/chatspl",
+      "headers": {
+        "Authorization": "apikey <USERNAME>:<API_KEY>"
+      }
+    },
+    "rizhiyi_dashboard": {
+      "type": "http",
+      "url": "http://<MCP_HTTP_HOST>:3000/mcp/dashboard",
+      "headers": {
+        "Authorization": "apikey <USERNAME>:<API_KEY>"
+      }
+    },
+    "rizhiyi_parserule": {
+      "type": "http",
+      "url": "http://<MCP_HTTP_HOST>:3000/mcp/parserule",
+      "headers": {
+        "Authorization": "apikey <USERNAME>:<API_KEY>"
+      }
+    },
+    "rizhiyi_dynamic_field": {
+      "type": "http",
+      "url": "http://<MCP_HTTP_HOST>:3000/mcp/fieldconfig",
+      "headers": {
+        "Authorization": "apikey <USERNAME>:<API_KEY>"
+      }
+    },
+    "rizhiyi_ingest": {
+      "type": "http",
+      "url": "http://<MCP_HTTP_HOST>:3000/mcp/ingest",
+      "headers": {
+        "Authorization": "apikey <USERNAME>:<API_KEY>"
+      }
+    },
+    "rizhiyi_alert": {
+      "type": "http",
+      "url": "http://<MCP_HTTP_HOST>:3000/mcp/alert",
+      "headers": {
+        "Authorization": "apikey <USERNAME>:<API_KEY>"
+      }
+    },
+    "rizhiyi_manage": {
+      "type": "http",
+      "url": "http://<MCP_HTTP_HOST>:3000/mcp/manage",
+      "headers": {
+        "Authorization": "apikey <USERNAME>:<API_KEY>"
+      }
+    },
+    "openapi_server": {
+      "type": "http",
+      "url": "http://<MCP_HTTP_HOST>:3000/mcp/openapi",
+      "headers": {
+        "Authorization": "apikey <USERNAME>:<API_KEY>"
+      }
+    }
+  }
+}

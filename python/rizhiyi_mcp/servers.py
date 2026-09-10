@@ -11,6 +11,7 @@ from typing import Any
 from mcp import types as mcp_types
 from mcp.server.fastmcp import FastMCP
 from mcp.server.lowlevel.helper_types import ReadResourceContents
+from mcp.server.transport_security import TransportSecuritySettings
 from mcp.shared.exceptions import McpError
 from mcp.types import Resource as MCPResource
 from mcp.types import ResourceTemplate as MCPResourceTemplate
@@ -109,6 +110,12 @@ class RizhiyiFastMCPServer(FastMCP[None]):
             instructions=instructions or f"{title} Python MCP 服务已就绪。",
             streamable_http_path="/",
             json_response=True,
+            host=runtime_config.mcp_http_host,
+            transport_security=TransportSecuritySettings(
+                enable_dns_rebinding_protection=runtime_config.mcp_enable_dns_rebinding_protection,
+                allowed_hosts=runtime_config.mcp_allowed_hosts,
+                allowed_origins=runtime_config.mcp_allowed_origins,
+            ),
         )
 
     def _setup_handlers(self) -> None:

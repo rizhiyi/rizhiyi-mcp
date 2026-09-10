@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from .log_tools_server import create_log_tools_server
+from .service_alerts import create_alerts_server
 from .service_servers import (
     create_dashboard_server,
     create_fieldconfig_server,
@@ -26,6 +27,7 @@ _SERVER_FACTORIES: dict[str, ServerFactory] = {
     "ingest": create_ingest_server,
     "openapi": create_openapi_server,
     "chatspl": create_chatspl_server,
+    "alert": create_alerts_server,
 }
 
 server_registry: dict[str, ServerFactory] = dict(_SERVER_FACTORIES)

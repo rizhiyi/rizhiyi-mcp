@@ -274,14 +274,16 @@ class RecordedUpstream:
 
 
 class HttpGatewayTestCase(unittest.TestCase):
-    def build_runtime_config(self) -> RuntimeConfig:
-        return RuntimeConfig(
+    def build_runtime_config(self, **overrides: Any) -> RuntimeConfig:
+        base: dict[str, Any] = dict(
             logease_base_url="http://logease.example",
             log_tools_result_store_dir=Path(self.temp_dir.name),
             log_tools_result_ttl_seconds=60,
             log_tools_result_inline_max_bytes=1024 * 1024,
             log_tools_result_max_file_bytes=5 * 1024 * 1024,
         )
+        base.update(overrides)
+        return RuntimeConfig(**base)
 
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()

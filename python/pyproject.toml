@@ -7,11 +7,11 @@ name = "rizhiyi-mcp-python"
 version = "0.3.0"
 description = "Python MCP skeleton for rizhiyi streamable HTTP migration"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 dependencies = [
   "fastapi>=0.115.0,<1.0.0",
   "httpx>=0.27.0,<1.0.0",
-  "mcp>=1.0.0",
+  "mcp>=1.0.0,<2",
   "pydantic>=2.8.0,<3.0.0",
   "pydantic-settings>=2.4.0,<3.0.0",
   "PyYAML>=6.0.0,<7.0.0",
@@ -38,7 +38,7 @@ include = ["rizhiyi_mcp*"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py310"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

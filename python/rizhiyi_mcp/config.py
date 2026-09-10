@@ -24,6 +24,14 @@ class RuntimeConfig(BaseSettings):
     mcp_http_host: str = "0.0.0.0"
     mcp_http_port: int = 3000
     mcp_http_base_path: str = "/mcp"
+    # DNS rebinding protection（MCP SDK TransportSecuritySettings）。
+    # SDK 自身默认关闭；这里也默认关闭，因为 MCP 网关已有 Authorization 鉴权，
+    # 且 allowed_hosts 不支持 "*" 全通配，开了容易误伤外部访问。
+    # 生产环境若需开启，设 MCP_ENABLE_DNS_REBINDING_PROTECTION=true，
+    # 并同时配置 MCP_ALLOWED_HOSTS（如 ["*"] 或具体 host:port 列表）。
+    mcp_enable_dns_rebinding_protection: bool = False
+    mcp_allowed_hosts: list[str] = ["*"]
+    mcp_allowed_origins: list[str] = ["*"]
     log_tools_result_store_dir: Path = Field(default_factory=lambda: _DEFAULT_STORE_DIR)
     log_tools_result_ttl_seconds: int = 1800
     log_tools_result_inline_max_bytes: int = 24 * 1024

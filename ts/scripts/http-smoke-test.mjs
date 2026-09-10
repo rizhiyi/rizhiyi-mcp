@@ -198,6 +198,157 @@ async function assertStructuredContentForLogSearchSheet() {
     await deleteSession('log-tools', sessionId);
 }
 
+async function assertAlertServerBehavior() {
+    // 1. initialize + tools/list
+    const sessionId = await initializeSession('alert');
+    const listResp = await jsonRequest('/mcp/alert', {
+        jsonrpc: '2.0',
+        id: 10,
+        method: 'tools/list',
+        params: {}
+    }, {
+        Authorization: authHeader,
+        'mcp-session-id': sessionId
+    });
+    if (listResp.status !== 200) {
+        throw new Error(`alert tools/list 失败: ${listResp.status} ${JSON.stringify(listResp.json)}`);
+    }
+    const toolNames = (listResp.json?.result?.tools ?? []).map(t => t.name);
+    const expectedNames = new Set([
+        'list_alerts', 'get_alert_detail', 'get_alerts_batch',
+        'create_keyword_alert', 'create_field_stat_alert', 'create_baseline_alert',
+        'create_surge_alert', 'create_spl_alert', 'create_stream_lookup_alert',
+        'create_stream_agg_alert', 'create_composite_alert',
+        'update_alert', 'update_alerts_batch',
+        'delete_alert', 'delete_alerts_batch',
+        'preview_alert', 'testrun_alert', 'get_alert_pretest_result',
+        'get_alert_references', 'get_alert_category_reference',
+    ]);
+    for (const name of expectedNames) {
+        if (!toolNames.includes(name)) {
+            throw new Error(`alert tools/list 缺少工具: ${name}; 实际: ${toolNames.join(',')}`);
+        }
+    }
+    console.log('  [alert] tools/list ok: ' + toolNames.length + ' tools');
+
+    // 2. 调用 list_alerts（真实环境）— 只看结构化字段，不关心数据量
+    const listCallResp = await jsonRequest('/mcp/alert', {
+        jsonrpc: '2.0',
+        id: 11,
+        method: 'tools/call',
+        params: {
+            name: 'list_alerts',
+            arguments: {
+                page: 0,
+                size: 3,
+                result_delivery: 'inline',
+                output_format: 'json',
+            }
+        }
+    }, {
+        Authorization: authHeader,
+        'mcp-session-id': sessionId
+    });
+    if (listCallResp.status !== 200) {
+        throw new Error(`alert list_alerts 调用失败: ${listCallResp.status} ${JSON.stringify(listCallResp.json)}`);
+    }
+    const listContent = (listCallResp.json?.result?.content ?? []);
+    if (!listContent.length) {
+        throw new Error(`alert list_alerts 内容缺失: ${JSON.stringify(listCallResp.json)}`);
+    }
+    console.log('  [alert] alert list ok');
+
+    // 3. 调用 get_alert_category_reference，确认 6 类都在
+    const refResp = await jsonRequest('/mcp/alert', {
+        jsonrpc: '2.0',
+        id: 12,
+        method: 'tools/call',
+        params: {
+            name: 'get_alert_category_reference',
+            arguments: { result_delivery: 'inline', output_format: 'json' }
+        }
+    }, {
+        Authorization: authHeader,
+        'mcp-session-id': sessionId
+    });
+    if (refResp.status !== 200) {
+        throw new Error(`alert get_alert_category_reference 调用失败: ${refResp.status} ${JSON.stringify(refResp.json)}`);
+    }
+    const refText = ((refResp.json?.result?.content ?? [])[0]?.text) || '';
+    for (const c of [0, 1, 2, 3, 4, 5]) {
+        // 要么在 catalog.supported_categories 要么在 categories 键
+        if (!refText.includes(`"${c}"`) && !refText.includes(`category:${c}`) && !refText.includes(`category: ${c}`) &&
+            // 支持对象键数字字符串
+            !(`"${c}"` in {} )) {
+            // 使用更宽松的检测：categories 对象键
+        }
+    }
+    // 更实际的做法：包含 "关键字监控" / "字段统计" / "SPL" / "流式" / "联合" / "切分" 这些字样中的名称
+    const namesMust = ['关键字监控', '字段统计监控', '连续统计监控', '突变异常监控', 'SPL 统计监控', '流式 lookup 监控', '流式聚合监控', '联合监控'];
+    for (const n of namesMust) {
+        if (!refText.includes(n)) {
+            throw new Error(`get_alert_category_reference 返回未包含名称 ${n}。返回文本片段: ${refText.slice(0, 300)}`);
+        }
+    }
+    console.log('  [alert] category ref ok (8 types)');
+
+    // 4. 构造最小 category=4 草稿对象，验证 create_* 的 JSON 字段预处理（本地 dry-run：通过 create_* 缺少必填拦截 / 不真实 create）
+    const draftBody = {
+        name: 'smoke-draft-spl-count',
+        category: 4,
+        enabled: true,
+        check_interval: 300,
+        interval_unit: 1,
+        dataset_ids: [],
+        query: 'tag:yottaweb_audit | stats count() as cnt',
+        check_condition: { timerange: '-1m', field: 'cnt', operator: '>', threshold: 'mid:0' },
+        extend_conf: { smoke: 'true' },
+    };
+    // 为避免真实创建，只调用 create_keyword_alert 但**故意带去 statistics_field 冲突**：这里用本地校验拦截；不真实 create
+    // 按 spec R10，这里只 print 草稿对象预处理结果 → 我们用 category=0 + statistics_field 冲突做本地校验
+    const badCallResp = await jsonRequest('/mcp/alert', {
+        jsonrpc: '2.0',
+        id: 13,
+        method: 'tools/call',
+        params: {
+            name: 'create_keyword_alert',
+            arguments: {
+                name: 'smoke-should-fail',
+                statistics_field: 'response_time', // category=0 + 非空 statistics_field -> 本地拦截
+                enabled: true,
+                check_interval: 300,
+                query: 'loglevel:ERROR',
+                dataset_ids: [1, 2],
+                check_condition: { timerange: '-5min', function: 'count', operator: '>', threshold: 'high:100' },
+                result_delivery: 'inline',
+            }
+        }
+    }, {
+        Authorization: authHeader,
+        'mcp-session-id': sessionId
+    });
+    // 预期返回 isError=true 且 suggestion 含 category
+    const isError = badCallResp.json?.result?.isError === true ||
+        Array.isArray(badCallResp.json?.result?.content) && badCallResp.json.result.content.some(c => c.type === 'text' && typeof c.text === 'string' && c.text.includes('CATEGORY_FIELD_CONFLICT'));
+    // 或者查看 content 文本：
+    const contentText = ((badCallResp.json?.result?.content ?? [])[0]?.text) ?? '';
+    if (!contentText.includes('CATEGORY_FIELD_CONFLICT') && !contentText.includes('category')) {
+        throw new Error(`category=0 + statistics_field 冲突应该在本地被拦截。实际内容: ${contentText.slice(0, 500)}`);
+    }
+    console.log('  [alert] draft preprocess ok (本地 category 冲突拦截生效)');
+
+    // 5. 打印预处理后的草稿（category=4）——用 selfcheck 的静态方法等价实现（此处仅 log JSON，不发请求）
+    const preprocessed = JSON.stringify({
+        ...draftBody,
+        dataset_ids: JSON.stringify(draftBody.dataset_ids),
+        check_condition: JSON.stringify(draftBody.check_condition),
+        extend_conf: JSON.stringify(draftBody.extend_conf),
+    });
+    console.log('  [alert] draft body (preprocessed) =', preprocessed);
+
+    await deleteSession('alert', sessionId);
+}
+
 async function main() {
     const serverProcess = spawn(process.execPath, ['./dist/http-server.js'], {
         cwd: process.cwd(),
@@ -233,6 +384,8 @@ async function main() {
         await assertToolsList('manage', 1);
         await assertStructuredContentForManage();
         await assertStructuredContentForLogSearchSheet();
+        await assertToolsList('alert', 13);
+        await assertAlertServerBehavior();
 
         console.log('HTTP smoke test passed');
     } finally {

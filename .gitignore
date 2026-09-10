@@ -152,6 +152,9 @@ CLAUDE.md
 .trae
 .trae/
 
+# opencode local config (contains local paths & credentials)
+opencode.json
+
 # api response files
 api-responses/
 docs/
