@@ -130,17 +130,24 @@ console.log('\n=== Test 3e: category=5 缺 topic ===');
     assert(!!err && String(err.suggestion).includes('topic'), '缺 topic 报错');
 }
 
-// ---- Test 3f: category=4 正常（SPL 统计）无冲突 ----
+// ---- Test 3f: category=4 SPL 正常场景（含 timerange + executor_id）----
 console.log('\n=== Test 3f: category=4 SPL 正常场景 ===');
 {
-    const err = AlertsModule.validateCategoryFieldConflictsStatic({ category: 4, query: 'a | stats count() as cnt' }, 'x', buildError);
-    assert(!err, 'category=4 不应触发 category 冲突');
+    const err = AlertsModule.validateCategoryFieldConflictsStatic({ category: 4, query: 'a | stats count() as cnt', executor_id: 1, check_condition: { timerange: '-1m', field: 'cnt' } }, 'x', buildError);
+    assert(!err, 'category=4 含 timerange + executor_id 不应触发冲突');
 }
 
-// ---- Test 3g: category=0 不带 statistics_field 正常 ----
+// ---- Test 3f2: category=4 缺 timerange 报错 ----
+console.log('\n=== Test 3f2: category=4 缺 timerange ===');
+{
+    const err = AlertsModule.validateCategoryFieldConflictsStatic({ category: 4, query: 'a | stats count() as cnt', executor_id: 1, check_condition: { field: 'cnt' } }, 'x', buildError);
+    assert(!!err && String(err.suggestion).includes('timerange'), 'category=4 缺 timerange 报错');
+}
+
+// ---- Test 3g: category=0 关键字 正常场景（含 timerange + executor_id）----
 console.log('\n=== Test 3g: category=0 关键字 正常场景 ===');
 {
-    const err = AlertsModule.validateCategoryFieldConflictsStatic({ category: 0, query: 'loglevel:ERROR' }, 'x', buildError);
+    const err = AlertsModule.validateCategoryFieldConflictsStatic({ category: 0, query: 'loglevel:ERROR', executor_id: 1, check_condition: { timerange: '-5min' } }, 'x', buildError);
     assert(!err, 'category=0 正确场景无冲突');
 }
 
@@ -151,32 +158,60 @@ console.log('\n=== Test 3h: category=19 缺 composite_info ===');
     assert(!!err && String(err.suggestion).includes('composite_info'), '缺 composite_info 报错');
 }
 
-// ---- Test 3i: category=19 正常（有 composite_info）无冲突 ----
+// ---- Test 3i: category=19 联合监控 正常场景（含 composite_info + executor_id）----
 console.log('\n=== Test 3i: category=19 联合监控 正常场景 ===');
 {
-    const err = AlertsModule.validateCategoryFieldConflictsStatic({ category: 19, query: '*', composite_info: { operator: 'or', children: [] } }, 'x', buildError);
-    assert(!err, 'category=19 有 composite_info 无冲突');
+    const err = AlertsModule.validateCategoryFieldConflictsStatic({ category: 19, query: '*', executor_id: 1, composite_info: { operator: 'or', children: [] } }, 'x', buildError);
+    assert(!err, 'category=19 有 composite_info + executor_id 无冲突');
 }
 
-// ---- Test 3j: category=1 正常（check_condition.field 存在）无冲突 ----
+// ---- Test 3i2: category=19 缺 executor_id 报错 ----
+console.log('\n=== Test 3i2: category=19 缺 executor_id ===');
+{
+    const err = AlertsModule.validateCategoryFieldConflictsStatic({ category: 19, query: '*', composite_info: { operator: 'or', children: [] } }, 'x', buildError);
+    assert(!!err && String(err.suggestion).includes('executor_id'), 'category=19 缺 executor_id 报错');
+}
+
+// ---- Test 3j: category=1 字段统计 正常场景（含 timerange + executor_id）----
 console.log('\n=== Test 3j: category=1 字段统计 正常场景 ===');
 {
-    const err = AlertsModule.validateCategoryFieldConflictsStatic({ category: 1, query: 'a', check_condition: { field: 'response_time', function: 'avg' } }, 'x', buildError);
-    assert(!err, 'category=1 有 check_condition.field 无冲突');
+    const err = AlertsModule.validateCategoryFieldConflictsStatic({ category: 1, query: 'a', executor_id: 1, check_condition: { field: 'response_time', function: 'avg', timerange: '-10m' } }, 'x', buildError);
+    assert(!err, 'category=1 有 check_condition.field + timerange + executor_id 无冲突');
 }
 
-// ---- Test 3k: category=2 正常（check_condition.base_value 存在）无冲突 ----
+// ---- Test 3j2: category=1 缺 timerange 报错 ----
+console.log('\n=== Test 3j2: category=1 缺 timerange ===');
+{
+    const err = AlertsModule.validateCategoryFieldConflictsStatic({ category: 1, query: 'a', executor_id: 1, check_condition: { field: 'response_time', function: 'avg' } }, 'x', buildError);
+    assert(!!err && String(err.suggestion).includes('timerange'), 'category=1 缺 timerange 报错');
+}
+
+// ---- Test 3k: category=2 连续统计 正常场景（含 timerange + executor_id）----
 console.log('\n=== Test 3k: category=2 连续统计 正常场景 ===');
 {
-    const err = AlertsModule.validateCategoryFieldConflictsStatic({ category: 2, query: 'a', check_condition: { base_value: '5', base_comparator: '>' } }, 'x', buildError);
-    assert(!err, 'category=2 有 base_value 无冲突');
+    const err = AlertsModule.validateCategoryFieldConflictsStatic({ category: 2, query: 'a', executor_id: 1, check_condition: { base_value: '5', base_comparator: '>', timerange: '-10m' } }, 'x', buildError);
+    assert(!err, 'category=2 有 base_value + timerange + executor_id 无冲突');
 }
 
-// ---- Test 3l: category=3 正常（check_condition.base_timerange 存在）无冲突 ----
+// ---- Test 3k2: category=2 缺 timerange 报错 ----
+console.log('\n=== Test 3k2: category=2 缺 timerange ===');
+{
+    const err = AlertsModule.validateCategoryFieldConflictsStatic({ category: 2, query: 'a', executor_id: 1, check_condition: { base_value: '5', base_comparator: '>' } }, 'x', buildError);
+    assert(!!err && String(err.suggestion).includes('timerange'), 'category=2 缺 timerange 报错');
+}
+
+// ---- Test 3l: category=3 突变异常 正常场景（含 timerange + executor_id）----
 console.log('\n=== Test 3l: category=3 突变异常 正常场景 ===');
 {
-    const err = AlertsModule.validateCategoryFieldConflictsStatic({ category: 3, query: 'a', check_condition: { base_timerange: 'now-2m,now-1m' } }, 'x', buildError);
-    assert(!err, 'category=3 有 base_timerange 无冲突');
+    const err = AlertsModule.validateCategoryFieldConflictsStatic({ category: 3, query: 'a', executor_id: 1, check_condition: { base_timerange: 'now-2m,now-1m', timerange: '-1m' } }, 'x', buildError);
+    assert(!err, 'category=3 有 base_timerange + timerange + executor_id 无冲突');
+}
+
+// ---- Test 3l2: category=3 缺 timerange 报错 ----
+console.log('\n=== Test 3l2: category=3 缺 timerange ===');
+{
+    const err = AlertsModule.validateCategoryFieldConflictsStatic({ category: 3, query: 'a', executor_id: 1, check_condition: { base_timerange: 'now-2m,now-1m' } }, 'x', buildError);
+    assert(!!err && String(err.suggestion).includes('timerange'), 'category=3 缺 timerange 报错');
 }
 
 // ---- Test 3m: category=6 缺 topic 报错 ----
@@ -186,11 +221,32 @@ console.log('\n=== Test 3m: category=6 缺 topic ===');
     assert(!!err && String(err.suggestion).includes('topic'), 'cat=6 缺 topic 报错');
 }
 
-// ---- Test 3n: category=6 正常（有 topic）无冲突 ----
+// ---- Test 3n: category=6 流式聚合 正常场景（含 executor_id）----
 console.log('\n=== Test 3n: category=6 流式聚合 正常场景 ===');
 {
+    const err = AlertsModule.validateCategoryFieldConflictsStatic({ category: 6, query: 'a | stats count() as cnt by tag', topic: 'raw_message', executor_id: 1 }, 'x', buildError);
+    assert(!err, 'category=6 有 topic + executor_id 无冲突');
+}
+
+// ---- Test 3n2: category=6 缺 executor_id 报错 ----
+console.log('\n=== Test 3n2: category=6 缺 executor_id ===');
+{
     const err = AlertsModule.validateCategoryFieldConflictsStatic({ category: 6, query: 'a | stats count() as cnt by tag', topic: 'raw_message' }, 'x', buildError);
-    assert(!err, 'category=6 有 topic 无冲突');
+    assert(!!err && String(err.suggestion).includes('executor_id'), 'category=6 缺 executor_id 报错');
+}
+
+// ---- Test 3o: category=5 缺 executor_id 报错 ----
+console.log('\n=== Test 3o: category=5 缺 executor_id ===');
+{
+    const err = AlertsModule.validateCategoryFieldConflictsStatic({ category: 5, query: 'a | lookup x', topic: 'raw_message', check_condition: { timerange: 'm' } }, 'x', buildError);
+    assert(!!err && String(err.suggestion).includes('executor_id'), 'category=5 缺 executor_id 报错');
+}
+
+// ---- Test 3p: category=0 缺 executor_id 报错 ----
+console.log('\n=== Test 3p: category=0 缺 executor_id ===');
+{
+    const err = AlertsModule.validateCategoryFieldConflictsStatic({ category: 0, query: 'a', check_condition: { timerange: '-5min' } }, 'x', buildError);
+    assert(!!err && String(err.suggestion).includes('executor_id'), 'category=0 缺 executor_id 报错');
 }
 
 // ---- Test 4: isMissingValueStatic + 必填缺失（T1-3 / T6-2 ④） ----
@@ -237,6 +293,16 @@ console.log('\n=== Test 5: 本地静态 ALERT_CATEGORY_META 覆盖 7 类 ===');
     const cat4body = meta.ALERT_CATEGORY_META[4].sampleBody;
     assert(Array.isArray(cat4body.dataset_ids) && cat4body.dataset_ids.length === 0,
         `category=4 sampleBody.dataset_ids 应为 []，实际 ${JSON.stringify(cat4body.dataset_ids)}`);
+    // 每个 sampleBody 都应含 executor_id（运行用户）
+    for (const k of keys) {
+        const body = meta.ALERT_CATEGORY_META[k].sampleBody;
+        assert('executor_id' in body, `category ${k} sampleBody 应含 executor_id，实际 ${JSON.stringify(body)}`);
+    }
+    // category=0-4 的 sampleCheckCondition 都应含 timerange
+    for (const k of [0, 1, 2, 3, 4]) {
+        const cc = meta.ALERT_CATEGORY_META[k].sampleCheckCondition;
+        assert('timerange' in cc, `category ${k} sampleCheckCondition 应含 timerange，实际 ${JSON.stringify(cc)}`);
+    }
     // category=0 check_condition 没有 field
     const cat0cc = meta.ALERT_CATEGORY_META[0].sampleCheckCondition;
     assert(!('field' in cat0cc) && cat0cc.function === 'count',

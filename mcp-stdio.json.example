@@ -24,7 +24,7 @@
         "LOGEASE_API_KEY": "<USERNAME>:<API_KEY>"
       }
     },
-    "rizhiyi_parserule": {
+    "rizhiyi_parserrule": {
       "command": "node",
       "args": ["/CHANGE/ME/rizhiyi-mcp/ts/dist/parserrule-server.js"],
       "env": {

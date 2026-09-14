@@ -24,11 +24,23 @@
 
 ***
 
-## 快速开始：3 步跑起来
+## 选择你的路径
+
+| | TypeScript（推荐） | Python |
+| --- | --- | --- |
+| 支持模式 | stdio + HTTP | 仅 HTTP |
+| 要求 | Node.js ≥ 18 | Python ≥ 3.10 |
+
+请根据你偏好的语言和运行模式，选择以下其中一个章节，从头到尾跟着走即可：
+
+- **[TypeScript 版使用指南](#typescript-版使用指南)** — 支持 stdio（推荐）和 HTTP 两种接入方式
+- **[Python 版使用指南](#python-版使用指南)** — 仅 HTTP 模式
+
+***
+
+## TypeScript 版使用指南
 
 ### 第 1 步：安装
-
-**方式 A：TypeScript（推荐，支持 stdio + HTTP 两种模式）**
 
 ```bash
 cd ts
@@ -36,123 +48,168 @@ npm install
 npm run build     # 构建产物到 ts/dist/，必须先执行
 ```
 
-> 要求 Node.js ≥ 18。
+### 第 2 步：启动并接入你的 AI 平台
 
-**方式 B：Python（仅 HTTP 模式）**
+TS 版支持两种运行模式，选其一。两种模式的凭据注入方式不同，别弄混：
 
-```bash
-cd python
-/usr/local/bin/python3 -m venv .venv  # 需 Python ≥ 3.10
-source .venv/bin/activate
-pip install -e '.[dev]'
-```
+- **模式 A（stdio）**：**不用配置 `.env`**，日志易地址和凭据直接写在客户端配置的 `env` 字段里；
+- **模式 B（HTTP）**：需要配置 `ts/.env`，网关进程启动时读取。
 
-> 要求 Python ≥ 3.10。
+---
 
-### 第 2 步：配置日志易服务器地址和凭据
+#### 模式 A：stdio 本地接入（推荐）
 
-两种实现都支持通过 `.env` 或环境变量注入：
+AI 客户端（如 Claude Desktop、Trae、Cursor）直接起子进程调用，最简单。此模式**不依赖 `ts/.env`**——日志易地址和凭据通过下面客户端配置里每个 server 的 `env` 字段注入。
 
-```bash
-# 复制示例
-cp ts/.env.example ts/.env        # TS 版
-cp python/.env.example python/.env  # Python 版
-```
-
-变量说明：
-
-| 变量                    | 说明                                                                            |
-| --------------------- | ----------------------------------------------------------------------------- |
-| `LOGEASE_BASE_URL`    | 日志易实例地址，例如 `https://your-logease.example.com`                                 |
-| `LOGEASE_API_KEY`     | API Key（推荐），格式通常是 `用户名:密钥`，如果用户名独立配置，则此处只填写密钥部分                               |
-| `LOGEASE_AUTH_HEADER` | 或直接填完整的 `Authorization` 头，例如 `apikey user:secret` 或 `Basic base64(user:pass)` |
-| `LOGEASE_USERNAME`    | （可选）传递给接口的中文用户名                                                               |
-
-### 第 3 步：启动并接入你的 AI 平台
-
-两种部署模式，二选一。每种模式的**完整客户端配置示例**已放在仓库根目录，复制后替换占位符即可直接用：
-
-- **stdio 模式**（TS only，推荐）：AI 客户端（如 Claude Desktop、Trae、Cursor）直接起子进程调用，最简单 → [`mcp-stdio.json.example`](mcp-stdio.json.example)
-
-- **HTTP 模式**（TS + Python）：独立网关进程，支持多会话、多客户端、远程调用 → [`mcp-http.json.example`](mcp-http.json.example)
-
-***
-
-## 模式一：stdio 本地接入（TS only，推荐）
-
-`mcp-stdio.json.example` 已包含全部 9 个服务器的完整配置，直接拿来改：
-
-```bash
-cp mcp-stdio.json.example mcp.json   # 然后编辑 mcp.json
-```
-
-只需替换三处占位符：
-
-| 占位符                      | 替换成                                             |
-| ----------------------- | ---------------------------------------------- |
-| `/CHANGE/ME/rizhiyi-mcp` | 仓库在你机器上的**绝对路径**（记得先 `cd ts && npm run build`）    |
-| `http://<LOGEASE_BASE_URL>` | 日志易实例地址，例如 `https://your-logease.example.com`      |
-| `<USERNAME>:<API_KEY>`  | 日志易 API 凭据，格式 `用户名:密钥`（支持中文用户名，见第 2 步变量说明）      |
-
-改完把 `mcp.json` 里的 `mcpServers` 合并进你 MCP 客户端的配置文件即可，例如 Claude Desktop：
+**客户端配置示例**（以 Claude Desktop 为例）：
 
 ```json
 {
   "mcpServers": {
     "rizhiyi_search": {
       "command": "node",
-      "args": ["<你的绝对路径>/rizhiyi-mcp/ts/dist/log-tools-server.js"],
+      "args": ["/your/absolute/path/to/rizhiyi-mcp/ts/dist/log-tools-server.js"],
       "env": {
         "LOGEASE_BASE_URL": "https://your-logease.example.com",
-        "LOGEASE_API_KEY": "<USER>:<API_KEY>"
+        "LOGEASE_API_KEY": "<USERNAME>:<API_KEY>"
+      }
+    },
+    "rizhiyi_chatspl": {
+      "command": "node",
+      "args": ["/your/absolute/path/to/rizhiyi-mcp/ts/dist/chatspl-server.js"],
+      "env": {
+        "LOGEASE_BASE_URL": "https://your-logease.example.com",
+        "LOGEASE_API_KEY": "<USERNAME>:<API_KEY>"
+      }
+    },
+    "rizhiyi_dashboard": {
+      "command": "node",
+      "args": ["/your/absolute/path/to/rizhiyi-mcp/ts/dist/dashboard-server.js"],
+      "env": {
+        "LOGEASE_BASE_URL": "https://your-logease.example.com",
+        "LOGEASE_API_KEY": "<USERNAME>:<API_KEY>"
+      }
+    },
+    "rizhiyi_parserrule": {
+      "command": "node",
+      "args": ["/your/absolute/path/to/rizhiyi-mcp/ts/dist/parserrule-server.js"],
+      "env": {
+        "LOGEASE_BASE_URL": "https://your-logease.example.com",
+        "LOGEASE_API_KEY": "<USERNAME>:<API_KEY>"
+      }
+    },
+    "rizhiyi_dynamic_field": {
+      "command": "node",
+      "args": ["/your/absolute/path/to/rizhiyi-mcp/ts/dist/fieldconfig-server.js"],
+      "env": {
+        "LOGEASE_BASE_URL": "https://your-logease.example.com",
+        "LOGEASE_API_KEY": "<USERNAME>:<API_KEY>"
+      }
+    },
+    "rizhiyi_ingest": {
+      "command": "node",
+      "args": ["/your/absolute/path/to/rizhiyi-mcp/ts/dist/ingest-server.js"],
+      "env": {
+        "LOGEASE_BASE_URL": "https://your-logease.example.com",
+        "LOGEASE_API_KEY": "<USERNAME>:<API_KEY>"
+      }
+    },
+    "rizhiyi_alert": {
+      "command": "node",
+      "args": ["/your/absolute/path/to/rizhiyi-mcp/ts/dist/alert-server.js"],
+      "env": {
+        "LOGEASE_BASE_URL": "https://your-logease.example.com",
+        "LOGEASE_API_KEY": "<USERNAME>:<API_KEY>"
+      }
+    },
+    "rizhiyi_manage": {
+      "command": "node",
+      "args": ["/your/absolute/path/to/rizhiyi-mcp/ts/dist/manage-server.js"],
+      "env": {
+        "LOGEASE_BASE_URL": "https://your-logease.example.com",
+        "LOGEASE_API_KEY": "<USERNAME>:<API_KEY>"
+      }
+    },
+    "openapi_server": {
+      "command": "node",
+      "args": ["/your/absolute/path/to/rizhiyi-mcp/ts/dist/openapi_server.js"],
+      "env": {
+        "LOGEASE_BASE_URL": "https://your-logease.example.com",
+        "LOGEASE_API_KEY": "<USERNAME>:<API_KEY>"
       }
     }
   }
 }
 ```
 
-> **要点**
->
-> - 每个服务器是独立子进程：配几个 server 就拉起几个 `node` 进程。不需要的（例如接口量巨大的 `openapi_server`）整段删除即可。
-> - 认证写在配置的 `env` 里最可靠——子进程的工作目录不一定是仓库目录，别依赖 `.env` 自动加载；`.env` 只在手工命令行启动时生效。
-> - 各 server 的 `args` 入口见下表，`mcp-stdio.json.example` 里已是最终写法：
+**替换说明：**
 
-| 配置里的 key              | 启动入口（`ts/dist/*.js`）          |
+| 占位符                      | 替换成                                             |
+| ----------------------- | ---------------------------------------------- |
+| `/your/absolute/path/to/rizhiyi-mcp` | 仓库在你机器上的**绝对路径**    |
+| `https://your-logease.example.com` | 日志易实例地址（`LOGEASE_BASE_URL`） |
+| `<USERNAME>:<API_KEY>`  | 日志易 API 凭据（`LOGEASE_API_KEY`），格式 `用户名:密钥`，支持中文用户名 |
+
+**各 server 的入口文件：**
+
+| 配置 key               | 启动入口（`ts/dist/*.js`）   |
 | --------------------- | ------------------------------ |
 | `rizhiyi_search`      | `log-tools-server.js`          |
 | `rizhiyi_chatspl`     | `chatspl-server.js`            |
 | `rizhiyi_dashboard`   | `dashboard-server.js`          |
-| `rizhiyi_parserule`   | `parserrule-server.js`         |
+| `rizhiyi_parserrule`  | `parserrule-server.js`         |
 | `rizhiyi_dynamic_field` | `fieldconfig-server.js`        |
 | `rizhiyi_ingest`      | `ingest-server.js`             |
 | `rizhiyi_alert`       | `alert-server.js`              |
 | `rizhiyi_manage`      | `manage-server.js`             |
 | `openapi_server`      | `openapi_server.js`            |
 
-配置完成后，重启 AI 客户端，就能在工具列表里看到上述服务器提供的所有工具了。
+> **要点**
+>
+> - 每个服务器是独立子进程：配几个 server 就拉起几个 `node` 进程。不需要的（例如接口量巨大的 `openapi_server`）整段删除即可。
+> - stdio 子进程**不读取 `.env`**（工作目录不一定是仓库目录），所以日志易地址和凭据必须写进每个 server 的 `env` 字段。
+> - 完整示例也可从 [`mcp-stdio.json.example`](mcp-stdio.json.example) 复制，替换三处占位符后合并进客户端配置。
 
-***
+配置完成后，**重启 AI 客户端**，就能在工具列表里看到上述服务器提供的所有工具了。
 
-## 模式二：HTTP 网关（TS + Python 均支持）
+---
+
+#### 模式 B：HTTP 网关
 
 适合多用户共享、远程部署、或客户端不支持 stdio 的场景。
 
-### TS 版启动
+##### 1. 配置 `ts/.env`
+
+HTTP 网关进程会读取 `ts/.env`。复制示例并填入日志易实例地址：
+
+```bash
+cp .env.example .env
+```
+
+编辑 `ts/.env`：
+
+```bash
+LOGEASE_BASE_URL=https://your-logease.example.com
+```
+
+> 认证信息**不需要**写在这里——HTTP 模式下每个请求的身份由 **MCP 客户端**通过 `Authorization` 头携带，见下文「HTTP 鉴权」。
+
+可选的网关专属环境变量（也在 `ts/.env` 中配置）：
+
+| 变量                   | 默认        | 说明   |
+| -------------------- | --------- | ---- |
+| `MCP_HTTP_HOST`      | `0.0.0.0` | 监听地址 |
+| `MCP_HTTP_PORT`      | `3000`    | 监听端口 |
+| `MCP_HTTP_BASE_PATH` | `/mcp`    | 路由前缀 |
+
+##### 2. 启动网关
 
 ```bash
 cd ts
 npm run start:http   # 等价于 npm run build && node dist/http-server.js
 ```
 
-### Python 版启动
-
-```bash
-cd python
-source .venv/bin/activate
-rizhiyi-mcp-python
-```
-
-默认监听（TS 与 Python 一致）：
+默认监听 `0.0.0.0:3000`，端点如下：
 
 | 端点                  | 方法     | 说明                                               |
 | ------------------- | ------ | ------------------------------------------------ |
@@ -162,42 +219,39 @@ rizhiyi-mcp-python
 
 可用的 `{serverName}`：`log-tools`、`chatspl`、`dashboard`、`manage`、`parserule`、`fieldconfig`、`ingest`、`openapi`、`alert`。
 
-
-
-### 客户端接入配置
+##### 3. 客户端接入配置
 
 仓库根目录的 [`mcp-http.json.example`](mcp-http.json.example) 已写好全部 9 个 server 的 HTTP 接入配置，复制后替换两个占位符即可：
-
-| 占位符                   | 替换成                                            |
-| -------------------- | ---------------------------------------------- |
-| `<MCP_HTTP_HOST>`      | 网关所在主机，本机部署就是 `127.0.0.1`                     |
-| `<USERNAME>:<API_KEY>` | 每个请求都要带的身份凭据，写入 `headers.Authorization`（见下方「HTTP 鉴权」） |
 
 ```json
 {
   "mcpServers": {
     "rizhiyi_search": {
       "type": "http",
-      "url": "http://127.0.0.1:3000/mcp/log-tools",
+      "url": "http://<MCP_HTTP_HOST>:3000/mcp/log-tools",
       "headers": {
-        "Authorization": "apikey <USER>:<API_KEY>"
+        "Authorization": "apikey <USERNAME>:<API_KEY>"
+      }
+    },
+    "rizhiyi_chatspl": {
+      "type": "http",
+      "url": "http://<MCP_HTTP_HOST>:3000/mcp/chatspl",
+      "headers": {
+        "Authorization": "apikey <USERNAME>:<API_KEY>"
       }
     }
   }
 }
 ```
 
+| 占位符                   | 替换成                                            |
+| -------------------- | ---------------------------------------------- |
+| `<MCP_HTTP_HOST>`      | 网关所在主机，本机部署就是 `127.0.0.1`                     |
+| `<USERNAME>:<API_KEY>` | 每个请求都要带的身份凭据，写入 `headers.Authorization` |
+
 > URL 末尾的路径段（`log-tools`、`chatspl` …）就是上面的 `{serverName}`，与网关路由一一对应。`type: "http"` 是流式 HTTP（Streamable HTTP）传输；部分客户端写作 `"type": "streamable-http"`，效果相同。
 
-环境变量：
-
-| 变量                   | 默认        | 说明   |
-| -------------------- | --------- | ---- |
-| `MCP_HTTP_HOST`      | `0.0.0.0` | 监听地址 |
-| `MCP_HTTP_PORT`      | `3000`    | 监听端口 |
-| `MCP_HTTP_BASE_PATH` | `/mcp`    | 路由前缀 |
-
-### HTTP 鉴权
+##### 4. HTTP 鉴权
 
 所有请求必须带 `Authorization` 头，支持两种写法：
 
@@ -206,15 +260,9 @@ Authorization: apikey <your-api-key>
 Authorization: Basic <base64(username:password)>
 ```
 
-> 网关只做格式校验；真正的用户名/密码/密钥是否有效，由日志易上游 API 判断。同一个 HTTP session 内不允许切换身份。
+**推荐：把身份写进 `Authorization` 头，支持中文 username**
 
-#### HTTP 模式下的中文 username 怎么传
-
-由于 HTTP 请求头原生不支持非 ASCII 字符直接写入，MCP  服务器做了专门处理：**先提取 username，再以 query 参数** **`?username=`** **的形式拼到上游请求 URL 上**，不会把中文塞进真正发送的 header。
-
-HTTP 模式下 username 有两种传递方式，优先级从高到低：
-
-**方式一（推荐）：直接放在 Authorization 头里，网关自动拆分**
+`用户名:密钥` 放在 apikey 后面，或编码进 Basic base64，网关会自动拆分出 username：
 
 ```
 # apikey 写法：<用户名>:<密钥>，冒号前的部分会被当作 username 提取
@@ -225,24 +273,128 @@ Authorization: apikey 运维_小王:AKIAIOSFODNN7EXAMPLE
 Authorization: Basic 5byg5LiJOm15LXNlY3JldC1rZXk=
 ```
 
-这种方式对 TS 和 Python 两个网关都生效，也是多用户共享网关场景下的标准用法——每个请求/会话带自己的身份即可。
+> 由于 HTTP 请求头原生不支持非 ASCII 字符直接写入，MCP 服务器会先提取 username，再以 query 参数 `?username=` 拼到上游请求 URL 上，不会把中文塞进真正发送的 header。
+>
+> 网关只做格式校验；真正的用户名/密码/密钥是否有效，由日志易上游 API 判断。同一个 HTTP session 内不允许切换身份。
 
-**方式二（TS 版网关专用）：进程级显式覆盖，用** **`LOGEASE_USERNAME`** **环境变量**
+***
 
-启动网关进程时设置：
+## Python 版使用指南
+
+> Python 版仅支持 HTTP 模式。如需 stdio 接入，请使用 TypeScript 版。
+
+### 第 1 步：安装
 
 ```bash
-# TS 版 HTTP 网关
-LOGEASE_USERNAME="王五" npm run start:http
+cd python
+/usr/local/bin/python3 -m venv .venv   # 需 Python ≥ 3.10
+source .venv/bin/activate
+pip install -e '.[dev]'
 ```
 
-一旦设置，它的优先级最高——即使 Authorization 里已经带了用户名，最终透传给上游 API 的 `username` 也会使用 `LOGEASE_USERNAME` 的值。适合"整个网关实例只代表一个用户"的单机部署场景。
+### 第 2 步：配置日志易服务器地址
 
-> 💡 小结：多用户共享网关 → 用方式一，写进 `Authorization: apikey 用户名:密钥`；单机单用户 → 两种方式任选其一。Python 网关当前只支持方式一。
+```bash
+cp .env.example .env
+```
 
-### 效果图
+编辑 `python/.env`，填入日志易实例地址：
 
-配置完成后，您的 AI 智能体即可通过自然语言指令或特定的工具调用语法来使用 `rizhiyi-mcp` 提供的功能。例如，您可以指示智能体“使用日志分析工具查询过去一小时的错误日志”： <img width="2880" height="1800" alt="image" src="https://github.com/user-attachments/assets/9400abe1-3248-46e7-a29c-5e5f302b2129" />
+```bash
+LOGEASE_BASE_URL=https://your-logease.example.com
+```
+
+> 认证信息**不需要**写在这里——HTTP 模式下每个请求的身份由 **MCP 客户端**通过 `Authorization` 头携带，见下文「HTTP 鉴权」。
+
+可选的网关专属环境变量（也在 `python/.env` 中配置）：
+
+| 变量                   | 默认        | 说明   |
+| -------------------- | --------- | ---- |
+| `MCP_HTTP_HOST`      | `0.0.0.0` | 监听地址 |
+| `MCP_HTTP_PORT`      | `3000`    | 监听端口 |
+| `MCP_HTTP_BASE_PATH` | `/mcp`    | 路由前缀 |
+
+### 第 3 步：启动 HTTP 网关
+
+```bash
+cd python
+source .venv/bin/activate
+rizhiyi-mcp-python
+```
+
+默认监听 `0.0.0.0:3000`，端点如下：
+
+| 端点                  | 方法     | 说明                                               |
+| ------------------- | ------ | ------------------------------------------------ |
+| `/healthz`          | GET    | 健康检查                                             |
+| `/mcp/{serverName}` | POST   | MCP 请求入口（initialize / tools/list / tools/call 等） |
+| `/mcp/{serverName}` | DELETE | 关闭指定 session                                     |
+
+可用的 `{serverName}`：`log-tools`、`chatspl`、`dashboard`、`manage`、`parserule`、`fieldconfig`、`ingest`、`openapi`、`alert`。
+
+### 第 4 步：客户端接入配置
+
+仓库根目录的 [`mcp-http.json.example`](mcp-http.json.example) 已写好全部 9 个 server 的 HTTP 接入配置，复制后替换两个占位符即可：
+
+```json
+{
+  "mcpServers": {
+    "rizhiyi_search": {
+      "type": "http",
+      "url": "http://<MCP_HTTP_HOST>:3000/mcp/log-tools",
+      "headers": {
+        "Authorization": "apikey <USERNAME>:<API_KEY>"
+      }
+    },
+    "rizhiyi_chatspl": {
+      "type": "http",
+      "url": "http://<MCP_HTTP_HOST>:3000/mcp/chatspl",
+      "headers": {
+        "Authorization": "apikey <USERNAME>:<API_KEY>"
+      }
+    }
+  }
+}
+```
+
+| 占位符                   | 替换成                                            |
+| -------------------- | ---------------------------------------------- |
+| `<MCP_HTTP_HOST>`      | 网关所在主机，本机部署就是 `127.0.0.1`                     |
+| `<USERNAME>:<API_KEY>` | 每个请求都要带的身份凭据，写入 `headers.Authorization` |
+
+> URL 末尾的路径段（`log-tools`、`chatspl` …）就是上面的 `{serverName}`，与网关路由一一对应。`type: "http"` 是流式 HTTP（Streamable HTTP）传输；部分客户端写作 `"type": "streamable-http"`，效果相同。
+
+#### HTTP 鉴权
+
+所有请求必须带 `Authorization` 头，支持两种写法：
+
+```
+Authorization: apikey <your-api-key>
+Authorization: Basic <base64(username:password)>
+```
+
+**推荐：把身份写进 `Authorization` 头，支持中文 username**
+
+`用户名:密钥` 放在 apikey 后面，或编码进 Basic base64，网关会自动拆分出 username：
+
+```
+# apikey 写法：<用户名>:<密钥>，冒号前的部分会被当作 username 提取
+Authorization: apikey 张三:my-secret-key
+Authorization: apikey 运维_小王:AKIAIOSFODNN7EXAMPLE
+
+# Basic 写法：base64(用户名:密码) 解码后自动取用户名
+Authorization: Basic 5byg5LiJOm15LXNlY3JldC1rZXk=
+```
+
+> 由于 HTTP 请求头原生不支持非 ASCII 字符直接写入，MCP 服务器会先提取 username，再以 query 参数 `?username=` 拼到上游请求 URL 上，不会把中文塞进真正发送的 header。
+>
+> 网关只做格式校验；真正的用户名/密码/密钥是否有效，由日志易上游 API 判断。同一个 HTTP session 内不允许切换身份。
+
+***
+
+## 效果图
+
+配置完成后，您的 AI 智能体即可通过自然语言指令或特定的工具调用语法来使用 `rizhiyi-mcp` 提供的功能。例如，您可以指示智能体"使用日志分析工具查询过去一小时的错误日志"： <img width="2880" height="1800" alt="image" src="https://github.com/user-attachments/assets/9400abe1-3248-46e7-a29c-5e5f302b2129" />
 
 ## 资源共享（大结果怎么处理）
 
@@ -285,4 +437,3 @@ A：`Accept` 请求头没有包含 `text/event-stream`。官方 Streamable HTTP 
 以下能力属于复杂 JSON body 配置类功能，计划以独立 MCP Server 方式提供：
 
 - `rizhiyi_agent_config`：采集/Agent 配置（agent）
-

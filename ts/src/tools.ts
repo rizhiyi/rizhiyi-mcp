@@ -2176,67 +2176,74 @@ function createTypedAlertTools(): ToolDefinition[] {
     return [
         tool(
             'create_keyword_alert',
-            '创建【关键字监控】（category=0）：基于搜索关键字 + 时间窗口 count 的最基础告警，适用于"某时间段内某类日志超过 N 条"类场景。check_condition.function=count（不含 field），statistics_field 必须留空（传了会被拦截）。',
-            ['name', 'query', 'check_condition'],
+            '创建【关键字监控】（category=0）：基于搜索关键字 + 时间窗口 count 的最基础告警，适用于"某时间段内某类日志超过 N 条"类场景。check_condition.function=count（不含 field），statistics_field 必须留空（传了会被拦截）。check_condition.timerange 必填（如 "-5min"、"-1h"），executor_id（运行用户）必填。',
+            ['name', 'query', 'check_condition', 'executor_id'],
             {
                 query: { type: 'string', description: '查询/检索语句，必填。此处为原生查询字符串，不包含 stats 聚合。' },
+                executor_id: { type: 'integer', description: '运行用户 ID，必填。' },
             }
         ),
         tool(
             'create_field_stat_alert',
-            '创建【字段统计监控】（category=1）：对指定数值字段做聚合统计告警（avg/sum/max/min 等）。check_condition.field 必填（数值字段名如 apache.req_time），check_condition.function 指定聚合函数。query 可含 stats...by 做分组，此时 segmentation_field 设为分组字段。',
-            ['name', 'query', 'check_condition'],
+            '创建【字段统计监控】（category=1）：对指定数值字段做聚合统计告警（avg/sum/max/min 等）。check_condition.field 必填（数值字段名如 apache.req_time），check_condition.function 指定聚合函数。query 可含 stats...by 做分组，此时 segmentation_field 设为分组字段。check_condition.timerange 必填（如 "-10m"），executor_id（运行用户）必填。',
+            ['name', 'query', 'check_condition', 'executor_id'],
             {
                 query: { type: 'string', description: '查询/检索语句，必填。可含 stats ... by 分组语句。' },
                 statistics_field: { type: 'string', description: '要聚合统计的字段名；与 check_condition.field 配合。' },
+                executor_id: { type: 'integer', description: '运行用户 ID，必填。' },
             }
         ),
         tool(
             'create_baseline_alert',
-            '创建【连续统计监控】（category=2）：基于基线值对比的连续统计告警，常见于"业务调用高耗时统计"等场景。check_condition 必须含 base_value（基线值）和 base_comparator（比较运算符，如 >），可含 field 指定统计字段。',
-            ['name', 'query', 'check_condition'],
+            '创建【连续统计监控】（category=2）：基于基线值对比的连续统计告警，常见于"业务调用高耗时统计"等场景。check_condition 必须含 base_value（基线值）和 base_comparator（比较运算符，如 >），可含 field 指定统计字段。check_condition.timerange 必填（如 "-10m"），executor_id（运行用户）必填。',
+            ['name', 'query', 'check_condition', 'executor_id'],
             {
                 query: { type: 'string', description: '查询/检索语句，必填。' },
+                executor_id: { type: 'integer', description: '运行用户 ID，必填。' },
             }
         ),
         tool(
             'create_surge_alert',
-            '创建【突变异常监控】（category=3）：基于时间窗口基线对比的突变检测告警，适用于"某字段值突然飙升"类场景。check_condition 必须含 base_timerange（基线时间范围，如 now-2m,now-1m），可含 field 指定监控字段，threshold 含百分比格式（如 info:50%;high:200%）。',
-            ['name', 'query', 'check_condition'],
+            '创建【突变异常监控】（category=3）：基于时间窗口基线对比的突变检测告警，适用于"某字段值突然飙升"类场景。check_condition 必须含 base_timerange（基线时间范围，如 now-2m,now-1m），可含 field 指定监控字段，threshold 含百分比格式（如 info:50%;high:200%）。check_condition.timerange 必填（如 "-1m"），executor_id（运行用户）必填。',
+            ['name', 'query', 'check_condition', 'executor_id'],
             {
                 query: { type: 'string', description: '查询/检索语句，必填。' },
+                executor_id: { type: 'integer', description: '运行用户 ID，必填。' },
             }
         ),
         tool(
             'create_spl_alert',
-            '创建【SPL 统计监控】（category=4）：query 传入完整 SPL（含 stats/inputlookup 等）做复杂聚合，dataset_ids 一般为 []。check_condition.field = stats 输出列（如 cnt）。仅当查询需要完整 SPL 语法时才用本类型；简单计数请用 create_keyword_alert。',
-            ['name', 'query', 'check_condition'],
+            '创建【SPL 统计监控】（category=4）：query 传入完整 SPL（含 stats/inputlookup 等）做复杂聚合，dataset_ids 一般为 []。check_condition.field = stats 输出列（如 cnt）。check_condition.timerange 必填（如 "-1m"），executor_id（运行用户）必填。仅当查询需要完整 SPL 语法时才用本类型；简单计数请用 create_keyword_alert。',
+            ['name', 'query', 'check_condition', 'executor_id'],
             {
                 query: { type: 'string', description: '完整 SPL 查询语句（含 stats/inputlookup 等），必填。结果需产生 check_condition.field 指定的输出列。' },
+                executor_id: { type: 'integer', description: '运行用户 ID，必填。' },
             }
         ),
         tool(
             'create_stream_lookup_alert',
-            '创建【流式 lookup 监控】（category=5）：基于 lookup 关联 + 流式计算的实时告警。需 topic 指定流式数据源（如 raw_message），query 含 lookup...on...| where 做关联过滤。check_condition.timerange 通常为 "m"；check_interval/interval_unit 通常为 0（由流式驱动）。',
-            ['name', 'query', 'topic', 'check_condition'],
+            '创建【流式 lookup 监控】（category=5）：基于 lookup 关联 + 流式计算的实时告警。需 topic 指定流式数据源（如 raw_message），query 含 lookup...on...| where 做关联过滤。check_condition.timerange 通常为 "m"；check_interval/interval_unit 通常为 0（由流式驱动）。executor_id（运行用户）必填。',
+            ['name', 'query', 'topic', 'check_condition', 'executor_id'],
             {
                 query: { type: 'string', description: '查询/检索语句，必填。此处含 lookup...on... 与 where 过滤。' },
                 topic: { type: 'string', description: '流式数据源（如 raw_message），必填。' },
+                executor_id: { type: 'integer', description: '运行用户 ID，必填。' },
             }
         ),
         tool(
             'create_stream_agg_alert',
-            '创建【流式聚合监控】（category=6）：基于流式计算 + stats 聚合的实时告警。需 topic 指定流式数据源（如 raw_message），query 含 stats...by+where 做流式聚合统计（区别于 cat=5 的 lookup+where）。check_condition 通常仅 threshold；check_interval/interval_unit 通常为 0；window 不带 - 前缀（如 "10m"）。',
-            ['name', 'query', 'topic'],
+            '创建【流式聚合监控】（category=6）：基于流式计算 + stats 聚合的实时告警。需 topic 指定流式数据源（如 raw_message），query 含 stats...by+where 做流式聚合统计（区别于 cat=5 的 lookup+where）。check_condition 通常仅 threshold；check_interval/interval_unit 通常为 0；window 不带 - 前缀（如 "10m"）。executor_id（运行用户）必填。',
+            ['name', 'query', 'topic', 'executor_id'],
             {
                 query: { type: 'string', description: '查询/检索语句，必填。此处含 stats ... by 与 where 做流式聚合。' },
                 topic: { type: 'string', description: '流式数据源（如 raw_message），必填。' },
+                executor_id: { type: 'integer', description: '运行用户 ID，必填。' },
             }
         ),
         tool(
             'create_composite_alert',
-            '创建【联合监控】（category=19）：组合多个子监控的联合告警。composite_info 必填（operator=or/and + children 数组，每项含 alert_uuid 和 watched_level）。query 通常为 *，check_condition.threshold=auto 典型；check_interval/interval_unit 通常为 0。',
-            ['name', 'composite_info'],
+            '创建【联合监控】（category=19）：组合多个子监控的联合告警。composite_info 必填（operator=or/and + children 数组，每项含 alert_uuid 和 watched_level）。query 通常为 *，check_condition.threshold=auto 典型；check_interval/interval_unit 通常为 0。executor_id（运行用户）必填。',
+            ['name', 'composite_info', 'executor_id'],
             {
                 query: { type: 'string', description: '通常传 "*"。' },
                 composite_info: {
@@ -2244,6 +2251,7 @@ function createTypedAlertTools(): ToolDefinition[] {
                     additionalProperties: true,
                     description: '联合监控定义，必填。结构：{"operator": "or|and", "children": [{"alert_uuid": "<子监控UUID>", "watched_level": ["info","low","mid","high"], "children": null}]}；也可传 JSON 字符串。'
                 },
+                executor_id: { type: 'integer', description: '运行用户 ID，必填。' },
             }
         ),
     ];

@@ -21,9 +21,9 @@
         "Authorization": "apikey <USERNAME>:<API_KEY>"
       }
     },
-    "rizhiyi_parserule": {
+    "rizhiyi_parserrule": {
       "type": "http",
-      "url": "http://<MCP_HTTP_HOST>:3000/mcp/parserule",
+      "url": "http://<MCP_HTTP_HOST>:3000/mcp/parserrule",
       "headers": {
         "Authorization": "apikey <USERNAME>:<API_KEY>"
       }

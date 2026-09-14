@@ -97,13 +97,14 @@ export const ALERT_CATEGORY_META: Record<number, {
     0: {
         name: '关键字监控',
         description: '基于搜索关键字 + 时间窗口 count 的最基础告警。query 是原生查询字符串（不含 stats 聚合），check_condition.function=count 且不含 field。适用于"某时间段内某类日志超过 N 条"类场景。',
-        requiredFields: ['name', 'query', 'check_interval', 'category', 'enabled', 'check_condition'],
+        requiredFields: ['name', 'query', 'check_interval', 'category', 'enabled', 'check_condition', 'executor_id'],
         specificFields: ['check_condition.function=count', 'check_condition 不含 field', 'statistics_field 应留空'],
         sampleCheckCondition: { timerange: '-5min', function: 'count', operator: '>', threshold: 'high:0' },
         sampleBody: {
             name: '关键字告警-Agent离线',
             category: 0,
             enabled: true,
+            executor_id: 1,
             check_interval: 300,
             interval_unit: 1,
             window: '-5min',
@@ -116,13 +117,14 @@ export const ALERT_CATEGORY_META: Record<number, {
     1: {
         name: '字段统计监控',
         description: '对指定数值字段做聚合统计告警。check_condition.field 指定要聚合的数值字段名（如 apache.req_time），check_condition.function 指定聚合函数（avg/sum/max/min 等）。query 可含 stats...by 做分组，此时 segmentation_field 设为分组字段。',
-        requiredFields: ['name', 'query', 'check_interval', 'category', 'enabled', 'check_condition'],
+        requiredFields: ['name', 'query', 'check_interval', 'category', 'enabled', 'check_condition', 'executor_id'],
         specificFields: ['check_condition.field = 数值字段名', 'check_condition.function = avg/sum/max/min 等', 'segmentation_field 可选（stats...by 分组时设置）'],
         sampleCheckCondition: { field: 'apache.req_time', function: 'max', timerange: '-10m', operator: '>', threshold: 'low:0.0001' },
         sampleBody: {
             name: '字段统计-最大响应时间告警',
             category: 1,
             enabled: true,
+            executor_id: 1,
             check_interval: 60,
             interval_unit: 0,
             dataset_ids: [{ dataset_id: 1 }],
@@ -134,13 +136,14 @@ export const ALERT_CATEGORY_META: Record<number, {
     2: {
         name: '连续统计监控',
         description: '基于基线值对比的连续统计告警。check_condition 含 base_value（基线值）和 base_comparator（基线比较运算符），对当前统计值与基线值做对比判断。常见于"业务调用高耗时统计"等场景。',
-        requiredFields: ['name', 'query', 'check_interval', 'category', 'enabled', 'check_condition'],
+        requiredFields: ['name', 'query', 'check_interval', 'category', 'enabled', 'check_condition', 'executor_id'],
         specificFields: ['check_condition.base_value 必填', 'check_condition.base_comparator 必填（如 >）', 'check_condition.field 指定统计字段', 'alert_segmentation_result 运行结果'],
         sampleCheckCondition: { timerange: '-10m', function: 'count', operator: '>', threshold: 'info:0;low:10;mid:100;high:1000', field: 'json.HTTP_RESPONSE', base_value: '5', base_comparator: '>' },
         sampleBody: {
             name: '连续统计-业务调用高耗时告警',
             category: 2,
             enabled: true,
+            executor_id: 1,
             check_interval: 60,
             interval_unit: 0,
             dataset_ids: [],
@@ -152,13 +155,14 @@ export const ALERT_CATEGORY_META: Record<number, {
     3: {
         name: '突变异常监控',
         description: '基于时间窗口基线对比的突变检测告警。check_condition 含 base_timerange（基线时间范围，如 now-2m,now-1m），将当前窗口统计值与基线窗口值做百分比/倍数对比。适用于"某字段值突然飙升"类场景。',
-        requiredFields: ['name', 'query', 'check_interval', 'category', 'enabled', 'check_condition'],
+        requiredFields: ['name', 'query', 'check_interval', 'category', 'enabled', 'check_condition', 'executor_id'],
         specificFields: ['check_condition.base_timerange 必填（如 now-2m,now-1m）', 'check_condition.field 指定监控字段', 'threshold 含百分比格式（如 info:50%）', 'dataset_ids 可含 [{dataset_id,node_id}] 对象数组'],
         sampleCheckCondition: { timerange: '-1m', function: 'count', operator: '>', threshold: 'info:50%;mid:100%;high:200%;critical:500%', field: 'apache.status', base_timerange: 'now-2m,now-1m' },
         sampleBody: {
             name: '突变异常-status码飙升告警',
             category: 3,
             enabled: true,
+            executor_id: 1,
             check_interval: 60,
             interval_unit: 0,
             dataset_ids: [{ dataset_id: 14, node_id: 8 }],
@@ -170,13 +174,14 @@ export const ALERT_CATEGORY_META: Record<number, {
     4: {
         name: 'SPL 统计监控',
         description: 'query 传入完整 SPL（包含 stats 聚合或 inputlookup 等），dataset_ids 通常为 []。可对 SPL 输出列（如 cnt）做阈值判断。',
-        requiredFields: ['name', 'query', 'check_interval', 'category', 'enabled', 'check_condition'],
+        requiredFields: ['name', 'query', 'check_interval', 'category', 'enabled', 'check_condition', 'executor_id'],
         specificFields: ['query 含完整 SPL（stats/inputlookup 等）', 'dataset_ids 一般为 []', 'check_condition.field = stats 输出列'],
         sampleCheckCondition: { threshold: 'mid:0', field: 'cnt', operator: '>', timerange: '-1m' },
         sampleBody: {
             name: 'SPL统计-Syslog未采集告警',
             category: 4,
             enabled: true,
+            executor_id: 1,
             check_interval: 480,
             interval_unit: 0,
             dataset_ids: [],
@@ -188,13 +193,14 @@ export const ALERT_CATEGORY_META: Record<number, {
     5: {
         name: '流式 lookup 监控',
         description: '基于 lookup 关联 + 流式计算的告警。topic 指定流式数据源（如 raw_message），query 含 lookup+where 做关联过滤。check_condition.timerange 通常为 "m"（分钟级）。check_interval 和 interval_unit 通常为 0（由流式驱动而非定时调度）。',
-        requiredFields: ['name', 'query', 'topic', 'category', 'enabled', 'check_condition'],
+        requiredFields: ['name', 'query', 'topic', 'category', 'enabled', 'check_condition', 'executor_id'],
         specificFields: ['topic 必填（如 raw_message）', 'query 含 lookup...on...| where 条件', 'check_condition.timerange="m" 典型', 'check_interval=0, interval_unit=0 典型'],
         sampleCheckCondition: { timerange: 'm', function: 'count', operator: '>', threshold: 'info' },
         sampleBody: {
             name: '流式lookup-高危IP匹配告警',
             category: 5,
             enabled: true,
+            executor_id: 1,
             check_interval: 0,
             interval_unit: 0,
             topic: 'raw_message',
@@ -206,13 +212,14 @@ export const ALERT_CATEGORY_META: Record<number, {
     6: {
         name: '流式聚合监控',
         description: '基于流式计算 + stats 聚合的实时告警。topic 指定流式数据源（如 raw_message），query 含 stats...by+where 做流式聚合统计（区别于 cat=5 的 lookup+where）。check_condition 通常极简（仅 threshold）。check_interval 和 interval_unit 通常为 0（由流式驱动）。window 指定聚合窗口（如 "10m"，不带 - 前缀）。',
-        requiredFields: ['name', 'query', 'topic', 'category', 'enabled'],
+        requiredFields: ['name', 'query', 'topic', 'category', 'enabled', 'executor_id'],
         specificFields: ['topic 必填（如 raw_message）', 'query 含 stats...by + where 做流式聚合', 'check_condition 通常仅 threshold', 'check_interval=0, interval_unit=0 典型', 'window 不带 - 前缀（如 "10m"）'],
         sampleCheckCondition: { threshold: 'info' },
         sampleBody: {
             name: '日志打印趋势',
             category: 6,
             enabled: true,
+            executor_id: 1,
             check_interval: 0,
             interval_unit: 0,
             topic: 'raw_message',
@@ -226,13 +233,14 @@ export const ALERT_CATEGORY_META: Record<number, {
     19: {
         name: '联合监控',
         description: '组合多个子监控的联合告警。composite_info 必填，定义子监控的组合关系（operator=or/and，children 数组每项含 alert_uuid 和 watched_level）。query 通常为 "*"，check_condition.threshold="auto"。check_interval 和 interval_unit 通常为 0。',
-        requiredFields: ['name', 'composite_info', 'category', 'enabled'],
+        requiredFields: ['name', 'composite_info', 'category', 'enabled', 'executor_id'],
         specificFields: ['composite_info 必填（含 operator + children 数组）', 'children[].alert_uuid = 子监控 UUID', 'children[].watched_level = 关注级别数组', 'query 通常为 *', 'check_condition.threshold=auto 典型'],
         sampleCheckCondition: { threshold: 'auto', timerange: '' },
         sampleBody: {
             name: '联合监控-多告警联合',
             category: 19,
             enabled: true,
+            executor_id: 1,
             check_interval: 0,
             interval_unit: 0,
             query: '*',
@@ -827,7 +835,25 @@ export class AlertsModule {
             );
         }
 
-        // category=4 SPL：无硬冲突（dataset_ids=[] 可接受，query 含 SPL 自由度高）
+        // category=0/1/2/3/4：check_condition.timerange 必填（非流式、非联合类型）
+        if ([0, 1, 2, 3, 4].includes(category) && !condHas('timerange')) {
+            return buildError(
+                'CATEGORY_FIELD_CONFLICT',
+                `${toolName}：category=${category}（${nameOf(category)}）的 check_condition 缺少 timerange。`,
+                `category=${category}(${nameOf(category)}) 的 check_condition 必须含 timerange（统计时段，如 "-5min"、"-1h"）。`,
+                { category }
+            );
+        }
+
+        // 所有监控类型：executor_id 必填
+        if (!has('executor_id')) {
+            return buildError(
+                'CATEGORY_FIELD_CONFLICT',
+                `${toolName}：缺少 executor_id（运行用户）。`,
+                `所有监控类型都必须指定运行用户 executor_id。`,
+                { category }
+            );
+        }
 
         return null;
     }

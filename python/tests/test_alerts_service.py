@@ -51,7 +51,7 @@ class AlertServiceTestCase(unittest.TestCase):
 
     def test_category1_missing_field_conflict(self) -> None:
         result = self.service.validate_category_field_conflicts(
-            {"category": 1, "check_condition": {"function": "max"}},
+            {"category": 1, "executor_id": 1, "check_condition": {"function": "max", "timerange": "-10m"}},
             "create_alert",
         )
         self.assertIsNotNone(result)
@@ -59,14 +59,14 @@ class AlertServiceTestCase(unittest.TestCase):
 
     def test_category1_with_field_ok(self) -> None:
         result = self.service.validate_category_field_conflicts(
-            {"category": 1, "check_condition": {"field": "apache.req_time", "function": "max"}},
+            {"category": 1, "executor_id": 1, "check_condition": {"field": "apache.req_time", "function": "max", "timerange": "-10m"}},
             "create_alert",
         )
         self.assertIsNone(result)
 
     def test_category2_missing_base_value_conflict(self) -> None:
         result = self.service.validate_category_field_conflicts(
-            {"category": 2, "check_condition": {"function": "count"}},
+            {"category": 2, "executor_id": 1, "check_condition": {"function": "count", "timerange": "-10m"}},
             "create_alert",
         )
         self.assertIsNotNone(result)
@@ -74,16 +74,34 @@ class AlertServiceTestCase(unittest.TestCase):
 
     def test_category5_missing_topic_conflict(self) -> None:
         result = self.service.validate_category_field_conflicts(
-            {"category": 5, "check_condition": {"timerange": "m"}},
+            {"category": 5, "executor_id": 1, "check_condition": {"timerange": "m"}},
             "create_alert",
         )
         self.assertIsNotNone(result)
         self.assertEqual(result["error_code"], "CATEGORY_FIELD_CONFLICT")
 
     def test_category19_missing_composite_info_conflict(self) -> None:
-        result = self.service.validate_category_field_conflicts({"category": 19}, "create_alert")
+        result = self.service.validate_category_field_conflicts({"category": 19, "executor_id": 1}, "create_alert")
         self.assertIsNotNone(result)
         self.assertEqual(result["error_code"], "CATEGORY_FIELD_CONFLICT")
+
+    def test_missing_timerange_conflict(self) -> None:
+        for category in (0, 1, 2, 3, 4):
+            result = self.service.validate_category_field_conflicts(
+                {"category": category, "executor_id": 1, "check_condition": {"function": "count"}},
+                "create_alert",
+            )
+            self.assertIsNotNone(result, f"category={category} 应缺少 timerange")
+            self.assertEqual(result["error_code"], "CATEGORY_FIELD_CONFLICT")
+
+    def test_missing_executor_id_conflict(self) -> None:
+        for category in (0, 1, 2, 3, 4, 5, 6, 19):
+            result = self.service.validate_category_field_conflicts(
+                {"category": category, "check_condition": {"timerange": "-5min"}},
+                "create_alert",
+            )
+            self.assertIsNotNone(result, f"category={category} 应缺少 executor_id")
+            self.assertEqual(result["error_code"], "CATEGORY_FIELD_CONFLICT")
 
     def test_no_category_skips_validation(self) -> None:
         result = self.service.validate_category_field_conflicts({"name": "t"}, "create_alert")
@@ -159,11 +177,11 @@ class AlertServiceTestCase(unittest.TestCase):
     def test_resolve_required_fields_for_create(self) -> None:
         self.assertEqual(
             self.service.resolve_required_fields_for_create(5),
-            ("name", "query", "topic", "category", "enabled", "check_condition"),
+            ("name", "query", "topic", "category", "enabled", "check_condition", "executor_id"),
         )
         self.assertEqual(
             self.service.resolve_required_fields_for_create(19),
-            ("name", "composite_info", "category", "enabled"),
+            ("name", "composite_info", "category", "enabled", "executor_id"),
         )
 
     def test_get_alert_category_reference_full_and_single(self) -> None:
@@ -174,7 +192,7 @@ class AlertServiceTestCase(unittest.TestCase):
 
     def test_create_typed_alert_assembles_rule_with_category(self) -> None:
         result = self.service.build_typed_rule(
-            {"name": "t", "query": "*", "check_interval": 300, "check_condition": {"timerange": "-5min", "function": "count", "operator": ">", "threshold": "high:0"}},
+            {"name": "t", "query": "*", "executor_id": 1, "check_interval": 300, "check_condition": {"timerange": "-5min", "function": "count", "operator": ">", "threshold": "high:0"}},
             0,
             "create_keyword_alert",
         )
@@ -184,19 +202,19 @@ class AlertServiceTestCase(unittest.TestCase):
         self.assertEqual(result["value"]["check_interval"], 300)
 
     def test_create_typed_alert_injects_default_enabled(self) -> None:
-        value = self.service.build_typed_rule({"name": "t", "query": "*"}, 4, "create_spl_alert")["value"]
+        value = self.service.build_typed_rule({"name": "t", "query": "*", "executor_id": 1}, 4, "create_spl_alert")["value"]
         self.assertEqual(value["category"], 4)
         self.assertTrue(value["enabled"])
 
     def test_create_typed_alert_locks_category_ignores_user_input(self) -> None:
-        value = self.service.build_typed_rule({"name": "t", "query": "*", "category": 1}, 0, "create_keyword_alert")["value"]
+        value = self.service.build_typed_rule({"name": "t", "query": "*", "executor_id": 1, "category": 1}, 0, "create_keyword_alert")["value"]
         self.assertEqual(value["category"], 0)
-        extra_overridden = self.service.build_typed_rule({"name": "t", "query": "*", "extra": {"category": 6}}, 19, "create_composite_alert")["value"]
+        extra_overridden = self.service.build_typed_rule({"name": "t", "query": "*", "executor_id": 1, "extra": {"category": 6}}, 19, "create_composite_alert")["value"]
         self.assertEqual(extra_overridden["category"], 19)
 
     def test_create_typed_alert_merges_extra_object(self) -> None:
         value = self.service.build_typed_rule(
-            {"name": "t", "query": "*", "extra": {"timezone": "Asia/Shanghai", "not_a_field": 1}},
+            {"name": "t", "query": "*", "executor_id": 1, "extra": {"timezone": "Asia/Shanghai", "not_a_field": 1}},
             1,
             "create_field_stat_alert",
         )["value"]
@@ -204,12 +222,12 @@ class AlertServiceTestCase(unittest.TestCase):
         self.assertNotIn("not_a_field", value)
 
     def test_create_typed_alert_merges_extra_json_string(self) -> None:
-        value = self.service.build_typed_rule({"name": "t", "query": "*", "extra": '{"timezone":"Asia/Shanghai"}'}, 1, "create_field_stat_alert")["value"]
+        value = self.service.build_typed_rule({"name": "t", "query": "*", "executor_id": 1, "extra": '{"timezone":"Asia/Shanghai"}'}, 1, "create_field_stat_alert")["value"]
         self.assertEqual(value["timezone"], "Asia/Shanghai")
         self.assertEqual(value["category"], 1)
 
     def test_create_typed_alert_rejects_bad_extra(self) -> None:
-        result = self.service.build_typed_rule({"name": "t", "query": "*", "extra": "{bad json"}, 0, "create_keyword_alert")
+        result = self.service.build_typed_rule({"name": "t", "query": "*", "executor_id": 1, "extra": "{bad json"}, 0, "create_keyword_alert")
         self.assertIn("error", result)
         self.assertEqual(result["error"]["error_code"], "INVALID_JSON_STRING")
 

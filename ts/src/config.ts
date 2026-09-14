@@ -44,7 +44,7 @@ function normalizeBasePath(rawPath: string | undefined): string {
 }
 
 export function getRuntimeConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig {
-    const logeaseBaseURL = env.LOGEASE_BASE_URL ?? 'http://127.0.0.1:8090';
+    const logeaseBaseURL = env.LOGEASE_BASE_URL ?? 'https://127.0.0.1:8090';
     const logeaseUsername = env.LOGEASE_USERNAME;
     const rejectUnauthorized = parseBooleanEnv(env.LOGEASE_TLS_REJECT_UNAUTHORIZED, false);
     const httpHost = env.MCP_HTTP_HOST || '0.0.0.0';
@@ -52,7 +52,7 @@ export function getRuntimeConfig(env: NodeJS.ProcessEnv = process.env): RuntimeC
     const httpBasePath = normalizeBasePath(env.MCP_HTTP_BASE_PATH);
 
     if (!env.LOGEASE_BASE_URL) {
-        console.warn('LOGEASE_BASE_URL 未设置，默认使用 http://127.0.0.1:8090');
+        console.warn('LOGEASE_BASE_URL 未设置，默认使用 https://127.0.0.1:8090');
     }
 
     return {

@@ -18,7 +18,7 @@ class RuntimeConfig(BaseSettings):
         extra="ignore",
     )
 
-    logease_base_url: str = "http://127.0.0.1:8090"
+    logease_base_url: str = "https://127.0.0.1:8090"
     logease_username: str | None = None
     logease_tls_reject_unauthorized: bool = False
     mcp_http_host: str = "0.0.0.0"
