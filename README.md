@@ -422,6 +422,22 @@ MCP_RATE_LIMIT_PER_TOOL='{"log_search_sheet":120,"dashboard/create_dashboard_fro
 
 ***
 
+## 本地工具调用日志
+
+Streamable HTTP 网关会把每次工具调用写成一行 JSON，默认存放在 `./logs/mcp-server-YYYYMMDD.log`。日志只包含调用元数据（时间、session、server、工具名、状态、耗时、用户和错误码），不记录工具参数、查询正文或返回结果。
+
+```bash
+RIZHIYI_LOG_DIR=./logs
+RIZHIYI_LOG_NAME_PREFIX=mcp-server
+RIZHIYI_LOG_ROTATE_BYTES=10485760  # 默认 10MB；<=0 时改为按时间轮转
+RIZHIYI_LOG_ROTATE_INTERVAL=1d     # 按时间轮转时支持 1d / 1h
+RIZHIYI_LOG_KEEP_FILES=7           # 包含当前文件在内的保留份数
+```
+
+同一天内发生多次轮转时，文件依次命名为 `mcp-server-YYYYMMDD.1.log`、`mcp-server-YYYYMMDD.2.log`。超过保留份数后自动删除最旧文件；被限流的调用记录为 `status=ok-limited` 和 `error_code=RATE_LIMIT_EXCEEDED`。
+
+***
+
 ## 效果图
 
 配置完成后，您的 AI 智能体即可通过自然语言指令或特定的工具调用语法来使用 `rizhiyi-mcp` 提供的功能。例如，您可以指示智能体"使用日志分析工具查询过去一小时的错误日志"： <img width="2880" height="1800" alt="image" src="https://github.com/user-attachments/assets/9400abe1-3248-46e7-a29c-5e5f302b2129" />

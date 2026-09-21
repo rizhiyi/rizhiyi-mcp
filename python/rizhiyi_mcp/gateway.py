@@ -14,6 +14,7 @@ from .auth import build_auth_context_from_authorization
 from .config import RuntimeConfig, create_server_context
 from .rate_limiting import FixedWindowRateLimiter
 from .server_registry import server_registry
+from .usage_log import UsageLogConfig, UsageLogger
 from .servers import (
     RizhiyiFastMCPServer,
     ServiceRuntimeState,
@@ -167,6 +168,9 @@ class AuthenticatedMountedServerApp:
             source="http",
             path=normalized_scope.get("path"),
             client_address=client_address,
+            route_name=self.route_name,
+            server_name=self.route_name,
+            session_id=session_id,
         )
         normalized_scope.setdefault("state", {})
         normalized_scope["state"]["rizhiyi_server_context"] = server_context
@@ -187,6 +191,7 @@ class AuthenticatedMountedServerApp:
                     status_code = status.HTTP_204_NO_CONTENT
 
                 if status_code < 400 and response_session_id and method in {"POST", "GET"} and authorization:
+                    server_context.request_meta.session_id = response_session_id
                     self.service_state.session_auth[response_session_id] = authorization
                     if parsed_body and parsed_body.get("method") == "initialize":
                         params = parsed_body.get("params")
@@ -259,6 +264,15 @@ def create_http_app(runtime_config: RuntimeConfig | None = None) -> FastAPI:
         global_limit=settings.mcp_rate_limit_global_per_minute,
         per_tool_limits=settings.mcp_rate_limit_per_tool,
     )
+    usage_logger = UsageLogger(
+        UsageLogConfig(
+            directory=settings.rizhiyi_log_dir,
+            name_prefix=settings.rizhiyi_log_name_prefix,
+            rotate_bytes=settings.rizhiyi_log_rotate_bytes,
+            rotate_interval=settings.rizhiyi_log_rotate_interval,
+            keep_files=settings.rizhiyi_log_keep_files,
+        )
+    )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -271,7 +285,11 @@ def create_http_app(runtime_config: RuntimeConfig | None = None) -> FastAPI:
     app.router.redirect_slashes = False
 
     for route_name, factory in server_registry.items():
-        service_state = ServiceRuntimeState(route_name=route_name, rate_limiter=rate_limiter)
+        service_state = ServiceRuntimeState(
+            route_name=route_name,
+            rate_limiter=rate_limiter,
+            usage_logger=usage_logger,
+        )
         server = factory(settings, service_state)
         mounted_servers[route_name] = MountedServer(route_name=route_name, server=server, state=service_state)
         app.mount(

@@ -1,0 +1,206 @@
+from __future__ import annotations
+
+import asyncio
+from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
+import json
+from pathlib import Path
+import re
+from threading import RLock
+from typing import Callable, Literal
+
+UsageLogRotateInterval = Literal["1d", "1h"]
+UsageLogStatus = Literal["ok", "ok-limited", "error"]
+
+
+@dataclass(frozen=True, slots=True)
+class UsageLogConfig:
+    directory: Path
+    name_prefix: str
+    rotate_bytes: int
+    rotate_interval: UsageLogRotateInterval
+    keep_files: int
+
+
+@dataclass(frozen=True, slots=True)
+class UsageLogEntry:
+    ts: str
+    epoch_ms: int
+    session_id: str | None
+    serverName: str
+    tool: str
+    routeName: str
+    status: UsageLogStatus
+    duration_ms: int
+    user: str | None
+    error_code: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class _LogFile:
+    path: Path
+    date_key: str
+    sequence: int
+    size: int
+    modified_seconds: float
+
+
+class UsageLogger:
+    def __init__(
+        self,
+        config: UsageLogConfig,
+        *,
+        clock: Callable[[], datetime] | None = None,
+    ) -> None:
+        self.config = config
+        self._clock = clock or (lambda: datetime.now().astimezone())
+        self._lock = RLock()
+        self._active_bucket: str | None = None
+        self._active_path: Path | None = None
+        self._filename_pattern = re.compile(
+            rf"^{re.escape(config.name_prefix)}-(\d{{8}})(?:\.(\d+))?\.log$"
+        )
+
+    async def write(self, entry: UsageLogEntry) -> None:
+        await asyncio.to_thread(self.write_sync, entry)
+
+    def write_sync(self, entry: UsageLogEntry) -> None:
+        with self._lock:
+            self.config.directory.mkdir(parents=True, exist_ok=True)
+            line = json.dumps(asdict(entry), ensure_ascii=False, separators=(",", ":")) + "\n"
+            now = self._ensure_local(self._clock())
+            active_path = self._resolve_active_path(now, len(line.encode("utf-8")))
+            with active_path.open("a", encoding="utf-8") as stream:
+                stream.write(line)
+            self._cleanup_old_files(active_path)
+
+    def _resolve_active_path(self, now: datetime, line_bytes: int) -> Path:
+        date_key = now.strftime("%Y%m%d")
+        bucket_key = (
+            date_key
+            if self.config.rotate_bytes > 0
+            else self._format_time_bucket(now)
+        )
+        files = self._list_log_files()
+
+        if self._active_bucket == bucket_key and self._active_path is not None:
+            active_file = next((item for item in files if item.path == self._active_path), None)
+            if active_file is not None and (
+                self.config.rotate_bytes <= 0
+                or active_file.size == 0
+                or active_file.size + line_bytes <= self.config.rotate_bytes
+            ):
+                return self._active_path
+
+        today_files = sorted(
+            (item for item in files if item.date_key == date_key),
+            key=self._sort_key,
+        )
+        latest = today_files[-1] if today_files else None
+
+        if self.config.rotate_bytes > 0:
+            if latest is None:
+                active_path = self._file_path(date_key, 0)
+            elif latest.size == 0 or latest.size + line_bytes <= self.config.rotate_bytes:
+                active_path = latest.path
+            else:
+                active_path = self._file_path(date_key, latest.sequence + 1)
+        elif latest is None:
+            active_path = self._file_path(date_key, 0)
+        else:
+            modified = datetime.fromtimestamp(latest.modified_seconds).astimezone()
+            if self._format_time_bucket(modified) == bucket_key:
+                active_path = latest.path
+            else:
+                active_path = self._file_path(date_key, latest.sequence + 1)
+
+        self._active_bucket = bucket_key
+        self._active_path = active_path
+        return active_path
+
+    def _list_log_files(self) -> list[_LogFile]:
+        if not self.config.directory.exists():
+            return []
+
+        files: list[_LogFile] = []
+        for path in self.config.directory.iterdir():
+            match = self._filename_pattern.fullmatch(path.name)
+            if match is None:
+                continue
+            try:
+                info = path.stat()
+            except FileNotFoundError:
+                continue
+            if not path.is_file():
+                continue
+            files.append(
+                _LogFile(
+                    path=path,
+                    date_key=match.group(1),
+                    sequence=int(match.group(2) or 0),
+                    size=info.st_size,
+                    modified_seconds=info.st_mtime,
+                )
+            )
+        return files
+
+    def _cleanup_old_files(self, active_path: Path) -> None:
+        files = sorted(self._list_log_files(), key=self._sort_key)
+        excess = len(files) - self.config.keep_files
+        for item in files:
+            if excess <= 0:
+                break
+            if item.path == active_path:
+                continue
+            try:
+                item.path.unlink()
+            except FileNotFoundError:
+                pass
+            else:
+                excess -= 1
+
+    def _file_path(self, date_key: str, sequence: int) -> Path:
+        sequence_suffix = f".{sequence}" if sequence > 0 else ""
+        return self.config.directory / f"{self.config.name_prefix}-{date_key}{sequence_suffix}.log"
+
+    def _format_time_bucket(self, value: datetime) -> str:
+        date_key = value.strftime("%Y%m%d")
+        return f"{date_key}{value:%H}" if self.config.rotate_interval == "1h" else date_key
+
+    @staticmethod
+    def _sort_key(item: _LogFile) -> tuple[str, int, float, str]:
+        return (item.date_key, item.sequence, item.modified_seconds, item.path.name)
+
+    @staticmethod
+    def _ensure_local(value: datetime) -> datetime:
+        if value.tzinfo is None:
+            return value.astimezone()
+        return value.astimezone()
+
+
+def create_usage_log_entry(
+    *,
+    session_id: str | None,
+    server_name: str,
+    tool: str,
+    route_name: str,
+    status: UsageLogStatus,
+    duration_ms: int,
+    user: str | None,
+    error_code: str | None,
+    now: datetime | None = None,
+) -> UsageLogEntry:
+    timestamp = UsageLogger._ensure_local(now or datetime.now().astimezone())
+    utc_timestamp = timestamp.astimezone(timezone.utc)
+    return UsageLogEntry(
+        ts=utc_timestamp.isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+        epoch_ms=int(timestamp.timestamp() * 1000),
+        session_id=session_id,
+        serverName=server_name,
+        tool=tool,
+        routeName=route_name,
+        status=status,
+        duration_ms=max(0, duration_ms),
+        user=user,
+        error_code=error_code,
+    )

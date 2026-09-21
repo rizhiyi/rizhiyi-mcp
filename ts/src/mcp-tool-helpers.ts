@@ -4,6 +4,7 @@ import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { deriveToolAnnotations } from './tool-annotations.js';
 import type { ToolDefinition } from './types.js';
+import { createUsageLogEntry, type UsageLogStatus } from './usage-log.js';
 
 type JsonSchema = {
     type?: string;
@@ -142,6 +143,7 @@ export function registerToolDefinitions(
                 }
             },
             async (args, extra) => {
+                const startedAt = Date.now();
                 const decision = context?.rateLimiter?.consume(
                     context.requestMeta.routeName || 'unknown',
                     tool.name
@@ -154,14 +156,79 @@ export function registerToolDefinitions(
                         retryable: true,
                         details: decision
                     };
-                    return {
+                    const result = {
                         content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }],
                         structuredContent: payload,
                         isError: true
                     };
+                    await writeUsageLogSafely(context, tool.name, 'ok-limited', startedAt, payload.error_code);
+                    return result;
                 }
-                return handler(args as Record<string, unknown>, extra);
+                try {
+                    const result = await handler(args as Record<string, unknown>, extra);
+                    await writeUsageLogSafely(
+                        context,
+                        tool.name,
+                        result?.isError ? 'error' : 'ok',
+                        startedAt,
+                        extractErrorCode(result)
+                    );
+                    return result;
+                } catch (error: any) {
+                    await writeUsageLogSafely(
+                        context,
+                        tool.name,
+                        'error',
+                        startedAt,
+                        extractThrownErrorCode(error)
+                    );
+                    throw error;
+                }
             }
         );
     }
+}
+
+async function writeUsageLogSafely(
+    context: ServerContext | undefined,
+    toolName: string,
+    status: UsageLogStatus,
+    startedAt: number,
+    errorCode?: string
+): Promise<void> {
+    if (!context?.usageLogger) {
+        return;
+    }
+
+    try {
+        const now = new Date();
+        await context.usageLogger.write(createUsageLogEntry({
+            session_id: context.requestMeta.sessionId || null,
+            serverName: context.requestMeta.serverName || context.requestMeta.routeName || 'unknown',
+            tool: toolName,
+            routeName: context.requestMeta.routeName || 'unknown',
+            status,
+            duration_ms: Math.max(0, now.getTime() - startedAt),
+            user: context.authContext.username || null,
+            error_code: errorCode || null
+        }, now));
+    } catch (error) {
+        console.error('写入 MCP 使用日志失败:', error);
+    }
+}
+
+function extractErrorCode(result: any): string | undefined {
+    const value = result?.structuredContent?.error_code;
+    return typeof value === 'string' && value ? value : undefined;
+}
+
+function extractThrownErrorCode(error: any): string | undefined {
+    const value = error?.error_code || error?.code;
+    if (typeof value === 'string' && value) {
+        return value;
+    }
+    if (typeof value === 'number') {
+        return String(value);
+    }
+    return undefined;
 }

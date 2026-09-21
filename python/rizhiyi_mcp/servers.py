@@ -5,6 +5,8 @@ from collections.abc import Awaitable, Callable, Iterable
 from contextvars import ContextVar, Token
 import inspect
 import json
+import logging
+import time
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
@@ -27,15 +29,18 @@ from .shared_result_store import (
     save_shared_result,
 )
 from .types import ResourceDefinition, ServerContext, SharedResultSummary, ToolCallResult, ToolDefinition
+from .usage_log import UsageLogger, UsageLogStatus, create_usage_log_entry
 
 _CURRENT_SERVER_CONTEXT: ContextVar[ServerContext | None] = ContextVar("rizhiyi_mcp_server_context", default=None)
 _CURRENT_SERVICE_STATE: ContextVar["ServiceRuntimeState | None"] = ContextVar("rizhiyi_mcp_service_state", default=None)
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
 class ServiceRuntimeState:
     route_name: str
     rate_limiter: FixedWindowRateLimiter | None = None
+    usage_logger: UsageLogger | None = None
     session_auth: dict[str, str] = field(default_factory=dict)
     initialize_params: dict[str, dict[str, Any]] = field(default_factory=dict)
     initialized_sessions: set[str] = field(default_factory=set)
@@ -150,6 +155,9 @@ class RizhiyiFastMCPServer(FastMCP[None]):
             return mcp_types.ServerResult(prompt)
 
         async def handle_tool_call(req: mcp_types.CallToolRequest) -> mcp_types.ServerResult:
+            started_at = time.perf_counter()
+            usage_status: UsageLogStatus = "error"
+            usage_error_code: str | None = None
             try:
                 decision = (
                     self.service_state.rate_limiter.consume(
@@ -160,6 +168,8 @@ class RizhiyiFastMCPServer(FastMCP[None]):
                     else None
                 )
                 if decision is not None and not decision.allowed:
+                    usage_status = "ok-limited"
+                    usage_error_code = "RATE_LIMIT_EXCEEDED"
                     payload = {
                         "error_code": "RATE_LIMIT_EXCEEDED",
                         "message": "工具调用频率已超过当前固定窗口上限。",
@@ -174,9 +184,12 @@ class RizhiyiFastMCPServer(FastMCP[None]):
                     )
                 else:
                     result = await self.call_tool(req.params.name, req.params.arguments or {})
+                    usage_status = "error" if result.is_error else "ok"
+                    usage_error_code = self._extract_result_error_code(result)
             except McpServerError as exc:
+                usage_error_code = str(exc.data.get("error_code") or "TOOL_CALL_FAILED")
                 payload = {
-                    "error_code": exc.data.get("error_code") or "TOOL_CALL_FAILED",
+                    "error_code": usage_error_code,
                     "message": str(exc),
                     "details": exc.data or None,
                 }
@@ -186,8 +199,9 @@ class RizhiyiFastMCPServer(FastMCP[None]):
                     is_error=True,
                 )
             except Exception as exc:
+                usage_error_code = "UNEXPECTED_TOOL_ERROR"
                 payload = {
-                    "error_code": "UNEXPECTED_TOOL_ERROR",
+                    "error_code": usage_error_code,
                     "message": str(exc),
                 }
                 result = ToolCallResult(
@@ -196,6 +210,12 @@ class RizhiyiFastMCPServer(FastMCP[None]):
                     is_error=True,
                 )
 
+            await self._write_usage_log(
+                tool_name=req.params.name,
+                status=usage_status,
+                duration_ms=round((time.perf_counter() - started_at) * 1000),
+                error_code=usage_error_code,
+            )
             return mcp_types.ServerResult(
                 mcp_types.CallToolResult(
                     content=[self._to_content_block(item) for item in result.content],
@@ -211,6 +231,40 @@ class RizhiyiFastMCPServer(FastMCP[None]):
         self._mcp_server.request_handlers[mcp_types.ListPromptsRequest] = handle_list_prompts
         self._mcp_server.request_handlers[mcp_types.GetPromptRequest] = handle_get_prompt
         self._mcp_server.request_handlers[mcp_types.CallToolRequest] = handle_tool_call
+
+    async def _write_usage_log(
+        self,
+        *,
+        tool_name: str,
+        status: UsageLogStatus,
+        duration_ms: int,
+        error_code: str | None,
+    ) -> None:
+        usage_logger = self.service_state.usage_logger
+        if usage_logger is None:
+            return
+        try:
+            context = get_current_server_context()
+            request_meta = context.request_meta
+            await usage_logger.write(
+                create_usage_log_entry(
+                    session_id=request_meta.session_id,
+                    server_name=request_meta.server_name or self.route_name,
+                    tool=tool_name,
+                    route_name=request_meta.route_name or self.route_name,
+                    status=status,
+                    duration_ms=duration_ms,
+                    user=context.auth_context.username,
+                    error_code=error_code,
+                )
+            )
+        except Exception:
+            _LOGGER.exception("写入 MCP 使用日志失败")
+
+    @staticmethod
+    def _extract_result_error_code(result: ToolCallResult) -> str | None:
+        value = result.structured_content.get("error_code")
+        return value if isinstance(value, str) and value else None
 
     async def list_tools(self) -> list[MCPTool]:
         return [

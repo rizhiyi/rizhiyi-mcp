@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- TypeScript、Python 的 Streamable HTTP 网关新增本地 JSON Lines 工具调用日志，支持按文件大小或按天/小时轮转、保留份数清理，并记录成功、错误及限流调用；日志不包含工具参数和结果正文。
+
 ## 0.3.1
 
 ### Added

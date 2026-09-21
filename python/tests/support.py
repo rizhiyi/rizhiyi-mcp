@@ -278,6 +278,7 @@ class HttpGatewayTestCase(unittest.TestCase):
         base: dict[str, Any] = dict(
             logease_base_url="http://logease.example",
             log_tools_result_store_dir=Path(self.temp_dir.name),
+            rizhiyi_log_dir=Path(self.temp_dir.name) / "usage-logs",
             log_tools_result_ttl_seconds=60,
             log_tools_result_inline_max_bytes=1024 * 1024,
             log_tools_result_max_file_bytes=5 * 1024 * 1024,

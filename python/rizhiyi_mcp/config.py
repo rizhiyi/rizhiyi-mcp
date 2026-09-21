@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from tempfile import gettempdir
+from typing import Literal
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -34,6 +35,11 @@ class RuntimeConfig(BaseSettings):
     mcp_allowed_origins: list[str] = ["*"]
     mcp_rate_limit_global_per_minute: int | None = None
     mcp_rate_limit_per_tool: dict[str, int] = Field(default_factory=dict)
+    rizhiyi_log_dir: Path = Path("./logs")
+    rizhiyi_log_name_prefix: str = "mcp-server"
+    rizhiyi_log_rotate_bytes: int = 10 * 1024 * 1024
+    rizhiyi_log_rotate_interval: Literal["1d", "1h"] = "1d"
+    rizhiyi_log_keep_files: int = 7
     log_tools_result_store_dir: Path = Field(default_factory=lambda: _DEFAULT_STORE_DIR)
     log_tools_result_ttl_seconds: int = 1800
     log_tools_result_inline_max_bytes: int = 24 * 1024
@@ -54,6 +60,7 @@ class RuntimeConfig(BaseSettings):
         "log_tools_result_ttl_seconds",
         "log_tools_result_inline_max_bytes",
         "log_tools_result_max_file_bytes",
+        "rizhiyi_log_keep_files",
         mode="after",
     )
     @classmethod
@@ -82,6 +89,14 @@ class RuntimeConfig(BaseSettings):
             normalized[key] = raw_limit
         return normalized
 
+    @field_validator("rizhiyi_log_name_prefix", mode="after")
+    @classmethod
+    def validate_log_name_prefix(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized or "/" in normalized or "\\" in normalized:
+            raise ValueError("必须是非空文件名前缀，且不能包含路径分隔符")
+        return normalized
+
     @field_validator("upstream_timeout_seconds", mode="after")
     @classmethod
     def validate_timeout(cls, value: float) -> float:
@@ -106,6 +121,9 @@ def create_server_context(
     source: RequestSource,
     path: str | None = None,
     client_address: str | None = None,
+    route_name: str | None = None,
+    server_name: str | None = None,
+    session_id: str | None = None,
 ) -> ServerContext:
     return ServerContext(
         runtime_config=runtime_config,
@@ -114,5 +132,8 @@ def create_server_context(
             source=source,
             path=path,
             client_address=client_address,
+            route_name=route_name,
+            server_name=server_name,
+            session_id=session_id,
         ),
     )

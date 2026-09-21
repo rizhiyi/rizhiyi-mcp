@@ -1,4 +1,7 @@
 import { spawn } from 'node:child_process';
+import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import process from 'node:process';
 import { setTimeout as delay } from 'node:timers/promises';
 
@@ -45,13 +48,15 @@ async function post(path, body, sessionId) {
 }
 
 async function main() {
+    const logDirectory = await mkdtemp(path.join(tmpdir(), 'rizhiyi-rate-limit-log-'));
     const serverProcess = spawn(process.execPath, ['./dist/http-server.js'], {
         cwd: process.cwd(),
         env: {
             ...process.env,
             MCP_HTTP_PORT: String(port),
             MCP_RATE_LIMIT_GLOBAL_PER_MINUTE: '1',
-            MCP_RATE_LIMIT_PER_TOOL: '{}'
+            MCP_RATE_LIMIT_PER_TOOL: '{}',
+            RIZHIYI_LOG_DIR: logDirectory
         },
         stdio: ['ignore', 'pipe', 'pipe']
     });
@@ -97,10 +102,31 @@ async function main() {
             throw new Error(`第二次工具调用未返回预期限流错误: ${JSON.stringify(second.body)}`);
         }
 
+        const logNames = (await readdir(logDirectory)).filter(name => name.endsWith('.log'));
+        if (logNames.length !== 1) {
+            throw new Error(`预期生成一个使用日志文件，实际: ${JSON.stringify(logNames)}`);
+        }
+        const entries = (await readFile(path.join(logDirectory, logNames[0]), 'utf8'))
+            .trim()
+            .split('\n')
+            .map(line => JSON.parse(line));
+        if (
+            entries.length !== 2
+            || entries[0].status !== 'ok'
+            || entries[1].status !== 'ok-limited'
+            || entries[1].error_code !== 'RATE_LIMIT_EXCEEDED'
+            || entries[0].session_id !== sessionId
+            || entries[0].user !== 'rate-limit-smoke'
+            || 'arguments' in entries[0]
+        ) {
+            throw new Error(`使用日志内容不符合预期: ${JSON.stringify(entries)}`);
+        }
+
         console.log('Rate limit HTTP smoke test passed');
     } finally {
         serverProcess.kill('SIGTERM');
         await delay(300);
+        await rm(logDirectory, { recursive: true, force: true });
     }
 }
 

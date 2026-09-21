@@ -10,6 +10,7 @@ import { describeAuthorization } from './auth-header.js';
 import { isExecutedDirectly } from './runtime-entry.js';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { FixedWindowRateLimiter } from './rate-limiting.js';
+import { UsageLogger } from './usage-log.js';
 
 function sendJsonError(res: Response, status: number, error: string, message: string) {
     res.status(status).json({
@@ -31,6 +32,7 @@ function buildRequestContext(
     req: Request,
     runtimeConfig: ReturnType<typeof getRuntimeConfig>,
     rateLimiter: FixedWindowRateLimiter,
+    usageLogger: UsageLogger,
     routeName: string
 ): ServerContext {
     // 如果 LOGEASE_USERNAME 环境变量设置了，用它显式指定（优先于从 apikey 里拆分的 username）
@@ -46,9 +48,11 @@ function buildRequestContext(
             source: 'http',
             path: req.path,
             clientAddress: req.ip,
-            routeName
+            routeName,
+            serverName: routeName
         },
-        rateLimiter
+        rateLimiter,
+        usageLogger
     };
 }
 
@@ -56,7 +60,8 @@ async function handleMcpRequest(
     req: Request,
     res: Response,
     runtimeConfig: ReturnType<typeof getRuntimeConfig>,
-    rateLimiter: FixedWindowRateLimiter
+    rateLimiter: FixedWindowRateLimiter,
+    usageLogger: UsageLogger
 ) {
     const serverName = String(req.params.serverName || '').trim();
     const factory = serverRegistry[serverName];
@@ -74,7 +79,7 @@ async function handleMcpRequest(
 
     let context: ServerContext;
     try {
-        context = buildRequestContext(req, runtimeConfig, rateLimiter, serverName);
+        context = buildRequestContext(req, runtimeConfig, rateLimiter, usageLogger, serverName);
     } catch (error: any) {
         sendJsonError(res, 400, 'INVALID_AUTHORIZATION', error?.message || 'Authorization 格式无效。');
         return;
@@ -107,6 +112,7 @@ async function handleMcpRequest(
                 sessionIdGenerator: () => randomUUID(),
                 enableJsonResponse: true,
                 onsessioninitialized: (initializedSessionId) => {
+                    context.requestMeta.sessionId = initializedSessionId;
                     sessionStore.set(initializedSessionId, {
                         serverName,
                         server,
@@ -139,6 +145,7 @@ export function createHttpApp() {
         runtimeConfig.rateLimitGlobalPerMinute,
         runtimeConfig.rateLimitPerTool
     );
+    const usageLogger = new UsageLogger(runtimeConfig.usageLog);
     const app = express();
 
     app.disable('x-powered-by');
@@ -157,7 +164,7 @@ export function createHttpApp() {
 
     app.post(
         `${runtimeConfig.httpBasePath}/:serverName`,
-        (req, res) => handleMcpRequest(req, res, runtimeConfig, rateLimiter)
+        (req, res) => handleMcpRequest(req, res, runtimeConfig, rateLimiter, usageLogger)
     );
     app.get(`${runtimeConfig.httpBasePath}/:serverName`, (_req, res) => {
         res.status(405).set('Allow', 'POST, DELETE').send('Method Not Allowed');

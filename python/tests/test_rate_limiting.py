@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from pydantic import ValidationError
 
 from rizhiyi_mcp.config import RuntimeConfig
@@ -63,6 +65,25 @@ class FixedWindowRateLimiterTestCase(HttpGatewayTestCase):
                 "per_tool_count": 1,
             },
         )
+
+    def test_usage_log_records_success_and_rate_limit_without_arguments(self) -> None:
+        self._restart_client(mcp_rate_limit_global_per_minute=1)
+        session_id = self._initialize_session("manage")
+
+        self._call_tool("manage", session_id, "select_module")
+        self._call_tool("manage", session_id, "select_module", request_id=4)
+
+        log_paths = sorted(self.runtime_config.rizhiyi_log_dir.glob("mcp-server-*.log"))
+        self.assertEqual(len(log_paths), 1)
+        entries = [json.loads(line) for line in log_paths[0].read_text(encoding="utf-8").splitlines()]
+        self.assertEqual([entry["status"] for entry in entries], ["ok", "ok-limited"])
+        self.assertEqual(entries[1]["error_code"], "RATE_LIMIT_EXCEEDED")
+        self.assertEqual(entries[0]["session_id"], session_id)
+        self.assertEqual(entries[0]["serverName"], "manage")
+        self.assertEqual(entries[0]["routeName"], "manage")
+        self.assertEqual(entries[0]["tool"], "select_module")
+        self.assertEqual(entries[0]["user"], "demo-user")
+        self.assertNotIn("arguments", entries[0])
 
 
 def test_fixed_window_resets_on_natural_boundary() -> None:

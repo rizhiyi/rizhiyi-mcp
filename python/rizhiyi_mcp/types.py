@@ -74,6 +74,9 @@ class RequestMeta:
     source: RequestSource
     path: str | None = None
     client_address: str | None = None
+    route_name: str | None = None
+    server_name: str | None = None
+    session_id: str | None = None
 
 
 @dataclass(slots=True)

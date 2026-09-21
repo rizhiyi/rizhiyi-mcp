@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import type { HttpClientConfig } from './types.js';
 import { AuthContext, buildAuthContextFromEnv } from './auth-context.js';
 import type { FixedWindowRateLimiter } from './rate-limiting.js';
+import type { UsageLogConfig, UsageLogger, UsageLogRotateInterval } from './usage-log.js';
 
 dotenv.config({ path: ['.env.local', '.env'] });
 
@@ -15,6 +16,7 @@ export interface RuntimeConfig {
     httpBasePath: string;
     rateLimitGlobalPerMinute?: number;
     rateLimitPerTool: Record<string, number>;
+    usageLog: UsageLogConfig;
 }
 
 export interface RequestMeta {
@@ -22,6 +24,8 @@ export interface RequestMeta {
     path?: string;
     clientAddress?: string;
     routeName?: string;
+    serverName?: string;
+    sessionId?: string;
 }
 
 export interface ServerContext {
@@ -29,6 +33,7 @@ export interface ServerContext {
     authContext: AuthContext;
     requestMeta: RequestMeta;
     rateLimiter?: FixedWindowRateLimiter;
+    usageLogger?: UsageLogger;
 }
 
 function parseBooleanEnv(rawValue: string | undefined, defaultValue: boolean): boolean {
@@ -57,6 +62,42 @@ function parseOptionalPositiveInteger(rawValue: string | undefined, variableName
         throw new Error(`${variableName} 必须是正整数`);
     }
     return parsed;
+}
+
+function parseIntegerEnv(rawValue: string | undefined, defaultValue: number, variableName: string): number {
+    if (typeof rawValue === 'undefined' || rawValue.trim() === '') {
+        return defaultValue;
+    }
+    const parsed = Number(rawValue);
+    if (!Number.isInteger(parsed)) {
+        throw new Error(`${variableName} 必须是整数`);
+    }
+    return parsed;
+}
+
+function parseUsageLogConfig(env: NodeJS.ProcessEnv): UsageLogConfig {
+    const namePrefix = (env.RIZHIYI_LOG_NAME_PREFIX || 'mcp-server').trim();
+    if (!namePrefix || namePrefix.includes('/') || namePrefix.includes('\\')) {
+        throw new Error('RIZHIYI_LOG_NAME_PREFIX 必须是非空文件名前缀，且不能包含路径分隔符');
+    }
+
+    const rotateInterval = (env.RIZHIYI_LOG_ROTATE_INTERVAL || '1d').trim() as UsageLogRotateInterval;
+    if (!['1d', '1h'].includes(rotateInterval)) {
+        throw new Error('RIZHIYI_LOG_ROTATE_INTERVAL 仅支持 1d 或 1h');
+    }
+
+    const keepFiles = parseIntegerEnv(env.RIZHIYI_LOG_KEEP_FILES, 7, 'RIZHIYI_LOG_KEEP_FILES');
+    if (keepFiles <= 0) {
+        throw new Error('RIZHIYI_LOG_KEEP_FILES 必须是正整数');
+    }
+
+    return {
+        directory: env.RIZHIYI_LOG_DIR?.trim() || './logs',
+        namePrefix,
+        rotateBytes: parseIntegerEnv(env.RIZHIYI_LOG_ROTATE_BYTES, 10 * 1024 * 1024, 'RIZHIYI_LOG_ROTATE_BYTES'),
+        rotateInterval,
+        keepFiles
+    };
 }
 
 function parsePerToolRateLimits(rawValue: string | undefined): Record<string, number> {
@@ -98,6 +139,7 @@ export function getRuntimeConfig(env: NodeJS.ProcessEnv = process.env): RuntimeC
         'MCP_RATE_LIMIT_GLOBAL_PER_MINUTE'
     );
     const rateLimitPerTool = parsePerToolRateLimits(env.MCP_RATE_LIMIT_PER_TOOL);
+    const usageLog = parseUsageLogConfig(env);
 
     if (!env.LOGEASE_BASE_URL) {
         console.warn('LOGEASE_BASE_URL 未设置，默认使用 https://127.0.0.1:8090');
@@ -111,7 +153,8 @@ export function getRuntimeConfig(env: NodeJS.ProcessEnv = process.env): RuntimeC
         httpPort: Number.isFinite(httpPort) ? httpPort : 3000,
         httpBasePath,
         rateLimitGlobalPerMinute,
-        rateLimitPerTool
+        rateLimitPerTool,
+        usageLog
     };
 }
 
