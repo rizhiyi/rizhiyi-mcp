@@ -353,7 +353,7 @@ export function createManageServer(context: ServerContext): McpServer {
 
       return formatManageSuccess(result, parameters as Record<string, any>);
     }
-  });
+  }, context);
 
   return server;
 }

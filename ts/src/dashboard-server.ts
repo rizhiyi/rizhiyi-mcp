@@ -53,7 +53,7 @@ export function createDashboardServer(context: ServerContext): McpServer {
         remove_dashboard_panel: async (parameters: Record<string, unknown>) => handleToolExecution('remove_dashboard_panel', () => dashboardModule.removeDashboardPanel(parameters), parameters)
     };
 
-    registerToolDefinitions(server, dashboardServerTools, handlers);
+    registerToolDefinitions(server, dashboardServerTools, handlers, context);
 
     async function handleToolExecution(toolName: string, executor: () => Promise<any>, params: any) {
         try {

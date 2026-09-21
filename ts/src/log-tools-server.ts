@@ -96,7 +96,7 @@ server.server.registerCapabilities({
         root_cause_suggestions: async (parameters) => handleRootCauseSuggestions({ ...parameters, __tool_name: 'root_cause_suggestions' }),
         trend_forecast: async (parameters) => handleTrendForecast({ ...parameters, __tool_name: 'trend_forecast' }),
         anomaly_alert: async (parameters) => handleAnomalyAlert({ ...parameters, __tool_name: 'anomaly_alert' })
-    });
+    }, context);
 
 server.server.setRequestHandler(ListResourcesRequestSchema, async () => {
     const resources = await listSharedResults(sharedResultStoreConfig);

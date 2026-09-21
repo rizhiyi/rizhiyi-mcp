@@ -58,7 +58,7 @@ export function createChatsplServer(context: ServerContext): McpServer {
             ), parameters)
     };
 
-    registerToolDefinitions(server, chatSplServerTools, handlers);
+    registerToolDefinitions(server, chatSplServerTools, handlers, context);
 
     async function handleChatSpl(parameters: Record<string, unknown>, extra: any): Promise<any> {
         const content = (parameters.content as string) || '';

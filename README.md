@@ -201,6 +201,8 @@ LOGEASE_BASE_URL=https://your-logease.example.com
 | `MCP_HTTP_HOST`      | `0.0.0.0` | 监听地址 |
 | `MCP_HTTP_PORT`      | `3000`    | 监听端口 |
 | `MCP_HTTP_BASE_PATH` | `/mcp`    | 路由前缀 |
+| `MCP_RATE_LIMIT_GLOBAL_PER_MINUTE` | 未设置 | 全部工具调用合计的每分钟上限 |
+| `MCP_RATE_LIMIT_PER_TOOL` | `{}` | 单工具每分钟上限的 JSON 映射 |
 
 ##### 2. 启动网关
 
@@ -313,6 +315,8 @@ LOGEASE_BASE_URL=https://your-logease.example.com
 | `MCP_HTTP_HOST`      | `0.0.0.0` | 监听地址 |
 | `MCP_HTTP_PORT`      | `3000`    | 监听端口 |
 | `MCP_HTTP_BASE_PATH` | `/mcp`    | 路由前缀 |
+| `MCP_RATE_LIMIT_GLOBAL_PER_MINUTE` | 未设置 | 全部工具调用合计的每分钟上限 |
+| `MCP_RATE_LIMIT_PER_TOOL` | `{}` | 单工具每分钟上限的 JSON 映射 |
 
 ### 第 3 步：启动 HTTP 网关
 
@@ -392,6 +396,32 @@ Authorization: Basic 5byg5LiJOm15LXNlY3JldC1rZXk=
 
 ***
 
+## 工具调用限流
+
+Streamable HTTP 网关支持与 [Splunk MCP Server rate limiting](https://help.splunk.com/en/splunk-cloud-platform/mcp-server-for-splunk-platform/1.3/mcp-server-rate-limiting) 类似的固定窗口限流：统计所有 `tools/call` 的全局调用量，也可以为单个工具设置更严格的上限。默认不设置任何上限。
+
+```bash
+# 当前进程内全部工具每分钟最多调用 600 次
+MCP_RATE_LIMIT_GLOBAL_PER_MINUTE=600
+
+# 工具名规则作用于所有 server；server/tool_name 只作用于指定 server
+MCP_RATE_LIMIT_PER_TOOL='{"log_search_sheet":120,"dashboard/create_dashboard_from_spec":10}'
+```
+
+规则说明：
+
+- 使用自然分钟固定窗口，计数在下一分钟开始时重置。
+- `server/tool_name` 精确规则优先于仅包含 `tool_name` 的规则；仅含工具名的规则会让各 server 中的同名工具共享计数。
+- 全局规则与单工具规则同时计数，任一规则超限都会拒绝本次工具执行。
+- 如果全局上限低于某个单工具上限，全局规则会先触发，该单工具上限实际无法用满。
+- 超限结果是 `isError: true` 的 MCP 工具结果，`error_code` 为 `RATE_LIMIT_EXCEEDED`；`details` 包含 `scope`、`limit`、`retry_after_seconds` 和 `reset_at`。
+- 计数仅保存在当前进程内，不会在多进程、多副本或多节点之间同步。需要集群级硬限制时，应在外层网关或共享存储中实现。
+- TypeScript 的 stdio 模式不启用这组限制；Python 版仅提供 HTTP 模式。
+
+`GET /healthz` 的 `rate_limiting` 字段会显示是否启用、全局上限和已配置的单工具规则数量，但不会暴露具体工具规则。
+
+***
+
 ## 效果图
 
 配置完成后，您的 AI 智能体即可通过自然语言指令或特定的工具调用语法来使用 `rizhiyi-mcp` 提供的功能。例如，您可以指示智能体"使用日志分析工具查询过去一小时的错误日志"： <img width="2880" height="1800" alt="image" src="https://github.com/user-attachments/assets/9400abe1-3248-46e7-a29c-5e5f302b2129" />
@@ -433,7 +463,5 @@ A：`Accept` 请求头没有包含 `text/event-stream`。官方 Streamable HTTP 
 详见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## TODO
-
-以下能力属于复杂 JSON body 配置类功能，计划以独立 MCP Server 方式提供：
 
 - `rizhiyi_agent_config`：采集/Agent 配置（agent）

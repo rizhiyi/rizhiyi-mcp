@@ -43,7 +43,7 @@ export function createParserRuleServer(context: ServerContext): McpServer {
         list_parserrule_references: async (parameters: Record<string, unknown>) => handleToolExecution('list_parserrule_references', () => parserRuleModule.listParserRuleReferences(parameters), parameters)
     };
 
-    registerToolDefinitions(server, parserRuleServerTools, handlers);
+    registerToolDefinitions(server, parserRuleServerTools, handlers, context);
 
     async function handleToolExecution(toolName: string, executor: () => Promise<any>, params: any) {
         const result = await executor();

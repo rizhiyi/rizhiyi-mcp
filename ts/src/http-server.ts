@@ -9,6 +9,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { describeAuthorization } from './auth-header.js';
 import { isExecutedDirectly } from './runtime-entry.js';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
+import { FixedWindowRateLimiter } from './rate-limiting.js';
 
 function sendJsonError(res: Response, status: number, error: string, message: string) {
     res.status(status).json({
@@ -26,8 +27,12 @@ interface SessionEntry {
 
 const sessionStore = new Map<string, SessionEntry>();
 
-function buildRequestContext(req: Request): ServerContext {
-    const runtimeConfig = getRuntimeConfig();
+function buildRequestContext(
+    req: Request,
+    runtimeConfig: ReturnType<typeof getRuntimeConfig>,
+    rateLimiter: FixedWindowRateLimiter,
+    routeName: string
+): ServerContext {
     // 如果 LOGEASE_USERNAME 环境变量设置了，用它显式指定（优先于从 apikey 里拆分的 username）
     const authContext = buildAuthContextFromAuthorization(
         req.header('authorization'),
@@ -40,12 +45,19 @@ function buildRequestContext(req: Request): ServerContext {
         requestMeta: {
             source: 'http',
             path: req.path,
-            clientAddress: req.ip
-        }
+            clientAddress: req.ip,
+            routeName
+        },
+        rateLimiter
     };
 }
 
-async function handleMcpRequest(req: Request, res: Response) {
+async function handleMcpRequest(
+    req: Request,
+    res: Response,
+    runtimeConfig: ReturnType<typeof getRuntimeConfig>,
+    rateLimiter: FixedWindowRateLimiter
+) {
     const serverName = String(req.params.serverName || '').trim();
     const factory = serverRegistry[serverName];
 
@@ -62,7 +74,7 @@ async function handleMcpRequest(req: Request, res: Response) {
 
     let context: ServerContext;
     try {
-        context = buildRequestContext(req);
+        context = buildRequestContext(req, runtimeConfig, rateLimiter, serverName);
     } catch (error: any) {
         sendJsonError(res, 400, 'INVALID_AUTHORIZATION', error?.message || 'Authorization 格式无效。');
         return;
@@ -123,6 +135,10 @@ async function handleMcpRequest(req: Request, res: Response) {
 
 export function createHttpApp() {
     const runtimeConfig = getRuntimeConfig();
+    const rateLimiter = new FixedWindowRateLimiter(
+        runtimeConfig.rateLimitGlobalPerMinute,
+        runtimeConfig.rateLimitPerTool
+    );
     const app = express();
 
     app.disable('x-powered-by');
@@ -130,11 +146,19 @@ export function createHttpApp() {
 
     app.get('/healthz', (_req, res) => {
         res.status(200).json({
-            ok: true
+            ok: true,
+            rate_limiting: {
+                enabled: rateLimiter.enabled,
+                global_per_minute: runtimeConfig.rateLimitGlobalPerMinute ?? null,
+                per_tool_count: Object.keys(runtimeConfig.rateLimitPerTool).length
+            }
         });
     });
 
-    app.post(`${runtimeConfig.httpBasePath}/:serverName`, handleMcpRequest);
+    app.post(
+        `${runtimeConfig.httpBasePath}/:serverName`,
+        (req, res) => handleMcpRequest(req, res, runtimeConfig, rateLimiter)
+    );
     app.get(`${runtimeConfig.httpBasePath}/:serverName`, (_req, res) => {
         res.status(405).set('Allow', 'POST, DELETE').send('Method Not Allowed');
     });

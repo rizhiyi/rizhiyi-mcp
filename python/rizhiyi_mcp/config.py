@@ -32,6 +32,8 @@ class RuntimeConfig(BaseSettings):
     mcp_enable_dns_rebinding_protection: bool = False
     mcp_allowed_hosts: list[str] = ["*"]
     mcp_allowed_origins: list[str] = ["*"]
+    mcp_rate_limit_global_per_minute: int | None = None
+    mcp_rate_limit_per_tool: dict[str, int] = Field(default_factory=dict)
     log_tools_result_store_dir: Path = Field(default_factory=lambda: _DEFAULT_STORE_DIR)
     log_tools_result_ttl_seconds: int = 1800
     log_tools_result_inline_max_bytes: int = 24 * 1024
@@ -59,6 +61,26 @@ class RuntimeConfig(BaseSettings):
         if value <= 0:
             raise ValueError("必须是正整数")
         return value
+
+    @field_validator("mcp_rate_limit_global_per_minute", mode="after")
+    @classmethod
+    def validate_optional_positive_int(cls, value: int | None) -> int | None:
+        if value is not None and value <= 0:
+            raise ValueError("必须是正整数或留空")
+        return value
+
+    @field_validator("mcp_rate_limit_per_tool", mode="after")
+    @classmethod
+    def validate_per_tool_limits(cls, value: dict[str, int]) -> dict[str, int]:
+        normalized: dict[str, int] = {}
+        for raw_key, raw_limit in value.items():
+            key = raw_key.strip()
+            if not key:
+                raise ValueError("工具限流键不能为空")
+            if isinstance(raw_limit, bool) or raw_limit <= 0:
+                raise ValueError(f"{key} 的限流值必须是正整数")
+            normalized[key] = raw_limit
+        return normalized
 
     @field_validator("upstream_timeout_seconds", mode="after")
     @classmethod

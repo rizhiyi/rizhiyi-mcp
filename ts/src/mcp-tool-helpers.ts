@@ -1,4 +1,5 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { ServerContext } from './config.js';
 import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { deriveToolAnnotations } from './tool-annotations.js';
@@ -121,6 +122,7 @@ export function registerToolDefinitions(
     server: McpServer,
     tools: ToolDefinition[],
     handlers: Record<string, ToolHandler>,
+    context?: ServerContext,
     annotationsByName: Record<string, ToolAnnotations> = {}
 ): void {
     for (const tool of tools) {
@@ -139,7 +141,27 @@ export function registerToolDefinitions(
                     ...(annotationsByName[tool.name] || {})
                 }
             },
-            async (args, extra) => handler(args as Record<string, unknown>, extra)
+            async (args, extra) => {
+                const decision = context?.rateLimiter?.consume(
+                    context.requestMeta.routeName || 'unknown',
+                    tool.name
+                );
+                if (decision && !decision.allowed) {
+                    const payload = {
+                        error_code: 'RATE_LIMIT_EXCEEDED',
+                        message: '工具调用频率已超过当前固定窗口上限。',
+                        suggestion: `请在 ${decision.retry_after_seconds} 秒后重试。`,
+                        retryable: true,
+                        details: decision
+                    };
+                    return {
+                        content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }],
+                        structuredContent: payload,
+                        isError: true
+                    };
+                }
+                return handler(args as Record<string, unknown>, extra);
+            }
         );
     }
 }

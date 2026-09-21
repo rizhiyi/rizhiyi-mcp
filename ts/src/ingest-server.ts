@@ -55,7 +55,7 @@ export function createIngestServer(context: ServerContext): McpServer {
         list_available_pipeline_agent_groups: async (parameters: Record<string, unknown>) => handleToolExecution('list_available_pipeline_agent_groups', () => ingestModule.listAvailablePipelineAgentGroups(parameters), parameters),
     };
 
-    registerToolDefinitions(server, ingestServerTools, handlers);
+    registerToolDefinitions(server, ingestServerTools, handlers, context);
 
     async function handleToolExecution(toolName: string, executor: () => Promise<any>, params: any) {
         try {

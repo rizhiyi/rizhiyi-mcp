@@ -304,8 +304,8 @@ async function assertAlertServerBehavior() {
         check_condition: { timerange: '-1m', field: 'cnt', operator: '>', threshold: 'mid:0' },
         extend_conf: { smoke: 'true' },
     };
-    // 为避免真实创建，只调用 create_keyword_alert 但**故意带去 statistics_field 冲突**：这里用本地校验拦截；不真实 create
-    // 按 spec R10，这里只 print 草稿对象预处理结果 → 我们用 category=0 + statistics_field 冲突做本地校验
+    // 为避免真实创建，调用 create_keyword_alert 并故意遗漏 check_condition.timerange，
+    // 让请求通过 MCP 参数 schema 后由本地 category 业务校验拦截。
     const badCallResp = await jsonRequest('/mcp/alert', {
         jsonrpc: '2.0',
         id: 13,
@@ -314,12 +314,12 @@ async function assertAlertServerBehavior() {
             name: 'create_keyword_alert',
             arguments: {
                 name: 'smoke-should-fail',
-                statistics_field: 'response_time', // category=0 + 非空 statistics_field -> 本地拦截
+                executor_id: 1,
                 enabled: true,
                 check_interval: 300,
                 query: 'loglevel:ERROR',
-                dataset_ids: [1, 2],
-                check_condition: { timerange: '-5min', function: 'count', operator: '>', threshold: 'high:100' },
+                dataset_ids: [],
+                check_condition: { function: 'count', operator: '>', threshold: 'high:100' },
                 result_delivery: 'inline',
             }
         }
@@ -327,15 +327,12 @@ async function assertAlertServerBehavior() {
         Authorization: authHeader,
         'mcp-session-id': sessionId
     });
-    // 预期返回 isError=true 且 suggestion 含 category
-    const isError = badCallResp.json?.result?.isError === true ||
-        Array.isArray(badCallResp.json?.result?.content) && badCallResp.json.result.content.some(c => c.type === 'text' && typeof c.text === 'string' && c.text.includes('CATEGORY_FIELD_CONFLICT'));
-    // 或者查看 content 文本：
+    // 预期在真正调用上游前返回 category 业务校验错误。
     const contentText = ((badCallResp.json?.result?.content ?? [])[0]?.text) ?? '';
-    if (!contentText.includes('CATEGORY_FIELD_CONFLICT') && !contentText.includes('category')) {
-        throw new Error(`category=0 + statistics_field 冲突应该在本地被拦截。实际内容: ${contentText.slice(0, 500)}`);
+    if (badCallResp.json?.result?.isError !== true || !contentText.includes('CATEGORY_FIELD_CONFLICT') || !contentText.includes('timerange')) {
+        throw new Error(`关键字告警缺少 timerange 应该在本地被拦截。实际内容: ${contentText.slice(0, 500)}`);
     }
-    console.log('  [alert] draft preprocess ok (本地 category 冲突拦截生效)');
+    console.log('  [alert] draft preprocess ok (本地 timerange 校验拦截生效)');
 
     // 5. 打印预处理后的草稿（category=4）——用 selfcheck 的静态方法等价实现（此处仅 log JSON，不发请求）
     const preprocessed = JSON.stringify({

@@ -80,7 +80,7 @@ export function createAlertServer(context: ServerContext): McpServer {
         get_alert_category_reference:(p: Record<string, unknown>) => handleToolExecution('get_alert_category_reference',() => alertsModule.getAlertCategoryReference(p), p),
     };
 
-    registerToolDefinitions(server, alertServerTools, handlers as any);
+    registerToolDefinitions(server, alertServerTools, handlers as any, context);
 
     async function handleToolExecution(toolName: string, executor: () => Promise<any>, params: any) {
         try {

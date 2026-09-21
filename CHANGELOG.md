@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1
+
+### Added
+
+- Streamable HTTP 网关新增固定分钟窗口的工具调用限流，支持全局上限与单工具上限；TypeScript、Python 两版配置和错误返回保持一致。
+
 ## 0.3.0
 
 > 同时提供 TS 与 Python 版本的实现。

@@ -19,6 +19,7 @@ from mcp.types import TextContent, Tool as MCPTool
 
 from .auth import describe_authorization
 from .config import RuntimeConfig
+from .rate_limiting import FixedWindowRateLimiter
 from .shared_result_store import (
     SharedResultStoreError,
     list_shared_results,
@@ -34,6 +35,7 @@ _CURRENT_SERVICE_STATE: ContextVar["ServiceRuntimeState | None"] = ContextVar("r
 @dataclass(slots=True)
 class ServiceRuntimeState:
     route_name: str
+    rate_limiter: FixedWindowRateLimiter | None = None
     session_auth: dict[str, str] = field(default_factory=dict)
     initialize_params: dict[str, dict[str, Any]] = field(default_factory=dict)
     initialized_sessions: set[str] = field(default_factory=set)
@@ -149,7 +151,29 @@ class RizhiyiFastMCPServer(FastMCP[None]):
 
         async def handle_tool_call(req: mcp_types.CallToolRequest) -> mcp_types.ServerResult:
             try:
-                result = await self.call_tool(req.params.name, req.params.arguments or {})
+                decision = (
+                    self.service_state.rate_limiter.consume(
+                        route_name=self.route_name,
+                        tool_name=req.params.name,
+                    )
+                    if self.service_state.rate_limiter is not None
+                    else None
+                )
+                if decision is not None and not decision.allowed:
+                    payload = {
+                        "error_code": "RATE_LIMIT_EXCEEDED",
+                        "message": "工具调用频率已超过当前固定窗口上限。",
+                        "suggestion": f"请在 {decision.retry_after_seconds} 秒后重试。",
+                        "retryable": True,
+                        "details": decision.to_details(),
+                    }
+                    result = ToolCallResult(
+                        structured_content=payload,
+                        content=[{"type": "text", "text": self._json_dump(payload)}],
+                        is_error=True,
+                    )
+                else:
+                    result = await self.call_tool(req.params.name, req.params.arguments or {})
             except McpServerError as exc:
                 payload = {
                     "error_code": exc.data.get("error_code") or "TOOL_CALL_FAILED",

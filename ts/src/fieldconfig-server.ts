@@ -39,7 +39,7 @@ export function createFieldConfigServer(context: ServerContext): McpServer {
         get_fieldconfig_transform_reference: async (parameters: Record<string, unknown>) => handleToolExecution('get_fieldconfig_transform_reference', () => fieldConfigModule.getFieldConfigTransformReference(), parameters)
     };
 
-    registerToolDefinitions(server, fieldConfigServerTools, handlers);
+    registerToolDefinitions(server, fieldConfigServerTools, handlers, context);
 
     async function handleToolExecution(toolName: string, executor: () => Promise<any>, params: any) {
         try {

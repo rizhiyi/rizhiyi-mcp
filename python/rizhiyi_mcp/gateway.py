@@ -12,6 +12,7 @@ from starlette.types import Message, Receive, Scope, Send
 
 from .auth import build_auth_context_from_authorization
 from .config import RuntimeConfig, create_server_context
+from .rate_limiting import FixedWindowRateLimiter
 from .server_registry import server_registry
 from .servers import (
     RizhiyiFastMCPServer,
@@ -254,6 +255,10 @@ class NormalizeMountedServerRootPathMiddleware:
 def create_http_app(runtime_config: RuntimeConfig | None = None) -> FastAPI:
     settings = runtime_config or RuntimeConfig()
     mounted_servers: dict[str, MountedServer] = {}
+    rate_limiter = FixedWindowRateLimiter(
+        global_limit=settings.mcp_rate_limit_global_per_minute,
+        per_tool_limits=settings.mcp_rate_limit_per_tool,
+    )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -262,11 +267,11 @@ def create_http_app(runtime_config: RuntimeConfig | None = None) -> FastAPI:
                 await stack.enter_async_context(item.server.session_manager.run())
             yield
 
-    app = FastAPI(title="rizhiyi-mcp-python", version="0.2.0", lifespan=lifespan)
+    app = FastAPI(title="rizhiyi-mcp-python", version="0.3.1", lifespan=lifespan)
     app.router.redirect_slashes = False
 
     for route_name, factory in server_registry.items():
-        service_state = ServiceRuntimeState(route_name=route_name)
+        service_state = ServiceRuntimeState(route_name=route_name, rate_limiter=rate_limiter)
         server = factory(settings, service_state)
         mounted_servers[route_name] = MountedServer(route_name=route_name, server=server, state=service_state)
         app.mount(
@@ -293,6 +298,11 @@ def create_http_app(runtime_config: RuntimeConfig | None = None) -> FastAPI:
             "registered_servers": sorted(mounted_servers),
             "session_count": sum(len(item.state.session_auth) for item in mounted_servers.values()),
             "transport_mode": "official_python_mcp_sdk",
+            "rate_limiting": {
+                "enabled": rate_limiter.enabled,
+                "global_per_minute": settings.mcp_rate_limit_global_per_minute,
+                "per_tool_count": len(settings.mcp_rate_limit_per_tool),
+            },
         }
 
     @app.middleware("http")

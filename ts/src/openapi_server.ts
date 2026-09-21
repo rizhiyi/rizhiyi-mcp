@@ -53,7 +53,7 @@ export async function createOpenapiServer(context: ServerContext): Promise<McpSe
         return buildToolSuccessResult(tool.name, payload);
       }
     ])
-  ));
+  ), context);
 
   return server;
 }
