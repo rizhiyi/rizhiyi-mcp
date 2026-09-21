@@ -10,7 +10,8 @@ export class LogEaseClient {
         this.client = axios.create({
             baseURL: config.baseURL,
             headers: config.headers,
-            httpsAgent: config.httpsAgent || new https.Agent({ rejectUnauthorized: false })
+            httpsAgent: config.httpsAgent || new https.Agent({ rejectUnauthorized: false }),
+            timeout: config.timeoutMs
         });
         this.username = config.username;
     }

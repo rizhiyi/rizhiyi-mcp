@@ -334,6 +334,7 @@ export interface HttpClientConfig {
     headers: Record<string, string>;
     httpsAgent?: any;
     username?: string;
+    timeoutMs?: number;
 }
 
 // 通用查询参数

@@ -140,6 +140,7 @@ export function createManageServer(context: ServerContext): McpServer {
     baseURL: httpClientConfig.baseURL,
     headers: httpClientConfig.headers,
     httpsAgent: httpClientConfig.httpsAgent,
+    timeout: httpClientConfig.timeoutMs,
   });
 
   async function generateAndExecuteApiCall(apiPath: string, apiMethod: string, params: Record<string, any>) {

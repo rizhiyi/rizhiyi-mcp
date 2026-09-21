@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 from collections.abc import Awaitable, Callable, Iterable
 from contextvars import ContextVar, Token
@@ -27,6 +28,15 @@ from .shared_result_store import (
     list_shared_results,
     read_shared_result,
     save_shared_result,
+)
+from .spl_guardrails import (
+    GuardrailAssessment,
+    GuardrailConfig,
+    apply_output_guardrails,
+    assess_generated_spl,
+    assess_tool_arguments,
+    guardrail_config_from_runtime,
+    merge_assessments,
 )
 from .types import ResourceDefinition, ServerContext, SharedResultSummary, ToolCallResult, ToolDefinition
 from .usage_log import UsageLogger, UsageLogStatus, create_usage_log_entry
@@ -183,7 +193,10 @@ class RizhiyiFastMCPServer(FastMCP[None]):
                         is_error=True,
                     )
                 else:
-                    result = await self.call_tool(req.params.name, req.params.arguments or {})
+                    result = await self._execute_tool_with_guardrails(
+                        req.params.name,
+                        req.params.arguments or {},
+                    )
                     usage_status = "error" if result.is_error else "ok"
                     usage_error_code = self._extract_result_error_code(result)
             except McpServerError as exc:
@@ -215,6 +228,11 @@ class RizhiyiFastMCPServer(FastMCP[None]):
                 status=usage_status,
                 duration_ms=round((time.perf_counter() - started_at) * 1000),
                 error_code=usage_error_code,
+                guardrail=(
+                    result.structured_content.get("guardrail")
+                    if isinstance(result.structured_content.get("guardrail"), dict)
+                    else None
+                ),
             )
             return mcp_types.ServerResult(
                 mcp_types.CallToolResult(
@@ -239,6 +257,7 @@ class RizhiyiFastMCPServer(FastMCP[None]):
         status: UsageLogStatus,
         duration_ms: int,
         error_code: str | None,
+        guardrail: dict[str, Any] | None,
     ) -> None:
         usage_logger = self.service_state.usage_logger
         if usage_logger is None:
@@ -256,6 +275,7 @@ class RizhiyiFastMCPServer(FastMCP[None]):
                     duration_ms=duration_ms,
                     user=context.auth_context.username,
                     error_code=error_code,
+                    guardrail=guardrail,
                 )
             )
         except Exception:
@@ -323,17 +343,138 @@ class RizhiyiFastMCPServer(FastMCP[None]):
             )
         ]
 
+    async def _execute_tool_with_guardrails(
+        self,
+        name: str,
+        arguments: dict | None,
+    ) -> ToolCallResult:
+        safe_arguments = arguments or {}
+        guardrail_config = guardrail_config_from_runtime(self.runtime_config)
+        assessment = assess_tool_arguments(
+            guardrail_config,
+            route_name=self.route_name,
+            tool_name=name,
+            arguments=safe_arguments,
+        )
+        if assessment.should_block:
+            return self._build_guardrail_block_result(assessment)
+
+        try:
+            invocation = self.call_tool(name, safe_arguments)
+            if (
+                guardrail_config.enabled
+                and guardrail_config.mode == "enforce"
+                and (assessment.queries or self.route_name == "log-tools")
+            ):
+                result = await asyncio.wait_for(
+                    invocation,
+                    timeout=guardrail_config.exec_timeout_seconds,
+                )
+            else:
+                result = await invocation
+        except asyncio.TimeoutError:
+            payload = {
+                "error_code": "SPL_EXECUTION_TIMEOUT",
+                "message": (
+                    "SPL 工具执行超过护栏时长上限 "
+                    f"{guardrail_config.exec_timeout_seconds} 秒。"
+                ),
+                "suggestion": "请缩小 time_range、收紧查询条件或拆分查询后重试。",
+                "retryable": True,
+                "details": {
+                    "timeout_seconds": guardrail_config.exec_timeout_seconds,
+                    "guardrail": assessment.to_details(),
+                },
+                "guardrail": assessment.to_details(),
+            }
+            return ToolCallResult(
+                structured_content=payload,
+                content=[{"type": "text", "text": self._json_dump(payload)}],
+                is_error=True,
+            )
+
+        generated_assessment = assess_generated_spl(
+            guardrail_config,
+            route_name=self.route_name,
+            tool_name=name,
+            payload=result.structured_content,
+        )
+        assessment = merge_assessments(assessment, generated_assessment)
+        if generated_assessment.should_block:
+            return self._build_guardrail_block_result(assessment)
+        return self._apply_guardrails_to_result(result, assessment, guardrail_config)
+
     async def call_tool(self, name: str, arguments: dict | None) -> ToolCallResult:
         safe_arguments = arguments or {}
-
         handler = self._tool_handlers.get(name)
         if handler is not None:
             return await self._invoke_tool_handler(handler, safe_arguments)
 
-        raise McpServerError(
-            f"未知工具: {name}",
-            code=-32601,
-            data={"name": name},
+        raise McpServerError(f"未知工具: {name}", code=-32601, data={"name": name})
+
+    def _build_guardrail_block_result(
+        self,
+        assessment: GuardrailAssessment,
+    ) -> ToolCallResult:
+        payload = {
+            "error_code": "SPL_GUARDRAIL_BLOCKED",
+            "message": assessment.message,
+            "suggestion": (
+                "请移除写入、删除、导出或外部访问命令，缩小时间范围，"
+                "并为子搜索增加显式限额后重试。"
+            ),
+            "retryable": False,
+            "details": assessment.to_details(),
+            "guardrail": assessment.to_details(),
+        }
+        return ToolCallResult(
+            structured_content=payload,
+            content=[{"type": "text", "text": self._json_dump(payload)}],
+            is_error=True,
+        )
+
+    def _apply_guardrails_to_result(
+        self,
+        result: ToolCallResult,
+        assessment: GuardrailAssessment,
+        guardrail_config: GuardrailConfig,
+    ) -> ToolCallResult:
+        if not guardrail_config.enabled:
+            return result
+
+        guarded_structured, sanitized_values, truncated_events, truncated_paths = (
+            apply_output_guardrails(result.structured_content, guardrail_config)
+        )
+        assessment.sanitized_values += sanitized_values
+        assessment.truncated_events += truncated_events
+        assessment.truncated_paths.extend(truncated_paths)
+
+        if not isinstance(guarded_structured, dict):
+            guarded_structured = {"value": guarded_structured}
+        if assessment.queries or assessment.sanitized_values or assessment.truncated_events:
+            guarded_structured["guardrail"] = assessment.to_details()
+
+        if truncated_events:
+            guarded_content = [{"type": "text", "text": self._json_dump(guarded_structured)}]
+        else:
+            guarded_content, _, _, _ = apply_output_guardrails(
+                result.content,
+                guardrail_config,
+            )
+            if assessment.queries or assessment.sanitized_values:
+                warning = self._json_dump({"guardrail": assessment.to_details()})
+                if isinstance(guarded_content, list):
+                    guarded_content = list(guarded_content)
+                    guarded_content.append({"type": "text", "text": warning})
+            if not isinstance(guarded_content, list):
+                guarded_content = [{"type": "text", "text": self._json_dump(guarded_content)}]
+
+        if assessment.queries or assessment.sanitized_values or assessment.truncated_events:
+            guarded_structured["guardrail"] = assessment.to_details()
+        return ToolCallResult(
+            structured_content=guarded_structured,
+            content=guarded_content,
+            is_error=result.is_error,
         )
 
     async def _invoke_tool_handler(self, handler: Any, arguments: dict[str, Any]) -> ToolCallResult:

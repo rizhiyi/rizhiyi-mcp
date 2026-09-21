@@ -3,6 +3,7 @@ import { promises as fs } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
 import type { SharedResultEnvelope, SharedResultKind, SharedResultSummary } from './types.js';
+import { applyOutputGuardrails, type GuardrailConfig } from './spl-guardrails.js';
 
 const DEFAULT_TTL_SECONDS = 30 * 60;
 const DEFAULT_INLINE_MAX_BYTES = 24 * 1024;
@@ -40,6 +41,7 @@ export interface SaveSharedResultInput {
     indexName?: string;
     upstreamSid?: string;
     ttlSeconds?: number;
+    guardrailConfig?: GuardrailConfig;
 }
 
 function parsePositiveInteger(value: string | undefined, fallback: number): number {
@@ -238,13 +240,41 @@ export async function saveSharedResult(
     await cleanupExpiredResults(config);
     await ensureStoreDir(config.storeDir);
 
+    let payload = input.payload;
+    let summary = input.summary;
+    let sourceQuery = input.sourceQuery;
+    if (input.guardrailConfig?.enabled) {
+        const guardedPayload = applyOutputGuardrails(payload, input.guardrailConfig);
+        const guardedSummary = applyOutputGuardrails(summary, input.guardrailConfig);
+        const guardedSourceQuery = applyOutputGuardrails(sourceQuery, input.guardrailConfig);
+        payload = guardedPayload.data;
+        summary = guardedSummary.data as SharedResultSummary;
+        sourceQuery = typeof guardedSourceQuery.data === 'string' ? guardedSourceQuery.data : undefined;
+        guardedPayload.sanitizedValues += guardedSourceQuery.sanitizedValues;
+        if (
+            payload
+            && typeof payload === 'object'
+            && !Array.isArray(payload)
+            && (guardedPayload.sanitizedValues || guardedPayload.truncatedEvents)
+        ) {
+            payload = {
+                ...(payload as Record<string, unknown>),
+                guardrail_output: {
+                    sanitized_values: guardedPayload.sanitizedValues,
+                    truncated_events: guardedPayload.truncatedEvents,
+                    truncated_paths: guardedPayload.truncatedPaths
+                }
+            };
+        }
+    }
+
     const ttlSeconds = input.ttlSeconds && input.ttlSeconds > 0
         ? Math.floor(input.ttlSeconds)
         : config.defaultTtlSeconds;
     const handle = randomUUID().replace(/-/g, '');
     const createdAt = new Date();
     const expiresAt = new Date(createdAt.getTime() + ttlSeconds * 1000);
-    const payloadBytes = Buffer.byteLength(JSON.stringify(input.payload ?? null), 'utf8');
+    const payloadBytes = Buffer.byteLength(JSON.stringify(payload ?? null), 'utf8');
     const resourceUri = buildSharedResultResourceUri(handle);
 
     if (payloadBytes > config.maxFileBytes) {
@@ -257,20 +287,20 @@ export async function saveSharedResult(
     const envelope: SharedResultEnvelope = {
         handle,
         resource_uri: resourceUri,
-        resource_title: buildSharedResultResourceTitle(input.toolName, input.summary, handle),
+        resource_title: buildSharedResultResourceTitle(input.toolName, summary, handle),
         resource_type: input.resultKind,
         resource_mime_type: SHARED_RESULT_RESOURCE_MIME_TYPE,
         created_at: createdAt.toISOString(),
         expires_at: expiresAt.toISOString(),
         tool_name: input.toolName,
         result_kind: input.resultKind,
-        source_query: input.sourceQuery,
+        source_query: sourceQuery,
         time_range: input.timeRange,
         index_name: input.indexName,
         upstream_sid: input.upstreamSid,
         payload_bytes: payloadBytes,
-        summary: input.summary,
-        payload: input.payload
+        summary,
+        payload
     };
 
     await fs.writeFile(buildFilePath(config.storeDir, handle), JSON.stringify(envelope, null, 2), 'utf8');

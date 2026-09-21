@@ -23,6 +23,9 @@ export interface UsageLogEntry {
     duration_ms: number;
     user: string | null;
     error_code: string | null;
+    guardrail_action?: string | null;
+    guardrail_risk_score?: number | null;
+    guardrail_denied_commands?: string[];
 }
 
 interface LogFile {

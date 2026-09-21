@@ -20,6 +20,7 @@ export async function createOpenapiServer(context: ServerContext): Promise<McpSe
     baseURL: httpClientConfig.baseURL,
     headers: httpClientConfig.headers,
     httpsAgent: httpClientConfig.httpsAgent,
+    timeout: httpClientConfig.timeoutMs,
   });
   const converter = new Converter({ httpClient });
   await converter.load(rzySpecs);

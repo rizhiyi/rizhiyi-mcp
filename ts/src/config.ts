@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import type { HttpClientConfig } from './types.js';
 import { AuthContext, buildAuthContextFromEnv } from './auth-context.js';
 import type { FixedWindowRateLimiter } from './rate-limiting.js';
+import type { GuardrailConfig } from './spl-guardrails.js';
 import type { UsageLogConfig, UsageLogger, UsageLogRotateInterval } from './usage-log.js';
 
 dotenv.config({ path: ['.env.local', '.env'] });
@@ -17,7 +18,14 @@ export interface RuntimeConfig {
     rateLimitGlobalPerMinute?: number;
     rateLimitPerTool: Record<string, number>;
     usageLog: UsageLogConfig;
+    guardrails: GuardrailConfig;
 }
+
+const DEFAULT_GUARDRAIL_DENY_COMMANDS = [
+    'collect', 'delete', 'mcollect', 'fit', 'outputlookup', 'download', 'save',
+    'dbxoutput', 'lookup2', 'fromes', 'fromkafkapy', 'rest', 'dbxlookup',
+    'dbxquery', 'dbxexec', 'ldapsearch', 'ldapfilter', 'ldapgroup', 'ldapfetch', 'history'
+];
 
 export interface RequestMeta {
     source: 'stdio' | 'http';
@@ -127,6 +135,101 @@ function parsePerToolRateLimits(rawValue: string | undefined): Record<string, nu
     }));
 }
 
+function parseJsonEnv(rawValue: string | undefined, variableName: string, fallback: unknown): unknown {
+    if (typeof rawValue === 'undefined' || rawValue.trim() === '') return fallback;
+    try {
+        return JSON.parse(rawValue);
+    } catch (error: any) {
+        throw new Error(`${variableName} 必须是合法 JSON: ${error?.message || error}`);
+    }
+}
+
+function parseStringArrayEnv(rawValue: string | undefined, variableName: string, fallback: string[]): string[] {
+    const parsed = parseJsonEnv(rawValue, variableName, fallback);
+    if (!Array.isArray(parsed) || !parsed.every((item) => typeof item === 'string')) {
+        throw new Error(`${variableName} 必须是 JSON 字符串数组`);
+    }
+    return [...new Set(parsed.map((item) => item.trim().toLowerCase()).filter(Boolean))];
+}
+
+function parseScoreMapEnv(rawValue: string | undefined): Record<string, number> {
+    const parsed = parseJsonEnv(rawValue, 'MCP_GUARDRAIL_RISK_RULE_OVERRIDES', {});
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('MCP_GUARDRAIL_RISK_RULE_OVERRIDES 必须是 JSON 对象');
+    }
+    return Object.fromEntries(Object.entries(parsed).map(([rawName, rawScore]) => {
+        const name = rawName.trim().toLowerCase();
+        if (!name || typeof rawScore !== 'number' || !Number.isInteger(rawScore) || rawScore < 0) {
+            throw new Error(`MCP_GUARDRAIL_RISK_RULE_OVERRIDES 中 ${rawName} 必须是非负整数`);
+        }
+        return [name, rawScore];
+    }));
+}
+
+function parseRiskThreshold(rawValue: string | undefined, fallback: number, variableName: string): number {
+    const value = parseIntegerEnv(rawValue, fallback, variableName);
+    if (value < 0 || value > 100) throw new Error(`${variableName} 必须在 0 到 100 之间`);
+    return value;
+}
+
+function parseGuardrailConfig(env: NodeJS.ProcessEnv): GuardrailConfig {
+    const mode = (env.MCP_GUARDRAIL_ENFORCE_MODE || 'audit').trim().toLowerCase();
+    if (mode !== 'audit' && mode !== 'enforce') {
+        throw new Error('MCP_GUARDRAIL_ENFORCE_MODE 仅支持 audit 或 enforce');
+    }
+    const masks = parseStringArrayEnv(
+        env.MCP_GUARDRAIL_SANITIZE_MASKS,
+        'MCP_GUARDRAIL_SANITIZE_MASKS',
+        ['credit_card', 'ssn']
+    );
+    const unknownMasks = masks.filter((item) => !['credit_card', 'ssn'].includes(item));
+    if (unknownMasks.length) throw new Error(`不支持的脱敏器: ${unknownMasks.join(', ')}`);
+
+    const customRaw = parseJsonEnv(env.MCP_GUARDRAIL_SANITIZE_CUSTOM_PATTERNS, 'MCP_GUARDRAIL_SANITIZE_CUSTOM_PATTERNS', []);
+    if (!Array.isArray(customRaw)) throw new Error('MCP_GUARDRAIL_SANITIZE_CUSTOM_PATTERNS 必须是 JSON 数组');
+    const customPatterns = customRaw.map((item: any, index) => {
+        if (!item || typeof item !== 'object' || typeof item.pattern !== 'string' || !item.pattern) {
+            throw new Error(`MCP_GUARDRAIL_SANITIZE_CUSTOM_PATTERNS 第 ${index + 1} 项缺少 pattern`);
+        }
+        try {
+            return { pattern: new RegExp(item.pattern, 'g'), replacement: String(item.replacement ?? '') };
+        } catch (error: any) {
+            throw new Error(`无效的自定义脱敏正则 ${item.pattern}: ${error?.message || error}`);
+        }
+    });
+
+    const execTimeoutSeconds = parseIntegerEnv(
+        env.MCP_GUARDRAIL_EXEC_TIMEOUT_SECONDS,
+        60,
+        'MCP_GUARDRAIL_EXEC_TIMEOUT_SECONDS'
+    );
+    const maxEvents = parseIntegerEnv(env.MCP_GUARDRAIL_MAX_EVENTS, 1000, 'MCP_GUARDRAIL_MAX_EVENTS');
+    if (execTimeoutSeconds <= 0 || maxEvents <= 0) {
+        throw new Error('MCP_GUARDRAIL_EXEC_TIMEOUT_SECONDS 和 MCP_GUARDRAIL_MAX_EVENTS 必须是正整数');
+    }
+    const safeTimerange = (env.MCP_GUARDRAIL_SAFE_TIMERANGE || '24h').trim().toLowerCase();
+    if (!safeTimerange) throw new Error('MCP_GUARDRAIL_SAFE_TIMERANGE 不能为空');
+
+    return {
+        enabled: parseBooleanEnv(env.MCP_GUARDRAILS_ENABLED, false),
+        mode,
+        denyCommands: new Set(parseStringArrayEnv(
+            env.MCP_GUARDRAIL_DENY_COMMANDS,
+            'MCP_GUARDRAIL_DENY_COMMANDS',
+            DEFAULT_GUARDRAIL_DENY_COMMANDS
+        )),
+        alertThreshold: parseRiskThreshold(env.MCP_GUARDRAIL_RISK_ALERT_THRESHOLD, 50, 'MCP_GUARDRAIL_RISK_ALERT_THRESHOLD'),
+        rejectThreshold: parseRiskThreshold(env.MCP_GUARDRAIL_RISK_REJECT_THRESHOLD, 100, 'MCP_GUARDRAIL_RISK_REJECT_THRESHOLD'),
+        ruleOverrides: parseScoreMapEnv(env.MCP_GUARDRAIL_RISK_RULE_OVERRIDES),
+        safeTimerange,
+        execTimeoutSeconds,
+        maxEvents,
+        sanitizeEnabled: parseBooleanEnv(env.MCP_GUARDRAIL_SANITIZE_ENABLED, true),
+        sanitizeMasks: new Set(masks),
+        sanitizeCustomPatterns: customPatterns
+    };
+}
+
 export function getRuntimeConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig {
     const logeaseBaseURL = env.LOGEASE_BASE_URL ?? 'https://127.0.0.1:8090';
     const logeaseUsername = env.LOGEASE_USERNAME;
@@ -140,6 +243,7 @@ export function getRuntimeConfig(env: NodeJS.ProcessEnv = process.env): RuntimeC
     );
     const rateLimitPerTool = parsePerToolRateLimits(env.MCP_RATE_LIMIT_PER_TOOL);
     const usageLog = parseUsageLogConfig(env);
+    const guardrails = parseGuardrailConfig(env);
 
     if (!env.LOGEASE_BASE_URL) {
         console.warn('LOGEASE_BASE_URL 未设置，默认使用 https://127.0.0.1:8090');
@@ -154,7 +258,8 @@ export function getRuntimeConfig(env: NodeJS.ProcessEnv = process.env): RuntimeC
         httpBasePath,
         rateLimitGlobalPerMinute,
         rateLimitPerTool,
-        usageLog
+        usageLog,
+        guardrails
     };
 }
 
@@ -169,7 +274,10 @@ export function createHttpClientConfig(context: ServerContext): HttpClientConfig
         baseURL: context.runtimeConfig.logeaseBaseURL,
         headers: context.authContext.headers,
         httpsAgent: createHttpsAgent(context.runtimeConfig),
-        username: context.authContext.username
+        username: context.authContext.username,
+        timeoutMs: context.runtimeConfig.guardrails.enabled && context.runtimeConfig.guardrails.mode === 'enforce'
+            ? context.runtimeConfig.guardrails.execTimeoutSeconds * 1000
+            : undefined
     };
 }
 

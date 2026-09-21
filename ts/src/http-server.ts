@@ -158,6 +158,13 @@ export function createHttpApp() {
                 enabled: rateLimiter.enabled,
                 global_per_minute: runtimeConfig.rateLimitGlobalPerMinute ?? null,
                 per_tool_count: Object.keys(runtimeConfig.rateLimitPerTool).length
+            },
+            guardrails: {
+                enabled: runtimeConfig.guardrails.enabled,
+                mode: runtimeConfig.guardrails.mode,
+                alert_threshold: runtimeConfig.guardrails.alertThreshold,
+                reject_threshold: runtimeConfig.guardrails.rejectThreshold,
+                max_events: runtimeConfig.guardrails.maxEvents
             }
         });
     });

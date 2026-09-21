@@ -1,16 +1,12 @@
 # Changelog
 
-## Unreleased
-
-### Added
-
-- TypeScript、Python 的 Streamable HTTP 网关新增本地 JSON Lines 工具调用日志，支持按文件大小或按天/小时轮转、保留份数清理，并记录成功、错误及限流调用；日志不包含工具参数和结果正文。
-
 ## 0.3.1
 
 ### Added
 
-- Streamable HTTP 网关新增固定分钟窗口的工具调用限流，支持全局上限与单工具上限；TypeScript、Python 两版配置和错误返回保持一致。
+- Streamable HTTP 网关新增固定分钟窗口的工具调用限流，支持全局上限与单工具上限。
+- TypeScript、Python 的 Streamable HTTP 网关新增本地 JSON Lines 工具调用日志，支持按文件大小或按天/小时轮转、保留份数清理，并记录成功、错误及限流调用；日志不包含工具参数和结果正文。
+- TypeScript、Python 新增统一 SPL 安全评分与执行护栏：递归识别嵌套危险命令，支持 audit/enforce、评分阈值、执行超时、返回条数上限、PII/自定义正则脱敏，并在共享 resource 落盘前应用相同保护。
 
 ## 0.3.0
 

@@ -9,6 +9,7 @@ from typing import Any
 from uuid import uuid4
 
 from .config import RuntimeConfig
+from .spl_guardrails import apply_output_guardrails, guardrail_config_from_runtime
 from .types import SharedResultEnvelope, SharedResultKind, SharedResultSummary
 
 _RESOURCE_PROTOCOL = "logease"
@@ -46,6 +47,26 @@ def save_shared_result(
     cleanup_expired_results(runtime_config)
     _ensure_store_dir(runtime_config)
 
+    guardrail_config = guardrail_config_from_runtime(runtime_config)
+    payload, sanitized_values, truncated_events, truncated_paths = apply_output_guardrails(
+        payload,
+        guardrail_config,
+    )
+    source_query, source_query_sanitized, _, _ = apply_output_guardrails(
+        source_query,
+        guardrail_config,
+    )
+    sanitized_values += source_query_sanitized
+    summary_payload, _, _, _ = apply_output_guardrails(asdict(summary), guardrail_config)
+    summary = SharedResultSummary(**summary_payload)
+    if isinstance(payload, dict) and (sanitized_values or truncated_events):
+        payload = dict(payload)
+        payload["guardrail_output"] = {
+            "sanitized_values": sanitized_values,
+            "truncated_events": truncated_events,
+            "truncated_paths": truncated_paths,
+        }
+
     resolved_ttl = ttl_seconds if ttl_seconds and ttl_seconds > 0 else runtime_config.log_tools_result_ttl_seconds
     handle = uuid4().hex
     created_at = _utcnow()
@@ -73,7 +94,7 @@ def save_shared_result(
         payload_bytes=payload_bytes,
         summary=summary,
         payload=payload,
-        source_query=source_query,
+        source_query=source_query if isinstance(source_query, str) else None,
         time_range=time_range,
         index_name=index_name,
         upstream_sid=upstream_sid,

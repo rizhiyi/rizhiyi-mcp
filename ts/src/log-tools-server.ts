@@ -638,7 +638,8 @@ async function formatResult(result: any, params: any = {}): Promise<any> {
                 sourceQuery: params.query,
                 timeRange: resolvePrimaryTimeRange(params),
                 upstreamSid: extractSidFromPayload(payload),
-                ttlSeconds: Number(params.result_ttl_seconds)
+                ttlSeconds: Number(params.result_ttl_seconds),
+                guardrailConfig: context.runtimeConfig.guardrails
             }, sharedResultStoreConfig);
 
             return formatImmediateSuccess(buildSharedResourceResponse(envelope), {

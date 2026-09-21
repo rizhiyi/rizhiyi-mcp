@@ -34,6 +34,9 @@ class UsageLogEntry:
     duration_ms: int
     user: str | None
     error_code: str | None
+    guardrail_action: str | None = None
+    guardrail_risk_score: int | None = None
+    guardrail_denied_commands: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -188,6 +191,7 @@ def create_usage_log_entry(
     duration_ms: int,
     user: str | None,
     error_code: str | None,
+    guardrail: dict | None = None,
     now: datetime | None = None,
 ) -> UsageLogEntry:
     timestamp = UsageLogger._ensure_local(now or datetime.now().astimezone())
@@ -203,4 +207,13 @@ def create_usage_log_entry(
         duration_ms=max(0, duration_ms),
         user=user,
         error_code=error_code,
+        guardrail_action=str(guardrail.get("action")) if guardrail else None,
+        guardrail_risk_score=(
+            int(guardrail.get("risk_score"))
+            if guardrail and isinstance(guardrail.get("risk_score"), int)
+            else None
+        ),
+        guardrail_denied_commands=tuple(
+            str(item) for item in (guardrail.get("denied_commands") or [])
+        ) if guardrail else (),
     )

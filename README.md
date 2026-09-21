@@ -422,6 +422,33 @@ MCP_RATE_LIMIT_PER_TOOL='{"log_search_sheet":120,"dashboard/create_dashboard_fro
 
 ***
 
+## SPL 安全评分与执行护栏
+
+TypeScript、Python 两套服务均支持统一的 SPL 执行前检查和返回前保护。默认关闭；建议先用 `audit` 灰度观察，再切换到 `enforce`。
+
+```bash
+MCP_GUARDRAILS_ENABLED=true
+MCP_GUARDRAIL_ENFORCE_MODE=audit
+MCP_GUARDRAIL_SAFE_TIMERANGE=24h
+MCP_GUARDRAIL_RISK_ALERT_THRESHOLD=50
+MCP_GUARDRAIL_RISK_REJECT_THRESHOLD=100
+MCP_GUARDRAIL_EXEC_TIMEOUT_SECONDS=60
+MCP_GUARDRAIL_MAX_EVENTS=1000
+```
+
+护栏会递归检查普通管道、`[[ ... ]]` / `[ ... ]` 子搜索、`map search="..."`，以及 dashboard、告警和 ChatSPL 知识规则中的嵌套 query：
+
+- 默认禁止写入、删除、导出、自定义执行和外部访问命令，如 `delete`、`collect`、`outputlookup`、`lookup2`、`rest`、`dbxquery`、`history`。
+- 对 `transaction`、`map`、`join`、`append`、无限额子搜索、宽索引范围和超长时间窗累计风险分。
+- `audit` 模式返回结构化 `guardrail` 评分并写入审计元数据，但不阻止执行；`enforce` 模式会在命中禁止命令或达到已启用的拒绝阈值时返回 `SPL_GUARDRAIL_BLOCKED`。
+- `MCP_GUARDRAIL_RISK_REJECT_THRESHOLD=100` 表示仅按禁止命令拦截，不启用纯评分自动拒绝；设置为 `0-99` 可启用评分阈值拒绝。
+- 返回结果会按配置递归脱敏信用卡号、SSN 和自定义正则，并把数组截断到 `MCP_GUARDRAIL_MAX_EVENTS`；共享 resource 在落盘前执行相同保护。
+- `GET /healthz` 的 `guardrails` 字段会显示开关、模式、评分阈值和事件上限。
+
+完整变量和默认禁止命令见 `python/.env.example`、`ts/.env.example`；规则依据见 `docs/research-spl-guardrails-risky-commands.md`。
+
+***
+
 ## 本地工具调用日志
 
 Streamable HTTP 网关会把每次工具调用写成一行 JSON，默认存放在 `./logs/mcp-server-YYYYMMDD.log`。日志只包含调用元数据（时间、session、server、工具名、状态、耗时、用户和错误码），不记录工具参数、查询正文或返回结果。
@@ -434,7 +461,7 @@ RIZHIYI_LOG_ROTATE_INTERVAL=1d     # 按时间轮转时支持 1d / 1h
 RIZHIYI_LOG_KEEP_FILES=7           # 包含当前文件在内的保留份数
 ```
 
-同一天内发生多次轮转时，文件依次命名为 `mcp-server-YYYYMMDD.1.log`、`mcp-server-YYYYMMDD.2.log`。超过保留份数后自动删除最旧文件；被限流的调用记录为 `status=ok-limited` 和 `error_code=RATE_LIMIT_EXCEEDED`。
+同一天内发生多次轮转时，文件依次命名为 `mcp-server-YYYYMMDD.1.log`、`mcp-server-YYYYMMDD.2.log`。超过保留份数后自动删除最旧文件；被限流的调用记录为 `status=ok-limited` 和 `error_code=RATE_LIMIT_EXCEEDED`。启用 SPL 护栏后，日志还会记录 action、风险分和命中的禁止命令，但仍不会记录查询正文。
 
 ***
 

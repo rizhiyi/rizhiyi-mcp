@@ -321,6 +321,13 @@ def create_http_app(runtime_config: RuntimeConfig | None = None) -> FastAPI:
                 "global_per_minute": settings.mcp_rate_limit_global_per_minute,
                 "per_tool_count": len(settings.mcp_rate_limit_per_tool),
             },
+            "guardrails": {
+                "enabled": settings.mcp_guardrails_enabled,
+                "mode": settings.mcp_guardrail_enforce_mode,
+                "alert_threshold": settings.mcp_guardrail_risk_alert_threshold,
+                "reject_threshold": settings.mcp_guardrail_risk_reject_threshold,
+                "max_events": settings.mcp_guardrail_max_events,
+            },
         }
 
     @app.middleware("http")

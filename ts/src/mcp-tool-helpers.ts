@@ -5,6 +5,14 @@ import { z } from 'zod';
 import { deriveToolAnnotations } from './tool-annotations.js';
 import type { ToolDefinition } from './types.js';
 import { createUsageLogEntry, type UsageLogStatus } from './usage-log.js';
+import {
+    applyOutputGuardrails,
+    assessGeneratedSpl,
+    assessToolArguments,
+    guardrailConfigFromRuntime,
+    GuardrailAssessment,
+    mergeAssessments
+} from './spl-guardrails.js';
 
 type JsonSchema = {
     type?: string;
@@ -164,23 +172,110 @@ export function registerToolDefinitions(
                     await writeUsageLogSafely(context, tool.name, 'ok-limited', startedAt, payload.error_code);
                     return result;
                 }
+                let activeAssessment: GuardrailAssessment | undefined;
                 try {
-                    const result = await handler(args as Record<string, unknown>, extra);
+                    const guardrailConfig = context
+                        ? guardrailConfigFromRuntime(context.runtimeConfig)
+                        : undefined;
+                    let assessment = guardrailConfig
+                        ? assessToolArguments(
+                            guardrailConfig,
+                            context?.requestMeta.routeName || 'unknown',
+                            tool.name,
+                            args as Record<string, unknown>
+                        )
+                        : undefined;
+                    activeAssessment = assessment;
+
+                    if (assessment?.shouldBlock) {
+                        const result = buildGuardrailBlockedResult(assessment);
+                        await writeUsageLogSafely(
+                            context,
+                            tool.name,
+                            'error',
+                            startedAt,
+                            'SPL_GUARDRAIL_BLOCKED',
+                            assessment.toDetails()
+                        );
+                        return result;
+                    }
+
+                    const invocation = Promise.resolve(handler(args as Record<string, unknown>, extra));
+                    let result: any;
+                    if (
+                        guardrailConfig?.enabled
+                        && guardrailConfig.mode === 'enforce'
+                        && (assessment?.queries.length || context?.requestMeta.routeName === 'log-tools')
+                    ) {
+                        result = await withTimeout(
+                            invocation,
+                            guardrailConfig.execTimeoutSeconds * 1000,
+                            guardrailConfig.execTimeoutSeconds
+                        );
+                    } else {
+                        result = await invocation;
+                    }
+
+                    if (guardrailConfig && assessment) {
+                        const generatedAssessment = assessGeneratedSpl(
+                            guardrailConfig,
+                            context?.requestMeta.routeName || 'unknown',
+                            tool.name,
+                            result?.structuredContent
+                        );
+                        assessment = mergeAssessments(assessment, generatedAssessment);
+                        activeAssessment = assessment;
+                        if (generatedAssessment.shouldBlock) {
+                            result = buildGuardrailBlockedResult(assessment);
+                        } else {
+                            result = applyGuardrailsToResult(result, assessment, guardrailConfig);
+                        }
+                    }
                     await writeUsageLogSafely(
                         context,
                         tool.name,
                         result?.isError ? 'error' : 'ok',
                         startedAt,
-                        extractErrorCode(result)
+                        extractErrorCode(result),
+                        result?.structuredContent?.guardrail
                     );
                     return result;
                 } catch (error: any) {
+                    if (error?.code === 'SPL_EXECUTION_TIMEOUT') {
+                        const guardrail = activeAssessment?.toDetails();
+                        const payload = {
+                            error_code: 'SPL_EXECUTION_TIMEOUT',
+                            message: error.message,
+                            suggestion: '请缩小 time_range、收紧查询条件或拆分查询后重试。',
+                            retryable: true,
+                            details: {
+                                timeout_seconds: error.timeoutSeconds,
+                                guardrail
+                            },
+                            guardrail
+                        };
+                        const result = {
+                            content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }],
+                            structuredContent: payload,
+                            isError: true
+                        };
+                        await writeUsageLogSafely(
+                            context,
+                            tool.name,
+                            'error',
+                            startedAt,
+                            payload.error_code,
+                            guardrail
+                        );
+                        return result;
+                    }
                     await writeUsageLogSafely(
                         context,
                         tool.name,
                         'error',
                         startedAt,
-                        extractThrownErrorCode(error)
+                        extractThrownErrorCode(error),
+                        activeAssessment?.toDetails()
                     );
                     throw error;
                 }
@@ -194,7 +289,8 @@ async function writeUsageLogSafely(
     toolName: string,
     status: UsageLogStatus,
     startedAt: number,
-    errorCode?: string
+    errorCode?: string,
+    guardrail?: Record<string, any>
 ): Promise<void> {
     if (!context?.usageLogger) {
         return;
@@ -210,10 +306,81 @@ async function writeUsageLogSafely(
             status,
             duration_ms: Math.max(0, now.getTime() - startedAt),
             user: context.authContext.username || null,
-            error_code: errorCode || null
+            error_code: errorCode || null,
+            guardrail_action: guardrail?.action || null,
+            guardrail_risk_score: Number.isInteger(guardrail?.risk_score) ? Number(guardrail?.risk_score) : null,
+            guardrail_denied_commands: Array.isArray(guardrail?.denied_commands)
+                ? guardrail.denied_commands.map(String)
+                : []
         }, now));
     } catch (error) {
         console.error('写入 MCP 使用日志失败:', error);
+    }
+}
+
+function buildGuardrailBlockedResult(assessment: GuardrailAssessment): any {
+    const details = assessment.toDetails();
+    const payload = {
+        error_code: 'SPL_GUARDRAIL_BLOCKED',
+        message: assessment.message,
+        suggestion: '请移除写入、删除、导出或外部访问命令，缩小时间范围，并为子搜索增加显式限额后重试。',
+        retryable: false,
+        details,
+        guardrail: details
+    };
+    return {
+        content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }],
+        structuredContent: payload,
+        isError: true
+    };
+}
+
+function applyGuardrailsToResult(
+    result: any,
+    assessment: GuardrailAssessment,
+    config: ReturnType<typeof guardrailConfigFromRuntime>
+): any {
+    if (!config.enabled || !result) return result;
+    const structured = applyOutputGuardrails(result.structuredContent, config);
+    assessment.sanitizedValues += structured.sanitizedValues;
+    assessment.truncatedEvents += structured.truncatedEvents;
+    assessment.truncatedPaths.push(...structured.truncatedPaths);
+
+    const structuredContent: Record<string, unknown> = structured.data && typeof structured.data === 'object' && !Array.isArray(structured.data)
+        ? { ...(structured.data as Record<string, unknown>) }
+        : { value: structured.data ?? null };
+
+    let content: any[];
+    if (structured.truncatedEvents > 0) {
+        content = [{ type: 'text', text: JSON.stringify(structuredContent, null, 2) }];
+    } else {
+        const guardedContent = applyOutputGuardrails(result.content, config);
+        content = Array.isArray(guardedContent.data) ? guardedContent.data : [];
+    }
+
+    if (assessment.queries.length > 0 || assessment.sanitizedValues > 0 || assessment.truncatedEvents > 0) {
+        structuredContent.guardrail = assessment.toDetails();
+        content = [...content, { type: 'text', text: JSON.stringify({ guardrail: assessment.toDetails() }, null, 2) }];
+    }
+    return { ...result, structuredContent, content };
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutSeconds: number): Promise<T> {
+    let timer: NodeJS.Timeout | undefined;
+    try {
+        return await Promise.race([
+            promise,
+            new Promise<T>((_resolve, reject) => {
+                timer = setTimeout(() => {
+                    const error: any = new Error(`SPL 工具执行超过护栏时长上限 ${timeoutSeconds} 秒。`);
+                    error.code = 'SPL_EXECUTION_TIMEOUT';
+                    error.timeoutSeconds = timeoutSeconds;
+                    reject(error);
+                }, timeoutMs);
+            })
+        ]);
+    } finally {
+        if (timer) clearTimeout(timer);
     }
 }
 
