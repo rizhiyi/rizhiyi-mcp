@@ -647,8 +647,7 @@ export class AnomalyDetectionModule {
             topk?: number,
             query?: string,
             time_range_a?: string,
-            time_range_b?: string,
-            index_name?: string
+            time_range_b?: string
         } = {}
     ): Promise<ApiResponse<PeriodComparisonResult>> {
         try {
@@ -697,7 +696,6 @@ export class AnomalyDetectionModule {
                     query, 
                     options.time_range_a || '', 
                     options.time_range_b || '', 
-                    options.index_name || 'yotta', 
                     compare_fields, 
                     topk
                 );
@@ -740,7 +738,6 @@ export class AnomalyDetectionModule {
         query?: string;
         time_range_a: string;
         time_range_b: string;
-        index_name?: string;
         bucket?: string;
         compare_fields?: string[];
         topk?: number;
@@ -751,7 +748,6 @@ export class AnomalyDetectionModule {
                 query = '*',
                 time_range_a,
                 time_range_b,
-                index_name = 'yotta',
                 bucket,
                 compare_fields = [],
                 topk = 10,
@@ -762,14 +758,12 @@ export class AnomalyDetectionModule {
                 this.timechartQuery.execute({
                     query,
                     time_range: time_range_a,
-                    index_name,
                     bucket,
                     metric_field
                 }),
                 this.timechartQuery.execute({
                     query,
                     time_range: time_range_b,
-                    index_name,
                     bucket,
                     metric_field
                 })
@@ -827,7 +821,7 @@ export class AnomalyDetectionModule {
             let fieldDifferences: any[] = [];
             if (compare_fields.length > 0) {
                 fieldDifferences = await this.compareFields(
-                    query, time_range_a, time_range_b, index_name, compare_fields, topk
+                    query, time_range_a, time_range_b, compare_fields, topk
                 );
             }
 
@@ -870,7 +864,6 @@ export class AnomalyDetectionModule {
         query: string,
         timeRangeA: string,
         timeRangeB: string,
-        indexName: string,
         fields: string[],
         topk: number
     ): Promise<any[]> {
@@ -879,8 +872,8 @@ export class AnomalyDetectionModule {
         for (const field of fields) {
             // 获取两个时间段的字段值分布
             const [distA, distB] = await Promise.all([
-                this.getFieldDistribution(query, timeRangeA, indexName, field),
-                this.getFieldDistribution(query, timeRangeB, indexName, field)
+                this.getFieldDistribution(query, timeRangeA, field),
+                this.getFieldDistribution(query, timeRangeB, field)
             ]);
 
             const differences = this.calculateDistributionDifferences(distA, distB, topk);
@@ -908,7 +901,6 @@ export class AnomalyDetectionModule {
     private async getFieldDistribution(
         query: string,
         timeRange: string,
-        indexName: string,
         field: string,
         limit: number = 20
     ): Promise<Record<string, number>> {
@@ -916,7 +908,6 @@ export class AnomalyDetectionModule {
             field,
             query,
             timeRange,
-            indexName,
             limit
         );
 
@@ -942,7 +933,6 @@ export class AnomalyDetectionModule {
     async executeCorrelationAnalysis(params: {
         query?: string;
         time_range: string;
-        index_name?: string;
         fields?: string[];
         mode?: 'lagged_pearson' | 'fp_growth' | 'auto';
         bucket?: string;
@@ -957,7 +947,6 @@ export class AnomalyDetectionModule {
             const {
                 query = '*',
                 time_range,
-                index_name = 'yotta',
                 fields = [],
                 mode = 'auto',
                 bucket,
@@ -982,7 +971,6 @@ export class AnomalyDetectionModule {
                 const searchResult = await this.logSearch.executeLogSearchSheet(
                     query,
                     time_range,
-                    index_name,
                     { page: 0, size: sample_size },
                     fields
                 );
@@ -1022,7 +1010,6 @@ export class AnomalyDetectionModule {
                 return await this.executeLaggedPearsonCorrelation({
                     query,
                     time_range,
-                    index_name,
                     fields,
                     fieldTypes,
                     requested_mode: mode,
@@ -1036,7 +1023,6 @@ export class AnomalyDetectionModule {
             return this.executeFpGrowthCorrelation({
                 query,
                 time_range,
-                index_name,
                 fields,
                 fieldTypes,
                 hits,
@@ -1178,7 +1164,6 @@ export class AnomalyDetectionModule {
     private async executeLaggedPearsonCorrelation(params: {
         query: string;
         time_range: string;
-        index_name: string;
         fields: string[];
         fieldTypes: Array<{
             field: string;
@@ -1193,13 +1178,12 @@ export class AnomalyDetectionModule {
         limit: number;
         sample_size: number;
     }): Promise<ApiResponse<CorrelationResult>> {
-        const { query, time_range, index_name, fields, fieldTypes, requested_mode, bucket, max_lag, limit, sample_size } = params;
+        const { query, time_range, fields, fieldTypes, requested_mode, bucket, max_lag, limit, sample_size } = params;
         const timechartResults = await Promise.all(
             fields.map((field) =>
                 this.timechartQuery.execute({
                     query,
                     time_range,
-                    index_name,
                     bucket,
                     metric_field: field
                 })
@@ -1290,7 +1274,6 @@ export class AnomalyDetectionModule {
     private executeFpGrowthCorrelation(params: {
         query: string;
         time_range: string;
-        index_name: string;
         fields: string[];
         fieldTypes: Array<{
             field: string;
@@ -1781,7 +1764,6 @@ export class AnomalyDetectionModule {
         query?: string;
         anomaly_window: string;
         baseline_window: string;
-        index_name?: string;
         candidate_fields?: string[];
         significance_threshold?: number;
         topk?: number;
@@ -1797,7 +1779,6 @@ export class AnomalyDetectionModule {
                 query = '*',
                 anomaly_window,
                 baseline_window,
-                index_name = 'yotta',
                 candidate_fields = [],
                 significance_threshold = 0.1,
                 topk = 5,
@@ -1818,8 +1799,8 @@ export class AnomalyDetectionModule {
                             fields: this.inferFieldsFromHits(anomalyInputRows)
                         }
                     })
-                    : this.logSearch.executeListFields(query, anomaly_window, index_name),
-                this.logSearch.executeListFields(query, baseline_window, index_name),
+                    : this.logSearch.executeListFields(query, anomaly_window),
+                this.logSearch.executeListFields(query, baseline_window),
                 anomalyInputRows.length > 0
                     ? Promise.resolve<ApiResponse<{ total: number }>>({
                         status: 200,
@@ -1827,8 +1808,8 @@ export class AnomalyDetectionModule {
                             total: anomalyInputRows.length
                         }
                     })
-                    : this.logSearch.executeLogSearchSheet(query, anomaly_window, index_name, { page: 0, size: 1 }),
-                this.logSearch.executeLogSearchSheet(query, baseline_window, index_name, { page: 0, size: 1 })
+                    : this.logSearch.executeLogSearchSheet(query, anomaly_window, { page: 0, size: 1 }),
+                this.logSearch.executeLogSearchSheet(query, baseline_window, { page: 0, size: 1 })
             ]);
 
             if (anomalyFields.error || baselineFields.error) {
@@ -1849,8 +1830,8 @@ export class AnomalyDetectionModule {
             const distributionDrift: DistributionDriftItem[] = [];
             for (const field of fieldsToAnalyze) {
                 const [baselineCounts, anomalyCounts] = await Promise.all([
-                    this.getFieldDistribution(query, baseline_window, index_name, field, field_value_limit),
-                    this.getFieldDistribution(query, anomaly_window, index_name, field, field_value_limit)
+                    this.getFieldDistribution(query, baseline_window, field, field_value_limit),
+                    this.getFieldDistribution(query, anomaly_window, field, field_value_limit)
                 ]);
 
                 const drift = this.analyzeFieldDistributionDrift(
@@ -1875,7 +1856,6 @@ export class AnomalyDetectionModule {
                 query,
                 anomaly_window,
                 baseline_window,
-                index_name,
                 fields: fieldsToAnalyze,
                 anomaly_hits: anomalyInputRows.length > 0 ? anomalyInputRows : undefined,
                 sample_size,
@@ -2061,7 +2041,6 @@ export class AnomalyDetectionModule {
         query: string;
         anomaly_window: string;
         baseline_window: string;
-        index_name: string;
         fields: string[];
         anomaly_hits?: Array<Record<string, any>>;
         sample_size: number;
@@ -2074,7 +2053,6 @@ export class AnomalyDetectionModule {
             query,
             anomaly_window,
             baseline_window,
-            index_name,
             fields,
             anomaly_hits,
             sample_size,
@@ -2096,12 +2074,12 @@ export class AnomalyDetectionModule {
                     hits: anomaly_hits
                 }
             })
-            : this.logSearch.executeLogSearchSheet(query, anomaly_window, index_name, { page: 0, size: sample_size }, sampledFields);
+            : this.logSearch.executeLogSearchSheet(query, anomaly_window, { page: 0, size: sample_size }, sampledFields);
         const [anomalySample, baselineSample, anomalyTotal, baselineTotal] = await Promise.all([
             anomalySamplePromise,
-            this.logSearch.executeLogSearchSheet(query, baseline_window, index_name, { page: 0, size: sample_size }, sampledFields),
-            this.getExactQueryCount(query, anomaly_window, index_name),
-            this.getExactQueryCount(query, baseline_window, index_name)
+            this.logSearch.executeLogSearchSheet(query, baseline_window, { page: 0, size: sample_size }, sampledFields),
+            this.getExactQueryCount(query, anomaly_window),
+            this.getExactQueryCount(query, baseline_window)
         ]);
 
         if (anomalySample.error || baselineSample.error || anomalyTotal <= 0 || baselineTotal <= 0) {
@@ -2163,8 +2141,8 @@ export class AnomalyDetectionModule {
         for (const candidate of preliminarySlices) {
             const sliceQuery = this.buildSliceQuery(query, candidate.terms);
             const [anomalyCount, baselineCount] = await Promise.all([
-                this.getExactQueryCount(sliceQuery, anomaly_window, index_name),
-                this.getExactQueryCount(sliceQuery, baseline_window, index_name)
+                this.getExactQueryCount(sliceQuery, anomaly_window),
+                this.getExactQueryCount(sliceQuery, baseline_window)
             ]);
 
             const anomalySupport = anomalyTotal > 0 ? anomalyCount / anomalyTotal : 0;
@@ -2261,11 +2239,10 @@ export class AnomalyDetectionModule {
         return Number((anomalySupport * Math.log2(lift + 1) * depth).toFixed(6));
     }
 
-    private async getExactQueryCount(query: string, timeRange: string, indexName: string): Promise<number> {
+    private async getExactQueryCount(query: string, timeRange: string): Promise<number> {
         const countResult = await this.logSearch.executeLogSearchSheet(
             `${query} | stats count() as count`,
             timeRange,
-            indexName,
             { page: 0, size: 1 },
             ['count']
         );
@@ -2338,7 +2315,6 @@ export class AnomalyDetectionModule {
     async executeAnomalyPoints(params: {
         query?: string;
         time_range: string;
-        index_name?: string;
         bucket?: string;
         metric_field?: string;
         method?: string;
@@ -2350,7 +2326,6 @@ export class AnomalyDetectionModule {
         return statistics.executeAnomalyPoints(
             params.query || '*',
             params.time_range,
-            params.index_name || 'yotta',
             params.bucket,
             params.metric_field,
             params.method || 'zscore',
@@ -2365,7 +2340,6 @@ export class AnomalyDetectionModule {
     async executeTrendSummary(params: {
         query?: string;
         time_range: string;
-        index_name?: string;
         bucket?: string;
         metric_field?: string;
         limit_peaks?: number;
@@ -2375,7 +2349,6 @@ export class AnomalyDetectionModule {
         return statistics.executeTrendSummary(
             params.query || '*',
             params.time_range,
-            params.index_name || 'yotta',
             params.bucket,
             params.metric_field,
             params.limit_peaks || 3
@@ -2388,7 +2361,6 @@ export class AnomalyDetectionModule {
     async executeDataOverview(params: {
         query?: string;
         time_range: string;
-        index_name?: string;
         metric_field?: string;
         percentiles?: number[];
     }): Promise<ApiResponse<any>> {
@@ -2397,7 +2369,6 @@ export class AnomalyDetectionModule {
         return statistics.executeDataOverview(
             params.query || '*',
             params.time_range,
-            params.index_name || 'yotta',
             params.metric_field,
             params.percentiles || [50, 90, 99]
         );
@@ -2409,7 +2380,6 @@ export class AnomalyDetectionModule {
     async executeTrendForecast(params: {
         query?: string;
         time_range: string;
-        index_name?: string;
         bucket?: string;
         horizon?: number;
         method?: string;
@@ -2429,7 +2399,6 @@ export class AnomalyDetectionModule {
     async executeAnomalyAlert(params: {
         query?: string;
         time_range: string;
-        index_name?: string;
         bucket?: string;
         method?: string;
         threshold?: number;

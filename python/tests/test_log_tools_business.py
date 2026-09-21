@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+import unittest
 from unittest.mock import patch
 
 from rizhiyi_mcp.log_tools_business import LogToolsBusinessService
@@ -51,6 +52,7 @@ class LogToolsBusinessGatewayTestCase(LogToolsHttpTestCase):
         async def fake_get(_self, path, *, params=None, headers=None):
             if path == "/api/v3/search/logreduce/":
                 self.assertEqual(params["query"], "status:error")
+                self.assertNotIn("index_name", params)
                 return api_response(status=200, data={"sid": "sid-1", "accepted": True})
             raise AssertionError(f"unexpected path: {path}")
 

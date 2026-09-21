@@ -372,7 +372,6 @@ export class StatisticsModule {
     async executeTrendSummary(
         query: string,
         timeRange: string,
-        indexName: string = "yotta",
         bucket?: string,
         metricField?: string,
         limitPeaks: number = 3
@@ -381,7 +380,6 @@ export class StatisticsModule {
             const result = await this.timechartQuery.execute({
                 query,
                 time_range: timeRange,
-                index_name: indexName,
                 bucket,
                 metric_field: metricField
             });
@@ -409,7 +407,6 @@ export class StatisticsModule {
     async executeAnomalyPoints(
         query: string,
         timeRange: string,
-        indexName: string = "yotta",
         bucket?: string,
         metricField?: string,
         method: string = 'zscore',
@@ -420,7 +417,6 @@ export class StatisticsModule {
             const result = await this.timechartQuery.execute({
                 query,
                 time_range: timeRange,
-                index_name: indexName,
                 bucket,
                 metric_field: metricField
             });
@@ -448,7 +444,6 @@ export class StatisticsModule {
     async executeDataOverview(
         query: string,
         timeRange: string,
-        indexName: string = "yotta",
         metricField?: string,
         percentiles: number[] = [50, 90, 99]
     ): Promise<ApiResponse<any>> {
@@ -457,7 +452,6 @@ export class StatisticsModule {
             const params = {
                 query,
                 time_range: timeRange,
-                index_name: indexName,
                 ...(metricField && { metric_field: metricField }),
                 percentiles: percentiles.join(',')
             };

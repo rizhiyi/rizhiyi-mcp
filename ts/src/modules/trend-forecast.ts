@@ -257,7 +257,6 @@ export class TrendForecastModule {
     async executeTrendForecast(params: {
         query?: string;
         time_range: string;
-        index_name?: string;
         bucket?: string;
         horizon?: number;
         method?: string;
@@ -270,7 +269,6 @@ export class TrendForecastModule {
             const {
                 query = '*',
                 time_range,
-                index_name = 'yotta',
                 bucket,
                 horizon = 12,
                 method = 'linear_regression',
@@ -283,7 +281,6 @@ export class TrendForecastModule {
             const result = await this.timechartQuery.execute({
                 query,
                 time_range,
-                index_name,
                 bucket,
                 metric_field
             });
@@ -316,7 +313,6 @@ export class TrendForecastModule {
     async executeAnomalyAlert(params: {
         query?: string;
         time_range: string;
-        index_name?: string;
         bucket?: string;
         method?: string;
         threshold?: number;
@@ -329,7 +325,6 @@ export class TrendForecastModule {
             const {
                 query = '*',
                 time_range,
-                index_name = 'yotta',
                 bucket,
                 method = 'prediction_band',
                 threshold = 3.0,
@@ -354,7 +349,6 @@ export class TrendForecastModule {
             const result = await this.client.get<any>('/api/v3/search/sheets/', {
                 query: tsQuery,
                 time_range,
-                index_name,
                 page: 0,
                 size: 100
             });

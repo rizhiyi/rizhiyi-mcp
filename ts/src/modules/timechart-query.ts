@@ -50,7 +50,6 @@ export class TimechartQueryModule {
             const {
                 query = '*',
                 time_range,
-                index_name = 'yotta',
                 bucket,
                 metric_field
             } = params;
@@ -61,7 +60,6 @@ export class TimechartQueryModule {
             const result = await this.client.get<any>('/api/v3/search/sheets/', {
                 query: query_executed,
                 time_range,
-                index_name,
                 page: 0,
                 size: 100
             });

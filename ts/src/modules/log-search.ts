@@ -25,7 +25,7 @@ export class LogSearchModule {
     /**
      * 生成精准溯源链接
      */
-    private generateQuickLinks(row: any, originalQuery: string, timeRange: string, indexName: string): Record<string, string> {
+    private generateQuickLinks(row: any, originalQuery: string, timeRange: string): Record<string, string> {
         const links: Record<string, string> = {};
         if (!this.baseURL) return links;
 
@@ -38,11 +38,6 @@ export class LogSearchModule {
         // 基础参数
         const baseParams = new URLSearchParams();
         baseParams.append('time_range', timeRange);
-        if (indexName) baseParams.append('index_name', indexName); // 注意：Web端参数可能不叫index_name，通常是datasets或隐含
-        // Web UI 通常使用 datasets=["index_name"]，这里简化处理，或者忽略 index_name 如果它是默认的 yotta
-        // 根据用户提供的样例: datasets=[] (空数组), app_id=45. 
-        // 既然无法准确知道 Web 端对应的 datasets 格式，且通常 search 页面默认会选当前 index，我们暂时只传 query 和 time_range
-        // 补充：用户提供的 URL 包含 searchMode=intelligent
         baseParams.append('searchMode', 'intelligent');
 
         // 遍历行数据中的字段
@@ -244,7 +239,6 @@ export class LogSearchModule {
     async executeLogSearchSheet(
         query: string, 
         timeRange: string, 
-        indexName: string = "yotta", 
         pagingOrLimit: number | { page?: number; size?: number; limit?: number } = 20,
         fields?: string[]
     ): Promise<ApiResponse<LogSearchResponse>> {
@@ -254,7 +248,6 @@ export class LogSearchModule {
             const params = {
                 query,
                 time_range: timeRange,
-                index_name: indexName,
                 page,
                 size
             };
@@ -282,7 +275,7 @@ export class LogSearchModule {
 
             // 为每行数据注入 _links
             hits = hits.map(row => {
-                const links = this.generateQuickLinks(row, query, timeRange, indexName);
+                const links = this.generateQuickLinks(row, query, timeRange);
                 return { ...row, _links: links };
             });
 
@@ -332,7 +325,6 @@ export class LogSearchModule {
     async executeLogReducePattern(
         query: string,
         timeRange: string,
-        indexName: string = "yotta",
         patternOptions: LogReduceParams['pattern_options'] = {}
     ): Promise<ApiResponse<LogReduceResponse>> {
         try {
@@ -342,7 +334,6 @@ export class LogSearchModule {
             const requestData = {
                 query,
                 time_range: timeRange,
-                index_name: indexName,
                 mask_url: true,
                 initial_dist: patternOptions?.initial_dist || '0.01',
                 alpha: patternOptions?.alpha || '1.8',
@@ -460,15 +451,13 @@ export class LogSearchModule {
      */
     async executeListFields(
         query: string,
-        timeRange: string,
-        indexName: string = "yotta"
+        timeRange: string
     ): Promise<ApiResponse<FieldsListResponse>> {
         try {
             const apiPath = '/api/v3/search/sheets/';
             const params = {
                 query,
                 time_range: timeRange,
-                index_name: indexName,
                 page: 0,
                 size: 0,  // 设置 size=0 只获取字段信息，不返回数据行
                 fields: true  // 明确请求字段信息
@@ -519,7 +508,6 @@ export class LogSearchModule {
         field: string,
         query: string,
         timeRange: string,
-        indexName: string = "yotta",
         limit: number = 100
     ): Promise<ApiResponse<FieldValuesListResponse>> {
         try {
@@ -530,7 +518,6 @@ export class LogSearchModule {
             const params = {
                 query: fieldQuery,
                 time_range: timeRange,
-                index_name: indexName,
                 page: 0,
                 size: limit,
                 fields: true  // 获取字段统计信息
@@ -616,7 +603,6 @@ export class LogSearchModule {
     async executeQueryDataPrecheck(
         query: string,
         timeRange: string,
-        indexName: string = 'yotta',
         sampleSize: number = 20,
         terminatedAfterSize: number = 100,
         sampleFields?: string[]
@@ -625,7 +611,6 @@ export class LogSearchModule {
             const result = await this.client.get<any>('/api/v3/search/sheets/', {
                 query,
                 time_range: timeRange,
-                index_name: indexName,
                 size: sampleSize,
                 fields: true,
                 timeline: 'false',
@@ -677,7 +662,6 @@ export class LogSearchModule {
     async executeQueryPrecheck(params: {
         query: string;
         time_range?: string;
-        index_name?: string;
         mode?: QueryPrecheckMode;
         expected_fields?: string[];
         field_mapping?: Record<string, any>;
@@ -688,7 +672,6 @@ export class LogSearchModule {
         const {
             query,
             time_range: timeRange = 'now-15m,now',
-            index_name: indexName = 'yotta',
             mode = 'full',
             expected_fields: expectedFields,
             field_mapping: fieldMapping,
@@ -723,7 +706,6 @@ export class LogSearchModule {
             const dataResult = await this.executeQueryDataPrecheck(
                 query,
                 timeRange,
-                indexName,
                 sampleSize,
                 terminatedAfterSize,
                 mergedSampleFields.length > 0 ? mergedSampleFields : undefined
@@ -802,7 +784,6 @@ export class LogSearchModule {
     async executeTimeSeriesCounts(
         query: string,
         timeRange: string,
-        indexName: string = "yotta",
         bucket: string = "5m",
         metricField?: string
     ): Promise<ApiResponse<{ points: Array<{ time: number; count: number }> }>> {
@@ -819,7 +800,6 @@ export class LogSearchModule {
             const result = await this.client.get<any>('/api/v3/search/sheets/', {
                 query: tsQuery,
                 time_range: timeRange,
-                index_name: indexName,
                 page: 0,
                 size: 100
             });
@@ -863,7 +843,6 @@ export class LogSearchModule {
     async executeDataOverview(
         query: string,
         timeRange: string,
-        indexName: string = "yotta",
         metricField?: string,
         percentiles: number[] = [50, 90, 99]
     ): Promise<ApiResponse<any>> {
@@ -873,7 +852,7 @@ export class LogSearchModule {
             if (metricField) {
                 // 获取基础统计数据
                 const statsQuery = `${query || '*'} | stats count, min(${metricField}), max(${metricField}), avg(${metricField}), sum(${metricField})`;
-                const statsResponse = await this.executeLogSearchSheet(statsQuery, timeRange, indexName, 100);
+                const statsResponse = await this.executeLogSearchSheet(statsQuery, timeRange, 100);
                 const statsRows = this.extractRows(statsResponse.data);
                 
                 if (statsRows.length > 0) {
@@ -884,7 +863,7 @@ export class LogSearchModule {
                     if (percentiles.length > 0) {
                         const percentileList = percentiles.join(', ');
                         const percQuery = `${query || '*'} | stats pct(${metricField}, ${percentileList}) as p`;
-                        const percResponse = await this.executeLogSearchSheet(percQuery, timeRange, indexName, 100);
+                        const percResponse = await this.executeLogSearchSheet(percQuery, timeRange, 100);
                         const percRows = this.extractRows(percResponse.data);
                         
                         if (percRows.length > 0) {
@@ -912,15 +891,14 @@ export class LogSearchModule {
                                 window_ms: durationMs,
                                 metric_field: metricField
                             },
-                            time_range: timeRange,
-                            index_name: indexName
+                            time_range: timeRange
                         }
                     };
                 }
             }
             
             // 默认行为：计算总命中数和每秒事件数
-            const summary = await this.executeLogSearchSheet(query || '*', timeRange, indexName, 1);
+            const summary = await this.executeLogSearchSheet(query || '*', timeRange, 1);
             const total = (summary.data as any)?.results?.total_hits ?? 0;
             const eps = durationMs > 0 ? (total / (durationMs / 1000)) : 0;
             return {
@@ -931,8 +909,7 @@ export class LogSearchModule {
                         window_ms: durationMs,
                         events_per_second: Number(eps.toFixed(4))
                     },
-                    time_range: timeRange,
-                    index_name: indexName
+                    time_range: timeRange
                 }
             };
         } catch (error: any) {

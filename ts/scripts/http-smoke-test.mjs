@@ -166,7 +166,6 @@ async function assertStructuredContentForLogSearchSheet() {
             arguments: {
                 time_range: timeRange,
                 query: process.env.MCP_SMOKE_LOG_SEARCH_QUERY || '*',
-                index_name: process.env.MCP_SMOKE_LOG_SEARCH_INDEX || 'yotta',
                 size: Number(process.env.MCP_SMOKE_LOG_SEARCH_SIZE || 1),
                 result_delivery: 'inline'
             }

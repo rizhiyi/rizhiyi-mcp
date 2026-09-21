@@ -85,11 +85,6 @@ BASIC_LOG_TOOLS: list[ToolDefinition] = [
                     "description": '时间范围，例如 "now-1h,now"。',
                     "default": "now-15m,now",
                 },
-                "index_name": {
-                    "type": "string",
-                    "description": "索引名称。",
-                    "default": "yotta",
-                },
                 "page": {
                     "type": "integer",
                     "description": "页码，从 0 开始。默认 0。",
@@ -145,11 +140,6 @@ BASIC_LOG_TOOLS: list[ToolDefinition] = [
                     "type": "string",
                     "description": '时间范围，例如 "now-1h,now"。',
                     "default": "now-15m,now",
-                },
-                "index_name": {
-                    "type": "string",
-                    "description": "索引名称。",
-                    "default": "yotta",
                 },
                 "pattern_options": {
                     "type": "object",
@@ -240,11 +230,6 @@ BASIC_LOG_TOOLS: list[ToolDefinition] = [
                     "description": '时间范围，例如 "now-1h,now"。',
                     "default": "now-15m,now",
                 },
-                "index_name": {
-                    "type": "string",
-                    "description": "索引名称。",
-                    "default": "yotta",
-                },
             },
         },
     ),
@@ -267,11 +252,6 @@ BASIC_LOG_TOOLS: list[ToolDefinition] = [
                     "type": "string",
                     "description": '时间范围，例如 "now-1h,now"。',
                     "default": "now-15m,now",
-                },
-                "index_name": {
-                    "type": "string",
-                    "description": "索引名称。",
-                    "default": "yotta",
                 },
                 "limit": {
                     "type": "integer",
@@ -302,11 +282,6 @@ BASIC_LOG_TOOLS: list[ToolDefinition] = [
                     "type": "string",
                     "description": '时间范围。syntax_only 可省略；data_only/full 建议显式传入，例如 "now-15m,now"。',
                     "default": "now-15m,now",
-                },
-                "index_name": {
-                    "type": "string",
-                    "description": "索引名称。",
-                    "default": "yotta",
                 },
                 "expected_fields": {
                     "type": "array",
@@ -358,7 +333,6 @@ STATISTICAL_ANALYSIS_TOOLS: list[ToolDefinition] = [
                     "description": '时间范围，例如 "now-1h,now"。',
                     "default": "now-15m,now",
                 },
-                "index_name": {"type": "string", "description": "索引名称。", "default": "yotta"},
                 "bucket": {
                     "type": "string",
                     "description": '可选，固定聚合桶（如 1m/5m/1h）。',
@@ -395,7 +369,6 @@ STATISTICAL_ANALYSIS_TOOLS: list[ToolDefinition] = [
                     "description": '时间范围，例如 "now-1h,now"。',
                     "default": "now-15m,now",
                 },
-                "index_name": {"type": "string", "description": "索引名称。", "default": "yotta"},
                 "bucket": {
                     "type": "string",
                     "description": '可选，固定聚合桶（如 1m/5m/1h）。',
@@ -472,7 +445,6 @@ INTELLIGENT_ANALYSIS_TOOLS: list[ToolDefinition] = [
                     "description": '第二时间段，例如 "now-1h,now"。',
                     "default": "now-1h,now",
                 },
-                "index_name": {"type": "string", "description": "索引名称。", "default": "yotta"},
                 "bucket": {
                     "type": "string",
                     "description": '时间桶大小，如 "1m"、"5m"、"1h"。',
@@ -511,7 +483,6 @@ INTELLIGENT_ANALYSIS_TOOLS: list[ToolDefinition] = [
                     "description": '时间范围，例如 "now-1h,now"。',
                     "default": "now-15m,now",
                 },
-                "index_name": {"type": "string", "description": "索引名称。", "default": "yotta"},
                 "fields": {
                     "type": "array",
                     "items": {"type": "string"},
@@ -580,7 +551,6 @@ INTELLIGENT_ANALYSIS_TOOLS: list[ToolDefinition] = [
                     "description": '基线窗口时间范围，例如 "now-90m,now-60m"。',
                     "default": "now-90m,now-60m",
                 },
-                "index_name": {"type": "string", "description": "索引名称。", "default": "yotta"},
                 "candidate_fields": {
                     "type": "array",
                     "items": {"type": "string"},
@@ -649,7 +619,6 @@ PREDICTIVE_ANALYSIS_TOOLS: list[ToolDefinition] = [
                     "description": '历史数据时间范围，例如 "now-24h,now"。',
                     "default": "now-24h,now",
                 },
-                "index_name": {"type": "string", "description": "索引名称。", "default": "yotta"},
                 "bucket": {
                     "type": "string",
                     "description": '时间桶大小，如 "1m"、"5m"、"1h"。',
@@ -704,7 +673,6 @@ PREDICTIVE_ANALYSIS_TOOLS: list[ToolDefinition] = [
                     "description": '历史数据时间范围，例如 "now-24h,now"。',
                     "default": "now-24h,now",
                 },
-                "index_name": {"type": "string", "description": "索引名称。", "default": "yotta"},
                 "bucket": {
                     "type": "string",
                     "description": '时间桶大小，如 "1m"、"5m"、"1h"。',

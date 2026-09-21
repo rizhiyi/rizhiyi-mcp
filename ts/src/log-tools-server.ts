@@ -144,7 +144,6 @@ async function handleLogSearchSheet(params: any) {
     const result = await logSearchModule.executeLogSearchSheet(
         params.query || "*",
         params.time_range,
-        params.index_name || "yotta",
         { page, size, limit: params.limit },
         params.fields
     );
@@ -162,7 +161,6 @@ async function handleLogReducePattern(params: any) {
     const result = await logSearchModule.executeLogReducePattern(
         params.query || "*",
         params.time_range,
-        params.index_name || "yotta",
         params.pattern_options || {}
     );
     return formatResult(result, params);
@@ -230,8 +228,7 @@ async function handleListFields(params: any) {
     }
     const result = await logSearchModule.executeListFields(
         params.query || "*",
-        params.time_range,
-        params.index_name || "yotta"
+        params.time_range
     );
     return formatResult(result, params);
 }
@@ -248,7 +245,6 @@ async function handleListFieldValues(params: any) {
         params.field,
         params.query || "*",
         params.time_range,
-        params.index_name || "yotta",
         params.limit || 100
     );
     return formatResult(result, params);
@@ -266,7 +262,6 @@ async function handleQueryPrecheck(params: any) {
     const result = await logSearchModule.executeQueryPrecheck({
         query: params.query,
         time_range: params.time_range || 'now-15m,now',
-        index_name: params.index_name || 'yotta',
         mode: params.mode || 'full',
         expected_fields: params.expected_fields || [],
         field_mapping: params.field_mapping || {},
@@ -288,7 +283,6 @@ async function handleDataOverview(params: any) {
     const result = await statisticsModule.executeDataOverview(
         params.query || "*",
         params.time_range,
-        params.index_name || "yotta",
         params.metric_field,
         params.percentiles || [50, 90, 99]
     );
@@ -322,7 +316,6 @@ async function handleTrendSummary(params: any) {
     const result = await statisticsModule.executeTrendSummary(
         params.query || "*",
         params.time_range,
-        params.index_name || "yotta",
         params.bucket,
         params.metric_field,
         params.limit_peaks || 3
@@ -359,7 +352,6 @@ async function handleAnomalyPoints(params: any) {
     const result = await statisticsModule.executeAnomalyPoints(
         params.query || "*",
         params.time_range,
-        params.index_name || "yotta",
         params.bucket,
         params.metric_field,
         params.method || 'zscore',
@@ -438,8 +430,7 @@ async function handlePeriodCompare(params: any) {
                 topk: params.topk || 10,
                 query: params.query || "*",
                 time_range_a: params.time_range_a,
-                time_range_b: params.time_range_b,
-                index_name: params.index_name || "yotta"
+                time_range_b: params.time_range_b
             }
         );
         return formatResult(result, params);
@@ -458,7 +449,6 @@ async function handlePeriodCompare(params: any) {
         query: params.query || "*",
         time_range_a: params.time_range_a,
         time_range_b: params.time_range_b,
-        index_name: params.index_name || "yotta",
         bucket: params.bucket,
         compare_fields: params.compare_fields || [],
         topk: params.topk || 10,
@@ -490,7 +480,6 @@ async function handleCorrelationAnalysis(params: any) {
     const result = await anomalyDetectionModule.executeCorrelationAnalysis({
         query: params.query || "*",
         time_range: params.time_range,
-        index_name: params.index_name || "yotta",
         fields: params.fields || [],
         mode: params.mode || 'auto',
         bucket: params.bucket,
@@ -520,7 +509,6 @@ async function handleRootCauseSuggestions(params: any) {
         query: params.query || "*",
         anomaly_window: params.anomaly_window,
         baseline_window: params.baseline_window,
-        index_name: params.index_name || "yotta",
         candidate_fields: params.candidate_fields || [],
         significance_threshold: params.significance_threshold ?? 0.1,
         topk: params.topk ?? 5,
@@ -565,7 +553,6 @@ async function handleTrendForecast(params: any) {
     const result = await trendForecastModule.executeTrendForecast({
         query: params.query || "*",
         time_range: params.time_range,
-        index_name: params.index_name || "yotta",
         bucket: params.bucket,
         horizon: params.horizon || 12,
         method: params.method || 'linear_regression',
@@ -608,7 +595,6 @@ async function handleAnomalyAlert(params: any) {
     const result = await trendForecastModule.executeAnomalyAlert({
         query: params.query || "*",
         time_range: params.time_range,
-        index_name: params.index_name || "yotta",
         bucket: params.bucket,
         method: params.method || 'prediction_band',
         threshold: params.threshold || 3.0,
@@ -651,7 +637,6 @@ async function formatResult(result: any, params: any = {}): Promise<any> {
                 summary: buildSharedResultSummary(toolName, payload),
                 sourceQuery: params.query,
                 timeRange: resolvePrimaryTimeRange(params),
-                indexName: params.index_name,
                 upstreamSid: extractSidFromPayload(payload),
                 ttlSeconds: Number(params.result_ttl_seconds)
             }, sharedResultStoreConfig);
@@ -929,7 +914,6 @@ function buildSharedResultReadResponse(
         upstream_sid: envelope.upstream_sid,
         source_query: envelope.source_query,
         time_range: envelope.time_range,
-        index_name: envelope.index_name,
         summary: envelope.summary
     };
 

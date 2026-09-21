@@ -26,7 +26,6 @@ class LogToolsBusinessService:
         *,
         query: str,
         time_range: str,
-        index_name: str = "yotta",
         pattern_options: dict[str, Any] | None = None,
     ) -> ApiResponse[dict[str, Any]]:
         options = pattern_options or {}
@@ -35,7 +34,6 @@ class LogToolsBusinessService:
             params={
                 "query": query,
                 "time_range": time_range,
-                "index_name": index_name,
                 "mask_url": True,
                 "initial_dist": str(options.get("initial_dist", "0.01")),
                 "alpha": str(options.get("alpha", "1.8")),
@@ -182,7 +180,6 @@ class LogToolsBusinessService:
         *,
         query: str,
         time_range: str,
-        index_name: str = "yotta",
         bucket: str | None = None,
         metric_field: str | None = None,
         limit_peaks: int = 3,
@@ -190,7 +187,6 @@ class LogToolsBusinessService:
         response = await self._timechart_query(
             query=query,
             time_range=time_range,
-            index_name=index_name,
             bucket=bucket,
             metric_field=metric_field,
         )
@@ -258,7 +254,6 @@ class LogToolsBusinessService:
         *,
         query: str,
         time_range: str,
-        index_name: str = "yotta",
         bucket: str | None = None,
         metric_field: str | None = None,
         method: str = "zscore",
@@ -268,7 +263,6 @@ class LogToolsBusinessService:
         response = await self._timechart_query(
             query=query,
             time_range=time_range,
-            index_name=index_name,
             bucket=bucket,
             metric_field=metric_field,
         )
@@ -332,7 +326,6 @@ class LogToolsBusinessService:
         query: str,
         time_range_a: str,
         time_range_b: str,
-        index_name: str = "yotta",
         bucket: str | None = None,
         compare_fields: list[str] | None = None,
         topk: int = 10,
@@ -342,14 +335,12 @@ class LogToolsBusinessService:
             self._timechart_query(
                 query=query,
                 time_range=time_range_a,
-                index_name=index_name,
                 bucket=bucket,
                 metric_field=metric_field,
             ),
             self._timechart_query(
                 query=query,
                 time_range=time_range_b,
-                index_name=index_name,
                 bucket=bucket,
                 metric_field=metric_field,
             ),
@@ -365,7 +356,6 @@ class LogToolsBusinessService:
             query=query,
             time_range_a=time_range_a,
             time_range_b=time_range_b,
-            index_name=index_name,
             compare_fields=compare_fields or [],
             topk=topk,
             status=max(response_a.status or 200, response_b.status or 200),
@@ -380,7 +370,6 @@ class LogToolsBusinessService:
         query: str = "*",
         time_range_a: str | None = None,
         time_range_b: str | None = None,
-        index_name: str = "yotta",
         compare_fields: list[str] | None = None,
         topk: int = 10,
         status: int | None = 200,
@@ -399,7 +388,6 @@ class LogToolsBusinessService:
                 query=query,
                 time_range_a=time_range_a or "",
                 time_range_b=time_range_b or "",
-                index_name=index_name,
                 fields=compare_fields,
                 topk=max(1, topk),
             )
@@ -425,7 +413,6 @@ class LogToolsBusinessService:
         *,
         query: str,
         time_range: str,
-        index_name: str = "yotta",
         fields: list[str] | None = None,
         mode: str = "auto",
         bucket: str | None = None,
@@ -445,7 +432,6 @@ class LogToolsBusinessService:
             sample_response = await self._search_rows(
                 query=query,
                 time_range=time_range,
-                index_name=index_name,
                 size=max(1, sample_size),
                 fields=target_fields,
             )
@@ -468,7 +454,6 @@ class LogToolsBusinessService:
             return await self._execute_lagged_pearson(
                 query=query,
                 time_range=time_range,
-                index_name=index_name,
                 fields=target_fields,
                 field_types=field_types,
                 requested_mode=mode,
@@ -496,7 +481,6 @@ class LogToolsBusinessService:
         query: str,
         anomaly_window: str,
         baseline_window: str,
-        index_name: str = "yotta",
         candidate_fields: list[str] | None = None,
         significance_threshold: float = 0.1,
         topk: int = 5,
@@ -511,7 +495,6 @@ class LogToolsBusinessService:
         baseline_sample_response = await self._search_rows(
             query=query,
             time_range=baseline_window,
-            index_name=index_name,
             size=max(1, sample_size),
         )
         if baseline_sample_response.error or baseline_sample_response.data is None:
@@ -522,7 +505,6 @@ class LogToolsBusinessService:
             anomaly_sample_response = await self._search_rows(
                 query=query,
                 time_range=anomaly_window,
-                index_name=index_name,
                 size=max(1, sample_size),
             )
             if anomaly_sample_response.error or anomaly_sample_response.data is None:
@@ -545,14 +527,12 @@ class LogToolsBusinessService:
                 self._get_field_distribution(
                     query=query,
                     time_range=baseline_window,
-                    index_name=index_name,
                     field=field,
                     limit=field_value_limit,
                 ),
                 self._get_field_distribution(
                     query=query,
                     time_range=anomaly_window,
-                    index_name=index_name,
                     field=field,
                     limit=field_value_limit,
                 ),
@@ -573,7 +553,6 @@ class LogToolsBusinessService:
             query=query,
             anomaly_window=anomaly_window,
             baseline_window=baseline_window,
-            index_name=index_name,
             fields=fields_to_analyze,
             anomaly_rows=anomaly_rows,
             baseline_rows=baseline_rows,
@@ -585,8 +564,8 @@ class LogToolsBusinessService:
         )
 
         anomaly_total, baseline_total = await asyncio.gather(
-            self._get_exact_query_count(query=query, time_range=anomaly_window, index_name=index_name),
-            self._get_exact_query_count(query=query, time_range=baseline_window, index_name=index_name),
+            self._get_exact_query_count(query=query, time_range=anomaly_window),
+            self._get_exact_query_count(query=query, time_range=baseline_window),
         )
         return ApiResponse(
             status=200,
@@ -615,7 +594,6 @@ class LogToolsBusinessService:
         *,
         query: str,
         time_range: str,
-        index_name: str = "yotta",
         bucket: str | None = None,
         horizon: int = 12,
         method: str = "linear_regression",
@@ -627,7 +605,6 @@ class LogToolsBusinessService:
         response = await self._timechart_query(
             query=query,
             time_range=time_range,
-            index_name=index_name,
             bucket=bucket,
             metric_field=metric_field,
         )
@@ -695,7 +672,6 @@ class LogToolsBusinessService:
         *,
         query: str,
         time_range: str,
-        index_name: str = "yotta",
         bucket: str | None = None,
         method: str = "prediction_band",
         threshold: float = 3.0,
@@ -707,7 +683,6 @@ class LogToolsBusinessService:
         response = await self._timechart_query(
             query=query,
             time_range=time_range,
-            index_name=index_name,
             bucket=bucket,
             metric_field=metric_field,
         )
@@ -820,7 +795,6 @@ class LogToolsBusinessService:
         *,
         query: str,
         time_range: str,
-        index_name: str,
         bucket: str | None,
         metric_field: str | None,
     ) -> ApiResponse[dict[str, Any]]:
@@ -837,7 +811,6 @@ class LogToolsBusinessService:
             params={
                 "query": executed_query,
                 "time_range": time_range,
-                "index_name": index_name,
                 "page": 0,
                 "size": 100,
             },
@@ -863,7 +836,6 @@ class LogToolsBusinessService:
         *,
         query: str,
         time_range: str,
-        index_name: str,
         size: int,
         fields: list[str] | None = None,
     ) -> ApiResponse[dict[str, Any]]:
@@ -872,7 +844,6 @@ class LogToolsBusinessService:
             params={
                 "query": query,
                 "time_range": time_range,
-                "index_name": index_name,
                 "page": 0,
                 "size": size,
             },
@@ -905,14 +876,12 @@ class LogToolsBusinessService:
         *,
         query: str,
         time_range: str,
-        index_name: str,
     ) -> ApiResponse[dict[str, Any]]:
         response = await self._request_json(
             "/api/v3/search/sheets/",
             params={
                 "query": query,
                 "time_range": time_range,
-                "index_name": index_name,
                 "page": 0,
                 "size": 0,
                 "fields": True,
@@ -942,7 +911,6 @@ class LogToolsBusinessService:
         *,
         query: str,
         time_range: str,
-        index_name: str,
         field: str,
         limit: int,
     ) -> dict[str, int]:
@@ -952,7 +920,6 @@ class LogToolsBusinessService:
             params={
                 "query": field_query,
                 "time_range": time_range,
-                "index_name": index_name,
                 "page": 0,
                 "size": max(1, limit),
                 "fields": True,
@@ -977,7 +944,6 @@ class LogToolsBusinessService:
         query: str,
         time_range_a: str,
         time_range_b: str,
-        index_name: str,
         fields: list[str],
         topk: int,
     ) -> list[dict[str, Any]]:
@@ -987,14 +953,12 @@ class LogToolsBusinessService:
                 self._get_field_distribution(
                     query=query,
                     time_range=time_range_a,
-                    index_name=index_name,
                     field=field,
                     limit=max(20, topk),
                 ),
                 self._get_field_distribution(
                     query=query,
                     time_range=time_range_b,
-                    index_name=index_name,
                     field=field,
                     limit=max(20, topk),
                 ),
@@ -1019,7 +983,6 @@ class LogToolsBusinessService:
         *,
         query: str,
         time_range: str,
-        index_name: str,
         fields: list[str],
         field_types: list[dict[str, Any]],
         requested_mode: str,
@@ -1033,7 +996,6 @@ class LogToolsBusinessService:
                 self._timechart_query(
                     query=query,
                     time_range=time_range,
-                    index_name=index_name,
                     bucket=bucket,
                     metric_field=field,
                 )
@@ -1170,7 +1132,6 @@ class LogToolsBusinessService:
         query: str,
         anomaly_window: str,
         baseline_window: str,
-        index_name: str,
         fields: list[str],
         anomaly_rows: list[dict[str, Any]],
         baseline_rows: list[dict[str, Any]],
@@ -1208,8 +1169,8 @@ class LogToolsBusinessService:
             return []
 
         anomaly_total, baseline_total = await asyncio.gather(
-            self._get_exact_query_count(query=query, time_range=anomaly_window, index_name=index_name),
-            self._get_exact_query_count(query=query, time_range=baseline_window, index_name=index_name),
+            self._get_exact_query_count(query=query, time_range=anomaly_window),
+            self._get_exact_query_count(query=query, time_range=baseline_window),
         )
         if anomaly_total <= 0 or baseline_total <= 0:
             return []
@@ -1237,8 +1198,8 @@ class LogToolsBusinessService:
             terms = candidate["terms"]
             slice_query = self._build_slice_query(query, terms)
             exact_anomaly, exact_baseline = await asyncio.gather(
-                self._get_exact_query_count(query=slice_query, time_range=anomaly_window, index_name=index_name),
-                self._get_exact_query_count(query=slice_query, time_range=baseline_window, index_name=index_name),
+                self._get_exact_query_count(query=slice_query, time_range=anomaly_window),
+                self._get_exact_query_count(query=slice_query, time_range=baseline_window),
             )
             anomaly_support = exact_anomaly / anomaly_total
             baseline_support = exact_baseline / baseline_total
@@ -1265,13 +1226,12 @@ class LogToolsBusinessService:
             unique.setdefault(item["query"], item)
         return sorted(unique.values(), key=lambda item: item["score"], reverse=True)[: max(1, topk)]
 
-    async def _get_exact_query_count(self, *, query: str, time_range: str, index_name: str) -> int:
+    async def _get_exact_query_count(self, *, query: str, time_range: str) -> int:
         response = await self._request_json(
             "/api/v3/search/sheets/",
             params={
                 "query": f"{query} | stats count() as count",
                 "time_range": time_range,
-                "index_name": index_name,
                 "page": 0,
                 "size": 1,
             },

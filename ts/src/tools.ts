@@ -66,11 +66,6 @@ export const basicLogTools: ToolDefinition[] = [
                     description: '时间范围，例如："now-1h,now"',
                     default: 'now-15m,now'
                 },
-                index_name: { 
-                    type: 'string', 
-                    description: '索引名称', 
-                    default: 'yotta' 
-                },
                 page: {
                     type: 'integer',
                     description: '页码，从 0 开始。默认 0，返回第一页。',
@@ -126,11 +121,6 @@ export const basicLogTools: ToolDefinition[] = [
                     type: 'string', 
                     description: '时间范围，例如："now-1h,now", "now/d,now+1d/d"',
                     default: 'now-15m,now'
-                },
-                index_name: { 
-                    type: 'string', 
-                    description: '索引名称', 
-                    default: 'yotta' 
                 },
                 pattern_options: {
                     type: 'object',
@@ -225,11 +215,6 @@ export const basicLogTools: ToolDefinition[] = [
                     type: 'string', 
                     description: '时间范围，例如："now-1h,now","now/d,now+1d/d"',
                     default: 'now-15m,now'
-                },
-                index_name: { 
-                    type: 'string', 
-                    description: '索引名称', 
-                    default: 'yotta' 
                 }
             }
         }
@@ -253,11 +238,6 @@ export const basicLogTools: ToolDefinition[] = [
                     type: 'string', 
                     description: '时间范围，例如："now-1h,now","now/d,now+1d/d"',
                     default: 'now-15m,now'
-                },
-                index_name: { 
-                    type: 'string', 
-                    description: '索引名称', 
-                    default: 'yotta' 
                 },
                 limit: {
                     type: 'integer',
@@ -288,11 +268,6 @@ export const basicLogTools: ToolDefinition[] = [
                     type: 'string',
                     description: '时间范围。syntax_only 可省略；data_only/full 建议显式传入，例如 "now-15m,now"',
                     default: 'now-15m,now'
-                },
-                index_name: {
-                    type: 'string',
-                    description: '索引名称',
-                    default: 'yotta'
                 },
                 expected_fields: {
                     type: 'array',
@@ -346,11 +321,6 @@ export const statisticalAnalysisTools: ToolDefinition[] = [
                     description: '时间范围，例如："now-1h,now"',
                     default: 'now-15m,now'
                 },
-                index_name: { 
-                    type: 'string', 
-                    description: '索引名称', 
-                    default: 'yotta' 
-                },
                 bucket: { 
                     type: 'string', 
                     description: '可选，固定聚合桶(如 1m/5m/1h)',
@@ -387,11 +357,6 @@ export const statisticalAnalysisTools: ToolDefinition[] = [
                     type: 'string', 
                     description: '时间范围，例如："now-1h,now"',
                     default: 'now-15m,now'
-                },
-                index_name: { 
-                    type: 'string', 
-                    description: '索引名称', 
-                    default: 'yotta' 
                 },
                 bucket: { 
                     type: 'string', 
@@ -466,11 +431,6 @@ export const intelligentAnalysisTools: ToolDefinition[] = [
                     description: '第二时间段，例如："now-1h,now"。当不提供previous_time_series_b时需提供',
                     default: 'now-1h,now'
                 },
-                index_name: { 
-                    type: 'string', 
-                    description: '索引名称', 
-                    default: 'yotta' 
-                },
                 bucket: { 
                     type: 'string', 
                     description: '时间桶大小，如"1m"、"5m"、"1h"',
@@ -509,11 +469,6 @@ export const intelligentAnalysisTools: ToolDefinition[] = [
                     type: 'string', 
                     description: '时间范围，例如："now-1h,now"',
                     default: 'now-15m,now'
-                },
-                index_name: { 
-                    type: 'string', 
-                    description: '索引名称', 
-                    default: 'yotta' 
                 },
                 fields: { 
                     type: 'array',
@@ -584,11 +539,6 @@ export const intelligentAnalysisTools: ToolDefinition[] = [
                     description: '基线窗口时间范围，例如："now-90m,now-60m"',
                     default: 'now-90m,now-60m'
                 },
-                index_name: { 
-                    type: 'string', 
-                    description: '索引名称', 
-                    default: 'yotta' 
-                },
                 candidate_fields: { 
                     type: 'array',
                     items: { type: 'string' },
@@ -658,11 +608,6 @@ export const predictiveAnalysisTools: ToolDefinition[] = [
                     description: '历史数据时间范围，例如："now-24h,now"',
                     default: 'now-24h,now'
                 },
-                index_name: { 
-                    type: 'string', 
-                    description: '索引名称', 
-                    default: 'yotta' 
-                },
                 bucket: { 
                     type: 'string', 
                     description: '时间桶大小，如"1m"、"5m"、"1h"',
@@ -720,11 +665,6 @@ export const predictiveAnalysisTools: ToolDefinition[] = [
                     type: 'string', 
                     description: '历史数据时间范围，例如："now-24h,now"',
                     default: 'now-24h,now'
-                },
-                index_name: { 
-                    type: 'string', 
-                    description: '索引名称', 
-                    default: 'yotta' 
                 },
                 bucket: { 
                     type: 'string', 

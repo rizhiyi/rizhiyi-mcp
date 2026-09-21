@@ -112,7 +112,6 @@ class LogToolsServer(RizhiyiFastMCPServer):
             result = await self._business_service.execute_log_reduce_pattern(
                 query=self._coerce_str(safe_arguments.get("query"), default="*"),
                 time_range=self._coerce_str(safe_arguments.get("time_range"), default="now-15m,now"),
-                index_name=self._coerce_str(safe_arguments.get("index_name"), default="yotta"),
                 pattern_options=safe_arguments.get("pattern_options")
                 if isinstance(safe_arguments.get("pattern_options"), dict)
                 else {},
@@ -173,7 +172,6 @@ class LogToolsServer(RizhiyiFastMCPServer):
             result = await self._business_service.execute_trend_summary(
                 query=self._coerce_str(safe_arguments.get("query"), default="*"),
                 time_range=self._coerce_str(safe_arguments.get("time_range"), default="now-15m,now"),
-                index_name=self._coerce_str(safe_arguments.get("index_name"), default="yotta"),
                 bucket=self._optional_str(safe_arguments.get("bucket")),
                 metric_field=self._optional_str(safe_arguments.get("metric_field")),
                 limit_peaks=self._coerce_int(safe_arguments.get("limit_peaks"), default=3, minimum=1),
@@ -199,7 +197,6 @@ class LogToolsServer(RizhiyiFastMCPServer):
             result = await self._business_service.execute_anomaly_points(
                 query=self._coerce_str(safe_arguments.get("query"), default="*"),
                 time_range=self._coerce_str(safe_arguments.get("time_range"), default="now-15m,now"),
-                index_name=self._coerce_str(safe_arguments.get("index_name"), default="yotta"),
                 bucket=self._optional_str(safe_arguments.get("bucket")),
                 metric_field=self._optional_str(safe_arguments.get("metric_field")),
                 method=self._coerce_str(safe_arguments.get("method"), default="zscore"),
@@ -232,7 +229,6 @@ class LogToolsServer(RizhiyiFastMCPServer):
                     query=self._coerce_str(safe_arguments.get("query"), default="*"),
                     time_range_a=self._optional_str(safe_arguments.get("time_range_a")),
                     time_range_b=self._optional_str(safe_arguments.get("time_range_b")),
-                    index_name=self._coerce_str(safe_arguments.get("index_name"), default="yotta"),
                     compare_fields=self._normalize_string_list(safe_arguments.get("compare_fields")),
                     topk=self._coerce_int(safe_arguments.get("topk"), default=10, minimum=1),
                 )
@@ -249,7 +245,6 @@ class LogToolsServer(RizhiyiFastMCPServer):
                 query=self._coerce_str(safe_arguments.get("query"), default="*"),
                 time_range_a=self._coerce_str(safe_arguments.get("time_range_a"), default=""),
                 time_range_b=self._coerce_str(safe_arguments.get("time_range_b"), default=""),
-                index_name=self._coerce_str(safe_arguments.get("index_name"), default="yotta"),
                 bucket=self._optional_str(safe_arguments.get("bucket")),
                 compare_fields=self._normalize_string_list(safe_arguments.get("compare_fields")),
                 topk=self._coerce_int(safe_arguments.get("topk"), default=10, minimum=1),
@@ -267,7 +262,6 @@ class LogToolsServer(RizhiyiFastMCPServer):
             result = await self._business_service.execute_correlation_analysis(
                 query=self._coerce_str(safe_arguments.get("query"), default="*"),
                 time_range=self._coerce_str(safe_arguments.get("time_range"), default="now-15m,now"),
-                index_name=self._coerce_str(safe_arguments.get("index_name"), default="yotta"),
                 fields=self._normalize_string_list(safe_arguments.get("fields")),
                 mode=self._coerce_str(safe_arguments.get("mode"), default="auto"),
                 bucket=self._optional_str(safe_arguments.get("bucket")),
@@ -293,7 +287,6 @@ class LogToolsServer(RizhiyiFastMCPServer):
                 query=self._coerce_str(safe_arguments.get("query"), default="*"),
                 anomaly_window=self._coerce_str(safe_arguments.get("anomaly_window"), default=""),
                 baseline_window=self._coerce_str(safe_arguments.get("baseline_window"), default=""),
-                index_name=self._coerce_str(safe_arguments.get("index_name"), default="yotta"),
                 candidate_fields=self._normalize_string_list(safe_arguments.get("candidate_fields")),
                 significance_threshold=self._coerce_float(
                     safe_arguments.get("significance_threshold"), default=0.1
@@ -333,7 +326,6 @@ class LogToolsServer(RizhiyiFastMCPServer):
             result = await self._business_service.execute_trend_forecast(
                 query=self._coerce_str(safe_arguments.get("query"), default="*"),
                 time_range=self._coerce_str(safe_arguments.get("time_range"), default="now-24h,now"),
-                index_name=self._coerce_str(safe_arguments.get("index_name"), default="yotta"),
                 bucket=self._optional_str(safe_arguments.get("bucket")),
                 horizon=self._coerce_int(safe_arguments.get("horizon"), default=12, minimum=1),
                 method=self._coerce_str(safe_arguments.get("method"), default="linear_regression"),
@@ -369,7 +361,6 @@ class LogToolsServer(RizhiyiFastMCPServer):
             result = await self._business_service.execute_anomaly_alert(
                 query=self._coerce_str(safe_arguments.get("query"), default="*"),
                 time_range=self._coerce_str(safe_arguments.get("time_range"), default="now-24h,now"),
-                index_name=self._coerce_str(safe_arguments.get("index_name"), default="yotta"),
                 bucket=self._optional_str(safe_arguments.get("bucket")),
                 method=self._coerce_str(safe_arguments.get("method"), default="prediction_band"),
                 threshold=self._coerce_float(safe_arguments.get("threshold"), default=3.0),
@@ -409,7 +400,6 @@ class LogToolsServer(RizhiyiFastMCPServer):
         effective_size = size if size is not None else limit
         query = self._coerce_str(arguments.get("query"), default="*")
         time_range = self._coerce_str(arguments.get("time_range"), default="now-15m,now")
-        index_name = self._coerce_str(arguments.get("index_name"), default="yotta")
         fields = arguments.get("fields")
 
         response = await self._request_json(
@@ -417,7 +407,6 @@ class LogToolsServer(RizhiyiFastMCPServer):
             params={
                 "query": query,
                 "time_range": time_range,
-                "index_name": index_name,
                 "page": page,
                 "size": effective_size,
             },
@@ -428,7 +417,7 @@ class LogToolsServer(RizhiyiFastMCPServer):
         raw_rows = response.data.get("results", {}).get("sheets", {}).get("rows", [])
         rows = raw_rows if isinstance(raw_rows, list) else []
         total = self._coerce_int(response.data.get("results", {}).get("total_hits"), default=len(rows), minimum=0)
-        hits = [self._inject_quick_links(row, query, time_range, index_name) for row in rows if isinstance(row, dict)]
+        hits = [self._inject_quick_links(row, query, time_range) for row in rows if isinstance(row, dict)]
 
         if isinstance(fields, list) and fields:
             requested_fields = [str(field) for field in fields if str(field).strip()]
@@ -452,14 +441,11 @@ class LogToolsServer(RizhiyiFastMCPServer):
     async def _execute_list_fields(self, arguments: dict[str, Any]) -> ApiResponse[dict[str, Any]]:
         query = self._coerce_str(arguments.get("query"), default="*")
         time_range = self._coerce_str(arguments.get("time_range"), default="now-15m,now")
-        index_name = self._coerce_str(arguments.get("index_name"), default="yotta")
-
         response = await self._request_json(
             "/api/v3/search/sheets/",
             params={
                 "query": query,
                 "time_range": time_range,
-                "index_name": index_name,
                 "page": 0,
                 "size": 0,
                 "fields": True,
@@ -494,7 +480,6 @@ class LogToolsServer(RizhiyiFastMCPServer):
         field = self._coerce_str(arguments.get("field"), default="")
         query = self._coerce_str(arguments.get("query"), default="*")
         time_range = self._coerce_str(arguments.get("time_range"), default="now-15m,now")
-        index_name = self._coerce_str(arguments.get("index_name"), default="yotta")
         limit = self._coerce_int(arguments.get("limit"), default=100, minimum=0)
 
         field_query = f"{query} | stats count by {field}" if query != "*" else f"* | stats count by {field}"
@@ -503,7 +488,6 @@ class LogToolsServer(RizhiyiFastMCPServer):
             params={
                 "query": field_query,
                 "time_range": time_range,
-                "index_name": index_name,
                 "page": 0,
                 "size": limit,
                 "fields": True,
@@ -534,7 +518,6 @@ class LogToolsServer(RizhiyiFastMCPServer):
     async def _execute_query_precheck(self, arguments: dict[str, Any]) -> ApiResponse[dict[str, Any]]:
         query = self._coerce_str(arguments.get("query"), default="")
         time_range = self._coerce_str(arguments.get("time_range"), default="now-15m,now")
-        index_name = self._coerce_str(arguments.get("index_name"), default="yotta")
         mode = self._coerce_str(arguments.get("mode"), default="full")
         expected_fields = self._normalize_string_list(arguments.get("expected_fields"))
         field_mapping = arguments.get("field_mapping") if isinstance(arguments.get("field_mapping"), dict) else {}
@@ -558,7 +541,6 @@ class LogToolsServer(RizhiyiFastMCPServer):
             data_response = await self._execute_query_data_precheck(
                 query=query,
                 time_range=time_range,
-                index_name=index_name,
                 sample_size=sample_size,
                 terminated_after_size=terminated_after_size,
                 sample_fields=merged_sample_fields,
@@ -658,7 +640,6 @@ class LogToolsServer(RizhiyiFastMCPServer):
         *,
         query: str,
         time_range: str,
-        index_name: str,
         sample_size: int,
         terminated_after_size: int,
         sample_fields: list[str],
@@ -668,7 +649,6 @@ class LogToolsServer(RizhiyiFastMCPServer):
             params={
                 "query": query,
                 "time_range": time_range,
-                "index_name": index_name,
                 "size": sample_size,
                 "fields": True,
                 "timeline": "false",
@@ -742,7 +722,6 @@ class LogToolsServer(RizhiyiFastMCPServer):
                     summary=self._build_shared_result_summary(tool_name, payload),
                     source_query=self._optional_str(arguments.get("query")),
                     time_range=self._resolve_primary_time_range(arguments),
-                    index_name=self._optional_str(arguments.get("index_name")),
                     upstream_sid=self._extract_sid_from_payload(payload),
                     ttl_seconds=self._parse_ttl_seconds(arguments),
                 )
@@ -1040,9 +1019,8 @@ class LogToolsServer(RizhiyiFastMCPServer):
         row: dict[str, Any],
         query: str,
         time_range: str,
-        index_name: str,
     ) -> dict[str, Any]:
-        links = self._generate_quick_links(row, query, time_range, index_name)
+        links = self._generate_quick_links(row, query, time_range)
         enriched = dict(row)
         enriched["_links"] = links
         return enriched
@@ -1052,7 +1030,6 @@ class LogToolsServer(RizhiyiFastMCPServer):
         row: dict[str, Any],
         query: str,
         time_range: str,
-        index_name: str,
     ) -> dict[str, str]:
         if not self._web_base_url:
             return {}
@@ -1063,9 +1040,6 @@ class LogToolsServer(RizhiyiFastMCPServer):
             "time_range": time_range,
             "searchMode": "intelligent",
         }
-        if index_name:
-            base_params["index_name"] = index_name
-
         links: dict[str, str] = {}
         for key, value in row.items():
             if value in (None, ""):

@@ -305,7 +305,6 @@ class GatewayTestCase(HttpGatewayTestCase):
                 {
                     "query": "status:error",
                     "time_range": "now-15m,now",
-                    "index_name": "yotta",
                     "page": 0,
                     "size": 1,
                 },

@@ -2,7 +2,6 @@
 export interface LogReduceParams {
     query: string;
     time_range: string;
-    index_name?: string;
     pattern_options?: {
         initial_dist?: string;
         alpha?: string;
@@ -341,7 +340,6 @@ export interface HttpClientConfig {
 export interface BaseQueryParams {
     query?: string;
     time_range: string;
-    index_name?: string;
     page?: number;
     size?: number;
     limit?: number; // backward compatibility alias, do not pass directly to /search/sheets
