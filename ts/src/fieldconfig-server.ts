@@ -97,7 +97,7 @@ export function createFieldConfigServer(context: ServerContext): McpServer {
 }
 
 async function startServer(): Promise<void> {
-    const server = createFieldConfigServer(createServerContextForStdio());
+    const server = createFieldConfigServer(createServerContextForStdio(process.env, 'fieldconfig'));
     const transport = new StdioServerTransport();
     await server.connect(transport);
     console.error('Rizhiyi FieldConfig MCP 服务器已启动');

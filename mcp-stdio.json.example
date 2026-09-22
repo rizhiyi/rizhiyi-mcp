@@ -5,7 +5,14 @@
       "args": ["/CHANGE/ME/rizhiyi-mcp/ts/dist/log-tools-server.js"],
       "env": {
         "LOGEASE_BASE_URL": "http://<LOGEASE_BASE_URL>",
-        "LOGEASE_API_KEY": "<USERNAME>:<API_KEY>"
+        "LOGEASE_API_KEY": "<USERNAME>:<API_KEY>",
+        "MCP_GUARDRAILS_ENABLED": "true",
+        "MCP_GUARDRAIL_ENFORCE_MODE": "audit",
+        "MCP_GUARDRAIL_RISK_ALERT_THRESHOLD": "50",
+        "MCP_GUARDRAIL_RISK_REJECT_THRESHOLD": "100",
+        "MCP_GUARDRAIL_SAFE_TIMERANGE": "24h",
+        "MCP_GUARDRAIL_EXEC_TIMEOUT_SECONDS": "60",
+        "MCP_GUARDRAIL_MAX_EVENTS": "1000"
       }
     },
     "rizhiyi_chatspl": {
@@ -13,7 +20,14 @@
       "args": ["/CHANGE/ME/rizhiyi-mcp/ts/dist/chatspl-server.js"],
       "env": {
         "LOGEASE_BASE_URL": "http://<LOGEASE_BASE_URL>",
-        "LOGEASE_API_KEY": "<USERNAME>:<API_KEY>"
+        "LOGEASE_API_KEY": "<USERNAME>:<API_KEY>",
+        "MCP_GUARDRAILS_ENABLED": "true",
+        "MCP_GUARDRAIL_ENFORCE_MODE": "audit",
+        "MCP_GUARDRAIL_RISK_ALERT_THRESHOLD": "50",
+        "MCP_GUARDRAIL_RISK_REJECT_THRESHOLD": "100",
+        "MCP_GUARDRAIL_SAFE_TIMERANGE": "24h",
+        "MCP_GUARDRAIL_EXEC_TIMEOUT_SECONDS": "60",
+        "MCP_GUARDRAIL_MAX_EVENTS": "1000"
       }
     },
     "rizhiyi_dashboard": {
@@ -21,7 +35,14 @@
       "args": ["/CHANGE/ME/rizhiyi-mcp/ts/dist/dashboard-server.js"],
       "env": {
         "LOGEASE_BASE_URL": "http://<LOGEASE_BASE_URL>",
-        "LOGEASE_API_KEY": "<USERNAME>:<API_KEY>"
+        "LOGEASE_API_KEY": "<USERNAME>:<API_KEY>",
+        "MCP_GUARDRAILS_ENABLED": "true",
+        "MCP_GUARDRAIL_ENFORCE_MODE": "audit",
+        "MCP_GUARDRAIL_RISK_ALERT_THRESHOLD": "50",
+        "MCP_GUARDRAIL_RISK_REJECT_THRESHOLD": "100",
+        "MCP_GUARDRAIL_SAFE_TIMERANGE": "24h",
+        "MCP_GUARDRAIL_EXEC_TIMEOUT_SECONDS": "60",
+        "MCP_GUARDRAIL_MAX_EVENTS": "1000"
       }
     },
     "rizhiyi_parserrule": {
@@ -53,7 +74,14 @@
       "args": ["/CHANGE/ME/rizhiyi-mcp/ts/dist/alert-server.js"],
       "env": {
         "LOGEASE_BASE_URL": "http://<LOGEASE_BASE_URL>",
-        "LOGEASE_API_KEY": "<USERNAME>:<API_KEY>"
+        "LOGEASE_API_KEY": "<USERNAME>:<API_KEY>",
+        "MCP_GUARDRAILS_ENABLED": "true",
+        "MCP_GUARDRAIL_ENFORCE_MODE": "enforce",
+        "MCP_GUARDRAIL_RISK_ALERT_THRESHOLD": "50",
+        "MCP_GUARDRAIL_RISK_REJECT_THRESHOLD": "100",
+        "MCP_GUARDRAIL_SAFE_TIMERANGE": "24h",
+        "MCP_GUARDRAIL_EXEC_TIMEOUT_SECONDS": "60",
+        "MCP_GUARDRAIL_MAX_EVENTS": "1000"
       }
     },
     "rizhiyi_manage": {

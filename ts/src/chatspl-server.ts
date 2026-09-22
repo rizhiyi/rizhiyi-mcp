@@ -165,7 +165,7 @@ export function createChatsplServer(context: ServerContext): McpServer {
 }
 
 if (isExecutedDirectly(import.meta.url)) {
-    const context = createServerContextForStdio();
+    const context = createServerContextForStdio(process.env, 'chatspl');
     const server = createChatsplServer(context);
     const transport = new StdioServerTransport();
     server.connect(transport).catch(console.error);

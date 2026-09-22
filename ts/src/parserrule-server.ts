@@ -93,7 +93,7 @@ export function createParserRuleServer(context: ServerContext): McpServer {
 }
 
 async function startServer(): Promise<void> {
-    const server = createParserRuleServer(createServerContextForStdio());
+    const server = createParserRuleServer(createServerContextForStdio(process.env, 'parserrule'));
     const transport = new StdioServerTransport();
     await server.connect(transport);
     console.error('Rizhiyi ParserRule MCP 服务器已启动');

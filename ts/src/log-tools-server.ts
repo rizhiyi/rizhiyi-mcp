@@ -1091,7 +1091,7 @@ function buildToolError(errorCode: string, message: string, suggestion: string):
 }
 
 async function startServer(): Promise<void> {
-    const server = createLogToolsServer(createServerContextForStdio());
+    const server = createLogToolsServer(createServerContextForStdio(process.env, 'log-tools'));
     const transport = new StdioServerTransport();
     await server.connect(transport);
     console.error('LogEase MCP 服务器已启动');

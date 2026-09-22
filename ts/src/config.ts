@@ -281,7 +281,10 @@ export function createHttpClientConfig(context: ServerContext): HttpClientConfig
     };
 }
 
-export function createServerContextForStdio(env: NodeJS.ProcessEnv = process.env): ServerContext {
+export function createServerContextForStdio(
+    env: NodeJS.ProcessEnv = process.env,
+    routeName?: string
+): ServerContext {
     const runtimeConfig = getRuntimeConfig(env);
     const authContext = buildAuthContextFromEnv(env);
 
@@ -293,7 +296,8 @@ export function createServerContextForStdio(env: NodeJS.ProcessEnv = process.env
         runtimeConfig,
         authContext,
         requestMeta: {
-            source: 'stdio'
+            source: 'stdio',
+            ...(routeName ? { routeName, serverName: routeName } : {})
         }
     };
 }

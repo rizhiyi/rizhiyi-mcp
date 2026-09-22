@@ -113,7 +113,7 @@ export function createIngestServer(context: ServerContext): McpServer {
 }
 
 async function startServer(): Promise<void> {
-    const server = createIngestServer(createServerContextForStdio());
+    const server = createIngestServer(createServerContextForStdio(process.env, 'ingest'));
     const transport = new StdioServerTransport();
     await server.connect(transport);
     console.error('Rizhiyi Ingest MCP 服务器已启动');

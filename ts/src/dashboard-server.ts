@@ -110,7 +110,7 @@ export function createDashboardServer(context: ServerContext): McpServer {
 }
 
 async function startServer(): Promise<void> {
-    const server = createDashboardServer(createServerContextForStdio());
+    const server = createDashboardServer(createServerContextForStdio(process.env, 'dashboard'));
     const transport = new StdioServerTransport();
     await server.connect(transport);
     console.error('Rizhiyi Dashboard MCP 服务器已启动');

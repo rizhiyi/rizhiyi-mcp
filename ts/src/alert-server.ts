@@ -138,7 +138,7 @@ export function createAlertServer(context: ServerContext): McpServer {
 }
 
 async function startServer(): Promise<void> {
-    const server = createAlertServer(createServerContextForStdio());
+    const server = createAlertServer(createServerContextForStdio(process.env, 'alert'));
     const transport = new StdioServerTransport();
     await server.connect(transport);
     console.error('Rizhiyi Alert MCP 服务器已启动 (rizhiyi_alert)');

@@ -60,7 +60,7 @@ export async function createOpenapiServer(context: ServerContext): Promise<McpSe
 }
 
 async function startServer(): Promise<void> {
-  const server = await createOpenapiServer(createServerContextForStdio());
+  const server = await createOpenapiServer(createServerContextForStdio(process.env, 'openapi'));
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }

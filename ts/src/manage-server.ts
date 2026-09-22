@@ -360,7 +360,7 @@ export function createManageServer(context: ServerContext): McpServer {
 }
 
 async function startServer(): Promise<void> {
-  const server = createManageServer(createServerContextForStdio());
+  const server = createManageServer(createServerContextForStdio(process.env, 'manage'));
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
