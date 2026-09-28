@@ -16,6 +16,7 @@
     "test:rate-limit": "npm run build && node scripts/rate-limit-smoke-test.mjs",
     "test:usage-log": "npm run build && node scripts/usage-log-test.mjs",
     "test:guardrails": "npm run build && node scripts/guardrails-test.mjs",
+    "test:tool-annotations": "npm run build && node scripts/tool-annotations-test.mjs",
     "test:analysis-parity": "npm run build && node scripts/analysis-parity-test.mjs",
     "test:shared-store": "npm run build && node scripts/shared-store-test.mjs",
     "start": "npm run build && node dist/log-tools-server.js",

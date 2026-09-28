@@ -122,3 +122,47 @@ def test_rate_limit_config_rejects_non_positive_values() -> None:
         pass
     else:  # pragma: no cover - assertion guard
         raise AssertionError("per-tool rate limit 0 should be rejected")
+
+
+def test_boundary_allows_exactly_limit_calls() -> None:
+    limiter = FixedWindowRateLimiter(global_limit=2, clock=lambda: 100.0)
+
+    assert limiter.consume(route_name="r", tool_name="a").allowed
+    assert limiter.consume(route_name="r", tool_name="a").allowed
+    denied = limiter.consume(route_name="r", tool_name="a")
+    assert not denied.allowed
+    assert denied.scope == "global"
+    assert denied.limit == 2
+    # 第 limit+1 次才拒绝：current 表示“本次调用若计入后的序号”。
+    assert denied.current == 3
+    assert denied.remaining == 0
+
+
+def test_rejected_calls_do_not_inflate_counter() -> None:
+    limiter = FixedWindowRateLimiter(global_limit=1, clock=lambda: 100.0)
+
+    assert limiter.consume(route_name="r", tool_name="a").allowed
+    first_denied = limiter.consume(route_name="r", tool_name="a")
+    second_denied = limiter.consume(route_name="r", tool_name="a")
+    third_denied = limiter.consume(route_name="r", tool_name="a")
+
+    # 被拒绝的调用不计数，current 恒定在 limit+1，而不是持续膨胀。
+    assert [d.current for d in (first_denied, second_denied, third_denied)] == [2, 2, 2]
+    assert all(d.remaining == 0 for d in (first_denied, second_denied, third_denied))
+
+
+def test_rejected_tool_call_does_not_consume_global_quota() -> None:
+    limiter = FixedWindowRateLimiter(
+        global_limit=2,
+        per_tool_limits={"tool_a": 1},
+        clock=lambda: 100.0,
+    )
+
+    assert limiter.consume(route_name="r", tool_name="tool_a").allowed
+    rejected = limiter.consume(route_name="r", tool_name="tool_a")
+    assert not rejected.allowed
+    assert rejected.scope == "tool"
+
+    # 被拒绝的 tool_a 调用不应占用全局配额，因此 tool_b 仍可用。
+    other = limiter.consume(route_name="r", tool_name="tool_b")
+    assert other.allowed

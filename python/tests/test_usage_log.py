@@ -76,3 +76,54 @@ def test_hourly_rotation_when_size_rotation_disabled(tmp_path: Path) -> None:
         "hourly-20260921.1.log",
         "hourly-20260921.log",
     ]
+
+
+def test_cache_invalidation_detects_external_new_file(tmp_path: Path) -> None:
+    local_timezone = datetime.now().astimezone().tzinfo
+    now = datetime(2026, 9, 21, 10, 0, tzinfo=local_timezone)
+    logger = UsageLogger(
+        UsageLogConfig(
+            directory=tmp_path,
+            name_prefix="invalidate",
+            rotate_bytes=1,
+            rotate_interval="1d",
+            keep_files=5,
+        ),
+        clock=lambda: now,
+    )
+
+    logger.write_sync(_entry())
+    logger.write_sync(_entry())
+    # 模拟另一个进程创建了更高序号的文件；依赖目录 mtime 失效才能被发现。
+    (tmp_path / "invalidate-20260921.5.log").write_text("external\n", encoding="utf-8")
+    logger.write_sync(_entry())
+
+    assert sorted(path.name for path in tmp_path.glob("invalidate-*.log")) == [
+        "invalidate-20260921.1.log",
+        "invalidate-20260921.5.log",
+        "invalidate-20260921.6.log",
+        "invalidate-20260921.log",
+    ]
+
+
+def test_size_cache_updates_after_append(tmp_path: Path) -> None:
+    local_timezone = datetime.now().astimezone().tzinfo
+    now = datetime(2026, 9, 21, 10, 0, tzinfo=local_timezone)
+    logger = UsageLogger(
+        UsageLogConfig(
+            directory=tmp_path,
+            name_prefix="size",
+            rotate_bytes=500,
+            rotate_interval="1d",
+            keep_files=100,
+        ),
+        clock=lambda: now,
+    )
+
+    for _ in range(20):
+        logger.write_sync(_entry())
+
+    paths = sorted(tmp_path.glob("size-*.log"))
+    # 若追加后不更新缓存大小，就会一直复用同一文件并突破 rotate_bytes。
+    assert len(paths) >= 2
+    assert all(path.stat().st_size <= 500 for path in paths)
