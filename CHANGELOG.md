@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **H2 上游请求超时与护栏解耦**：新增 `UPSTREAM_TIMEOUT_SECONDS`（默认 30 秒，TS/Python 同名同默认值）。TypeScript 的 axios `timeoutMs` 与工具执行 `withTimeout`、Python 的 `asyncio.wait_for` 不再依赖护栏开关；护栏处于 `enforce` 且命中 SPL 执行路径时仍使用 `MCP_GUARDRAIL_EXEC_TIMEOUT_SECONDS`，其余情况回退到 `UPSTREAM_TIMEOUT_SECONDS`。
+- **H3 请求体大小上限**：新增 `MCP_HTTP_MAX_BODY_BYTES`（默认 4MB）。Python 网关 `_consume_request_body` 累计超限即中断读取并返回 `413 REQUEST_BODY_TOO_LARGE`；TypeScript 的 `express.json` 上限由硬编码 `'4mb'` 改为读同一配置键，并通过错误中间件返回一致的 413 JSON。
+- **H4 HTTP session 空闲回收与数量上限**：新增 `MCP_HTTP_SESSION_IDLE_TTL_SECONDS`（默认 1800）与 `MCP_HTTP_SESSION_MAX_COUNT`（默认 256）。两端记录 session 最近活跃时间并在每次请求刷新，后台每 60 秒 GC：先按空闲 TTL 清理，再按数量上限淘汰最旧 session，淘汰时真正关闭 transport（TS 关闭 server + transport，Python 终止 SDK transport）；`GET /healthz` 两端均暴露 `session_count`。
+
 ## 0.3.1
 
 ### Added

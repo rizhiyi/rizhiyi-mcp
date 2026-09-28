@@ -1,5 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ServerContext } from './config.js';
+import { DEFAULT_UPSTREAM_TIMEOUT_SECONDS } from './config.js';
 import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { deriveToolAnnotations } from './tool-annotations.js';
@@ -11,6 +12,7 @@ import {
     assessToolArguments,
     guardrailConfigFromRuntime,
     GuardrailAssessment,
+    GuardrailConfig,
     mergeAssessments
 } from './spl-guardrails.js';
 
@@ -127,6 +129,26 @@ export function jsonSchemaObjectToZodShape(jsonSchema: JsonSchema): Record<strin
     );
 }
 
+/**
+ * 决定单次工具执行的超时阈值（秒）。
+ * 执行超时无条件生效；护栏处于 enforce 且命中 SPL 执行路径时使用护栏阈值，
+ * 其余情况回退到与护栏解耦的 UPSTREAM_TIMEOUT_SECONDS。
+ */
+export function resolveExecutionTimeoutSeconds(
+    guardrailConfig: GuardrailConfig | undefined,
+    options: { routeName?: string; queryCount: number; upstreamTimeoutSeconds?: number }
+): number {
+    const guardrailExecApplies = Boolean(
+        guardrailConfig?.enabled
+        && guardrailConfig.mode === 'enforce'
+        && (options.queryCount > 0 || options.routeName === 'log-tools')
+    );
+    if (guardrailExecApplies && guardrailConfig) {
+        return guardrailConfig.execTimeoutSeconds;
+    }
+    return options.upstreamTimeoutSeconds ?? DEFAULT_UPSTREAM_TIMEOUT_SECONDS;
+}
+
 export function registerToolDefinitions(
     server: McpServer,
     tools: ToolDefinition[],
@@ -201,20 +223,13 @@ export function registerToolDefinitions(
                     }
 
                     const invocation = Promise.resolve(handler(args as Record<string, unknown>, extra));
-                    let result: any;
-                    if (
-                        guardrailConfig?.enabled
-                        && guardrailConfig.mode === 'enforce'
-                        && (assessment?.queries.length || context?.requestMeta.routeName === 'log-tools')
-                    ) {
-                        result = await withTimeout(
-                            invocation,
-                            guardrailConfig.execTimeoutSeconds * 1000,
-                            guardrailConfig.execTimeoutSeconds
-                        );
-                    } else {
-                        result = await invocation;
-                    }
+                    // 工具执行超时无条件生效：护栏 enforce 只决定阈值，不再决定“是否超时”。
+                    const timeoutSeconds = resolveExecutionTimeoutSeconds(guardrailConfig, {
+                        routeName: context?.requestMeta.routeName,
+                        queryCount: assessment?.queries.length ?? 0,
+                        upstreamTimeoutSeconds: context?.runtimeConfig.upstreamTimeoutSeconds
+                    });
+                    let result: any = await withTimeout(invocation, timeoutSeconds * 1000, timeoutSeconds);
 
                     if (guardrailConfig && assessment) {
                         const generatedAssessment = assessGeneratedSpl(
@@ -372,7 +387,7 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutSec
             promise,
             new Promise<T>((_resolve, reject) => {
                 timer = setTimeout(() => {
-                    const error: any = new Error(`SPL 工具执行超过护栏时长上限 ${timeoutSeconds} 秒。`);
+                    const error: any = new Error(`工具执行超过时长上限 ${timeoutSeconds} 秒。`);
                     error.code = 'SPL_EXECUTION_TIMEOUT';
                     error.timeoutSeconds = timeoutSeconds;
                     reject(error);

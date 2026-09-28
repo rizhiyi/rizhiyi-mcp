@@ -54,6 +54,19 @@ class ServiceRuntimeState:
     session_auth: dict[str, str] = field(default_factory=dict)
     initialize_params: dict[str, dict[str, Any]] = field(default_factory=dict)
     initialized_sessions: set[str] = field(default_factory=set)
+    # session_id -> 最近一次命中该 session 的单调时钟时间（秒），用于空闲 TTL 与数量淘汰。
+    session_last_seen: dict[str, float] = field(default_factory=dict)
+
+    def touch_session(self, session_id: str, *, now: float | None = None) -> None:
+        """刷新 session 的最近活跃时间。"""
+        self.session_last_seen[session_id] = time.monotonic() if now is None else now
+
+    def forget_session(self, session_id: str) -> None:
+        """从全部 session 记账结构中移除指定 session。"""
+        self.session_auth.pop(session_id, None)
+        self.initialize_params.pop(session_id, None)
+        self.initialized_sessions.discard(session_id)
+        self.session_last_seen.pop(session_id, None)
 
 
 class McpServerError(Exception):
@@ -359,30 +372,29 @@ class RizhiyiFastMCPServer(FastMCP[None]):
         if assessment.should_block:
             return self._build_guardrail_block_result(assessment)
 
+        # 工具执行超时无条件生效：护栏 enforce 只决定阈值，不再决定“是否超时”。
+        # 未命中护栏执行路径时回退到与护栏解耦的 upstream_timeout_seconds。
+        if (
+            guardrail_config.enabled
+            and guardrail_config.mode == "enforce"
+            and (assessment.queries or self.route_name == "log-tools")
+        ):
+            timeout_seconds = guardrail_config.exec_timeout_seconds
+        else:
+            timeout_seconds = self.runtime_config.upstream_timeout_seconds
+
         try:
             invocation = self.call_tool(name, safe_arguments)
-            if (
-                guardrail_config.enabled
-                and guardrail_config.mode == "enforce"
-                and (assessment.queries or self.route_name == "log-tools")
-            ):
-                result = await asyncio.wait_for(
-                    invocation,
-                    timeout=guardrail_config.exec_timeout_seconds,
-                )
-            else:
-                result = await invocation
+            result = await asyncio.wait_for(invocation, timeout=timeout_seconds)
         except asyncio.TimeoutError:
+            timeout_text = f"{timeout_seconds:g}"
             payload = {
                 "error_code": "SPL_EXECUTION_TIMEOUT",
-                "message": (
-                    "SPL 工具执行超过护栏时长上限 "
-                    f"{guardrail_config.exec_timeout_seconds} 秒。"
-                ),
+                "message": f"工具执行超过时长上限 {timeout_text} 秒。",
                 "suggestion": "请缩小 time_range、收紧查询条件或拆分查询后重试。",
                 "retryable": True,
                 "details": {
-                    "timeout_seconds": guardrail_config.exec_timeout_seconds,
+                    "timeout_seconds": timeout_seconds,
                     "guardrail": assessment.to_details(),
                 },
                 "guardrail": assessment.to_details(),
@@ -411,6 +423,29 @@ class RizhiyiFastMCPServer(FastMCP[None]):
             return await self._invoke_tool_handler(handler, safe_arguments)
 
         raise McpServerError(f"未知工具: {name}", code=-32601, data={"name": name})
+
+    async def close_session(self, session_id: str) -> bool:
+        """关闭并移除指定 session 的 SDK transport（用于空闲回收 / 数量淘汰）。
+
+        SDK 的 StreamableHTTPSessionManager 没有公开的按 session 关闭接口，
+        这里从其内部登记表取出 transport 并 terminate()，确保不是只删引用。
+        """
+        manager = self.session_manager
+        instances = getattr(manager, "_server_instances", None)
+        if not isinstance(instances, dict):
+            return False
+        transport = instances.pop(session_id, None)
+        owners = getattr(manager, "_session_owners", None)
+        if isinstance(owners, dict):
+            owners.pop(session_id, None)
+        if transport is None:
+            return False
+        try:
+            await transport.terminate()
+        except Exception:
+            _LOGGER.exception("关闭 MCP session transport 失败: %s", session_id)
+            return False
+        return True
 
     def _build_guardrail_block_result(
         self,

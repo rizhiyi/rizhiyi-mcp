@@ -58,6 +58,11 @@ class RuntimeConfig(BaseSettings):
     mcp_allowed_origins: list[str] = ["*"]
     mcp_rate_limit_global_per_minute: int | None = None
     mcp_rate_limit_per_tool: dict[str, int] = Field(default_factory=dict)
+    # HTTP 网关请求体上限（字节），与 TS 端 express.json limit 使用同一环境变量与默认值。
+    mcp_http_max_body_bytes: int = 4 * 1024 * 1024
+    # HTTP session 空闲回收 TTL（秒）与全局数量上限，与 TS 端保持一致。
+    mcp_http_session_idle_ttl_seconds: int = 1800
+    mcp_http_session_max_count: int = 256
     rizhiyi_log_dir: Path = Path("./logs")
     rizhiyi_log_name_prefix: str = "mcp-server"
     rizhiyi_log_rotate_bytes: int = 10 * 1024 * 1024
@@ -102,6 +107,9 @@ class RuntimeConfig(BaseSettings):
         "rizhiyi_log_keep_files",
         "mcp_guardrail_exec_timeout_seconds",
         "mcp_guardrail_max_events",
+        "mcp_http_max_body_bytes",
+        "mcp_http_session_idle_ttl_seconds",
+        "mcp_http_session_max_count",
         mode="after",
     )
     @classmethod
