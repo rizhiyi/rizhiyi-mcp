@@ -203,6 +203,10 @@ LOGEASE_BASE_URL=https://your-logease.example.com
 | `MCP_HTTP_BASE_PATH` | `/mcp`    | 路由前缀 |
 | `MCP_RATE_LIMIT_GLOBAL_PER_MINUTE` | 未设置 | 全部工具调用合计的每分钟上限 |
 | `MCP_RATE_LIMIT_PER_TOOL` | `{}` | 单工具每分钟上限的 JSON 映射 |
+| `UPSTREAM_TIMEOUT_SECONDS` | `30` | 上游请求 / 工具执行兜底超时（秒），与护栏解耦 |
+| `MCP_HTTP_MAX_BODY_BYTES` | `4194304` | 单次请求体上限（字节），超限返回 413 |
+| `MCP_HTTP_SESSION_IDLE_TTL_SECONDS` | `1800` | HTTP session 空闲回收 TTL（秒） |
+| `MCP_HTTP_SESSION_MAX_COUNT` | `256` | HTTP session 全局数量上限，超限淘汰最旧 |
 
 ##### 2. 启动网关
 
@@ -317,6 +321,10 @@ LOGEASE_BASE_URL=https://your-logease.example.com
 | `MCP_HTTP_BASE_PATH` | `/mcp`    | 路由前缀 |
 | `MCP_RATE_LIMIT_GLOBAL_PER_MINUTE` | 未设置 | 全部工具调用合计的每分钟上限 |
 | `MCP_RATE_LIMIT_PER_TOOL` | `{}` | 单工具每分钟上限的 JSON 映射 |
+| `UPSTREAM_TIMEOUT_SECONDS` | `30` | 上游请求 / 工具执行兜底超时（秒），与护栏解耦 |
+| `MCP_HTTP_MAX_BODY_BYTES` | `4194304` | 单次请求体上限（字节），超限返回 413 |
+| `MCP_HTTP_SESSION_IDLE_TTL_SECONDS` | `1800` | HTTP session 空闲回收 TTL（秒） |
+| `MCP_HTTP_SESSION_MAX_COUNT` | `256` | HTTP session 全局数量上限，超限淘汰最旧 |
 
 ### 第 3 步：启动 HTTP 网关
 
@@ -419,6 +427,26 @@ MCP_RATE_LIMIT_PER_TOOL='{"log_search_sheet":120,"dashboard/create_dashboard_fro
 - TypeScript 的 stdio 模式不启用这组限制；Python 版仅提供 HTTP 模式。
 
 `GET /healthz` 的 `rate_limiting` 字段会显示是否启用、全局上限和已配置的单工具规则数量，但不会暴露具体工具规则。
+
+***
+
+## HTTP 网关可靠性与资源上限
+
+TypeScript、Python 两套网关共享同一组配置键与默认值，用于避免工具调用永久挂起和 session 无界增长：
+
+```bash
+# 上游请求 / 工具执行兜底超时（秒），与护栏解耦：护栏关闭时同样生效
+UPSTREAM_TIMEOUT_SECONDS=30
+# 单次请求体上限（字节），超过即返回 413 REQUEST_BODY_TOO_LARGE
+MCP_HTTP_MAX_BODY_BYTES=4194304
+# HTTP session 空闲回收 TTL（秒）与全局数量上限
+MCP_HTTP_SESSION_IDLE_TTL_SECONDS=1800
+MCP_HTTP_SESSION_MAX_COUNT=256
+```
+
+- `UPSTREAM_TIMEOUT_SECONDS` 是可靠性兜底，不再依赖 `MCP_GUARDRAILS_ENABLED`。当护栏处于 `enforce` 且命中 SPL 执行路径时，使用 `MCP_GUARDRAIL_EXEC_TIMEOUT_SECONDS`；其余情况一律使用 `UPSTREAM_TIMEOUT_SECONDS`。
+- 每个 HTTP session 记录最近活跃时间，每次请求命中即刷新。后台 GC 每 60 秒执行一次，**先按空闲 TTL 清理，再按数量上限淘汰最旧的 session**；被淘汰的 session 会真正关闭其 transport。
+- `GET /healthz` 的 `session_count` 字段展示当前存活的 session 数量。
 
 ***
 

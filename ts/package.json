@@ -17,6 +17,7 @@
     "test:usage-log": "npm run build && node scripts/usage-log-test.mjs",
     "test:guardrails": "npm run build && node scripts/guardrails-test.mjs",
     "test:tool-annotations": "npm run build && node scripts/tool-annotations-test.mjs",
+    "test:http-guard": "npm run build && node scripts/http-guard-test.mjs",
     "test:analysis-parity": "npm run build && node scripts/analysis-parity-test.mjs",
     "test:shared-store": "npm run build && node scripts/shared-store-test.mjs",
     "test:openapi-cache": "npm run build && node scripts/openapi-cache-test.mjs",

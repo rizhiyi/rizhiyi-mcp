@@ -19,7 +19,29 @@ export interface RuntimeConfig {
     rateLimitPerTool: Record<string, number>;
     usageLog: UsageLogConfig;
     guardrails: GuardrailConfig;
+    /**
+     * 上游 HTTP 请求 / 工具执行的兜底超时（秒）。
+     * 与护栏完全解耦：即使护栏关闭也必须生效，避免工具调用永久挂起。
+     * 环境变量 UPSTREAM_TIMEOUT_SECONDS，默认 30，与 Python 端保持一致。
+     */
+    upstreamTimeoutSeconds: number;
+    /**
+     * HTTP 网关单次请求体上限（字节），与 Python 端 mcp_http_max_body_bytes 保持一致。
+     * 环境变量 MCP_HTTP_MAX_BODY_BYTES，默认 4MB。
+     */
+    httpMaxBodyBytes: number;
+    /**
+     * HTTP session 空闲回收 TTL（秒）与全局数量上限，与 Python 端保持一致。
+     * 环境变量 MCP_HTTP_SESSION_IDLE_TTL_SECONDS（默认 1800）/ MCP_HTTP_SESSION_MAX_COUNT（默认 256）。
+     */
+    sessionIdleTtlSeconds: number;
+    sessionMaxCount: number;
 }
+
+export const DEFAULT_UPSTREAM_TIMEOUT_SECONDS = 30;
+export const DEFAULT_HTTP_MAX_BODY_BYTES = 4 * 1024 * 1024;
+export const DEFAULT_SESSION_IDLE_TTL_SECONDS = 1800;
+export const DEFAULT_SESSION_MAX_COUNT = 256;
 
 const DEFAULT_GUARDRAIL_DENY_COMMANDS = [
     'collect', 'delete', 'mcollect', 'fit', 'outputlookup', 'download', 'save',
@@ -79,6 +101,25 @@ function parseIntegerEnv(rawValue: string | undefined, defaultValue: number, var
     const parsed = Number(rawValue);
     if (!Number.isInteger(parsed)) {
         throw new Error(`${variableName} 必须是整数`);
+    }
+    return parsed;
+}
+
+function parsePositiveNumberEnv(rawValue: string | undefined, defaultValue: number, variableName: string): number {
+    if (typeof rawValue === 'undefined' || rawValue.trim() === '') {
+        return defaultValue;
+    }
+    const parsed = Number(rawValue);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+        throw new Error(`${variableName} 必须是大于 0 的数字`);
+    }
+    return parsed;
+}
+
+function parsePositiveIntegerEnv(rawValue: string | undefined, defaultValue: number, variableName: string): number {
+    const parsed = parseIntegerEnv(rawValue, defaultValue, variableName);
+    if (parsed <= 0) {
+        throw new Error(`${variableName} 必须是正整数`);
     }
     return parsed;
 }
@@ -244,6 +285,26 @@ export function getRuntimeConfig(env: NodeJS.ProcessEnv = process.env): RuntimeC
     const rateLimitPerTool = parsePerToolRateLimits(env.MCP_RATE_LIMIT_PER_TOOL);
     const usageLog = parseUsageLogConfig(env);
     const guardrails = parseGuardrailConfig(env);
+    const upstreamTimeoutSeconds = parsePositiveNumberEnv(
+        env.UPSTREAM_TIMEOUT_SECONDS,
+        DEFAULT_UPSTREAM_TIMEOUT_SECONDS,
+        'UPSTREAM_TIMEOUT_SECONDS'
+    );
+    const httpMaxBodyBytes = parsePositiveIntegerEnv(
+        env.MCP_HTTP_MAX_BODY_BYTES,
+        DEFAULT_HTTP_MAX_BODY_BYTES,
+        'MCP_HTTP_MAX_BODY_BYTES'
+    );
+    const sessionIdleTtlSeconds = parsePositiveIntegerEnv(
+        env.MCP_HTTP_SESSION_IDLE_TTL_SECONDS,
+        DEFAULT_SESSION_IDLE_TTL_SECONDS,
+        'MCP_HTTP_SESSION_IDLE_TTL_SECONDS'
+    );
+    const sessionMaxCount = parsePositiveIntegerEnv(
+        env.MCP_HTTP_SESSION_MAX_COUNT,
+        DEFAULT_SESSION_MAX_COUNT,
+        'MCP_HTTP_SESSION_MAX_COUNT'
+    );
 
     if (!env.LOGEASE_BASE_URL) {
         console.warn('LOGEASE_BASE_URL 未设置，默认使用 https://127.0.0.1:8090');
@@ -259,7 +320,11 @@ export function getRuntimeConfig(env: NodeJS.ProcessEnv = process.env): RuntimeC
         rateLimitGlobalPerMinute,
         rateLimitPerTool,
         usageLog,
-        guardrails
+        guardrails,
+        upstreamTimeoutSeconds,
+        httpMaxBodyBytes,
+        sessionIdleTtlSeconds,
+        sessionMaxCount
     };
 }
 
@@ -275,9 +340,8 @@ export function createHttpClientConfig(context: ServerContext): HttpClientConfig
         headers: context.authContext.headers,
         httpsAgent: createHttpsAgent(context.runtimeConfig),
         username: context.authContext.username,
-        timeoutMs: context.runtimeConfig.guardrails.enabled && context.runtimeConfig.guardrails.mode === 'enforce'
-            ? context.runtimeConfig.guardrails.execTimeoutSeconds * 1000
-            : undefined
+        // 上游请求超时与护栏解耦：无论护栏是否开启都无条件生效，避免请求永久挂起。
+        timeoutMs: context.runtimeConfig.upstreamTimeoutSeconds * 1000
     };
 }
 

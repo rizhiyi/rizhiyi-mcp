@@ -1,8 +1,12 @@
 from __future__ import annotations
 
-from contextlib import AsyncExitStack, asynccontextmanager
+import asyncio
+from collections.abc import Awaitable, Callable, Sequence
+from contextlib import AsyncExitStack, asynccontextmanager, suppress
 from dataclasses import dataclass
 import json
+import logging
+import time
 from typing import Any
 
 from fastapi import FastAPI, status
@@ -22,12 +26,80 @@ from .servers import (
     push_request_runtime_context,
 )
 
+_LOGGER = logging.getLogger(__name__)
+
+# 后台 session GC 周期（秒）。
+_SESSION_GC_INTERVAL_SECONDS = 60.0
+
 
 @dataclass(slots=True)
 class MountedServer:
     route_name: str
     server: RizhiyiFastMCPServer
     state: ServiceRuntimeState
+
+
+class RequestBodyTooLarge(Exception):
+    """请求体累计字节数超过配置上限时抛出，由网关转换为 413 响应。"""
+
+    def __init__(self, max_bytes: int) -> None:
+        super().__init__(f"request body exceeds {max_bytes} bytes")
+        self.max_bytes = max_bytes
+
+
+SessionCloser = Callable[[str], Awaitable[bool]]
+
+
+async def collect_stale_sessions(
+    scopes: Sequence[tuple[ServiceRuntimeState, SessionCloser]],
+    *,
+    idle_ttl_seconds: float,
+    max_count: int,
+    now: float | None = None,
+) -> list[str]:
+    """回收空闲或超量的 HTTP session，返回被回收的 session_id 列表。
+
+    优先级：**先按空闲 TTL 清理，再按全局数量上限淘汰最旧的 session**。
+    淘汰时必须调用 closer 真正关闭 transport，而不是只从记账结构里删引用。
+    """
+    current = time.monotonic() if now is None else now
+    evicted: list[str] = []
+
+    # 1) 空闲 TTL：last_seen 缺失或超过 TTL 未刷新的一律回收。
+    for state, closer in scopes:
+        for session_id in list(state.session_auth):
+            last_seen = state.session_last_seen.get(session_id)
+            if last_seen is not None and current - last_seen < idle_ttl_seconds:
+                continue
+            state.forget_session(session_id)
+            await closer(session_id)
+            evicted.append(session_id)
+
+    # 2) 数量上限：跨全部 server 全局淘汰最旧的 session。
+    tracked = [
+        (state.session_last_seen.get(session_id, float("-inf")), state, closer, session_id)
+        for state, closer in scopes
+        for session_id in list(state.session_auth)
+    ]
+    overflow = len(tracked) - max_count
+    if overflow > 0:
+        tracked.sort(key=lambda item: item[0])
+        for _, state, closer, session_id in tracked[:overflow]:
+            state.forget_session(session_id)
+            await closer(session_id)
+            evicted.append(session_id)
+
+    return evicted
+
+
+async def _session_gc_loop(evict: Callable[[], Awaitable[None]]) -> None:
+    """按固定周期执行 session 回收，直到任务被取消。"""
+    while True:
+        await asyncio.sleep(_SESSION_GC_INTERVAL_SECONDS)
+        try:
+            await evict()
+        except Exception:  # pragma: no cover - GC 失败不应终止后台任务
+            _LOGGER.exception("回收空闲 MCP session 失败")
 
 
 class AuthenticatedMountedServerApp:
@@ -38,11 +110,13 @@ class AuthenticatedMountedServerApp:
         runtime_config: RuntimeConfig,
         server: RizhiyiFastMCPServer,
         service_state: ServiceRuntimeState,
+        on_session_registered: Callable[[], Awaitable[None]] | None = None,
     ) -> None:
         self.route_name = route_name
         self.runtime_config = runtime_config
         self.server = server
         self.service_state = service_state
+        self.on_session_registered = on_session_registered
         server.streamable_http_app()
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
@@ -63,7 +137,18 @@ class AuthenticatedMountedServerApp:
         parsed_body: dict[str, Any] | None = None
 
         if method == "POST":
-            raw_body = await _consume_request_body(receive)
+            try:
+                raw_body = await _consume_request_body(
+                    receive,
+                    max_bytes=self.runtime_config.mcp_http_max_body_bytes,
+                )
+            except RequestBodyTooLarge as exc:
+                await _http_error(
+                    status.HTTP_413_CONTENT_TOO_LARGE,
+                    "REQUEST_BODY_TOO_LARGE",
+                    f"请求体超过上限 {exc.max_bytes} 字节。",
+                )(scope, receive, send)
+                return
             parsed_body = _maybe_parse_json(raw_body)
             accept_values = _parse_accept_header(headers.get("accept", ""))
             if not _accepts_streamable_post(accept_values):
@@ -160,6 +245,10 @@ class AuthenticatedMountedServerApp:
         ):
             await self._ensure_session_initialized(normalized_scope, session_id)
 
+        # 每次命中已有 session 都刷新活跃时间，供后台 GC 判断空闲 TTL。
+        if session_id and session_id in self.service_state.session_auth:
+            self.service_state.touch_session(session_id)
+
         client = scope.get("client")
         client_address = client[0] if isinstance(client, tuple) and client else None
         server_context = create_server_context(
@@ -191,18 +280,21 @@ class AuthenticatedMountedServerApp:
                     status_code = status.HTTP_204_NO_CONTENT
 
                 if status_code < 400 and response_session_id and method in {"POST", "GET"} and authorization:
+                    is_new_session = response_session_id not in self.service_state.session_auth
                     server_context.request_meta.session_id = response_session_id
                     self.service_state.session_auth[response_session_id] = authorization
+                    self.service_state.touch_session(response_session_id)
                     if parsed_body and parsed_body.get("method") == "initialize":
                         params = parsed_body.get("params")
                         self.service_state.initialize_params[response_session_id] = params if isinstance(params, dict) else {}
                     elif parsed_body and parsed_body.get("method") == "notifications/initialized":
                         self.service_state.initialized_sessions.add(response_session_id)
+                    # 新 session 注册后立即按数量上限淘汰最旧的 session，避免两次 GC 之间无界增长。
+                    if is_new_session and self.on_session_registered is not None:
+                        await self.on_session_registered()
 
                 if status_code < 400 and method == "DELETE" and session_id:
-                    self.service_state.session_auth.pop(session_id, None)
-                    self.service_state.initialize_params.pop(session_id, None)
-                    self.service_state.initialized_sessions.discard(session_id)
+                    self.service_state.forget_session(session_id)
 
             await send(message)
 
@@ -260,6 +352,7 @@ class NormalizeMountedServerRootPathMiddleware:
 def create_http_app(runtime_config: RuntimeConfig | None = None) -> FastAPI:
     settings = runtime_config or RuntimeConfig()
     mounted_servers: dict[str, MountedServer] = {}
+    session_scopes: list[tuple[ServiceRuntimeState, SessionCloser]] = []
     rate_limiter = FixedWindowRateLimiter(
         global_limit=settings.mcp_rate_limit_global_per_minute,
         per_tool_limits=settings.mcp_rate_limit_per_tool,
@@ -274,12 +367,26 @@ def create_http_app(runtime_config: RuntimeConfig | None = None) -> FastAPI:
         )
     )
 
+    async def evict_stale_sessions() -> None:
+        await collect_stale_sessions(
+            session_scopes,
+            idle_ttl_seconds=settings.mcp_http_session_idle_ttl_seconds,
+            max_count=settings.mcp_http_session_max_count,
+        )
+
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         async with AsyncExitStack() as stack:
             for item in mounted_servers.values():
                 await stack.enter_async_context(item.server.session_manager.run())
-            yield
+            # 后台定时 GC；随 lifespan 结束被取消，不会阻止进程退出。
+            gc_task = asyncio.create_task(_session_gc_loop(evict_stale_sessions))
+            try:
+                yield
+            finally:
+                gc_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await gc_task
 
     app = FastAPI(title="rizhiyi-mcp-python", version="0.3.1", lifespan=lifespan)
     app.router.redirect_slashes = False
@@ -292,6 +399,7 @@ def create_http_app(runtime_config: RuntimeConfig | None = None) -> FastAPI:
         )
         server = factory(settings, service_state)
         mounted_servers[route_name] = MountedServer(route_name=route_name, server=server, state=service_state)
+        session_scopes.append((service_state, server.close_session))
         app.mount(
             f"{settings.mcp_http_base_path}/{route_name}",
             AuthenticatedMountedServerApp(
@@ -299,6 +407,7 @@ def create_http_app(runtime_config: RuntimeConfig | None = None) -> FastAPI:
                 runtime_config=settings,
                 server=server,
                 service_state=service_state,
+                on_session_registered=evict_stale_sessions,
             ),
         )
 
@@ -347,13 +456,23 @@ def create_http_app(runtime_config: RuntimeConfig | None = None) -> FastAPI:
     return app
 
 
-async def _consume_request_body(receive: Receive) -> bytes:
+async def _consume_request_body(receive: Receive, *, max_bytes: int) -> bytes:
+    """读取请求体；累计字节数超过 max_bytes 时立即中断，不再向 receive() 索取后续数据。
+
+    超限时抛出 RequestBodyTooLarge，由调用方转换为 413 响应，
+    避免把超大请求读完才判断（也避免连接被直接断开）。
+    """
     chunks: list[bytes] = []
+    total = 0
     while True:
         message = await receive()
         if message["type"] != "http.request":
             break
-        chunks.append(message.get("body", b""))
+        chunk = message.get("body", b"")
+        total += len(chunk)
+        if total > max_bytes:
+            raise RequestBodyTooLarge(max_bytes)
+        chunks.append(chunk)
         if not message.get("more_body", False):
             break
     return b"".join(chunks)

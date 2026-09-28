@@ -1,6 +1,6 @@
 import express from 'express';
 import { randomUUID } from 'crypto';
-import type { Request, Response } from 'express';
+import type { NextFunction, Request, Response } from 'express';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { buildAuthContextFromAuthorization } from './auth-context.js';
 import { getRuntimeConfig, type ServerContext } from './config.js';
@@ -24,9 +24,81 @@ interface SessionEntry {
     server: McpServer;
     transport: StreamableHTTPServerTransport;
     context: ServerContext;
+    /** 最近一次命中该 session 的请求时间（毫秒），用于空闲 TTL 与数量淘汰。 */
+    lastSeenAt: number;
 }
 
-const sessionStore = new Map<string, SessionEntry>();
+/** 后台 session GC 周期。 */
+const SESSION_GC_INTERVAL_MS = 60_000;
+
+function touchSessionEntry(entry: SessionEntry): void {
+    entry.lastSeenAt = Date.now();
+}
+
+async function closeSessionEntry(entry: SessionEntry): Promise<void> {
+    try {
+        await entry.server.close();
+    } catch (error) {
+        console.error('关闭 MCP session server 失败:', error);
+    }
+    try {
+        await entry.transport.close();
+    } catch (error) {
+        console.error('关闭 MCP session transport 失败:', error);
+    }
+}
+
+/**
+ * 超过 maxCount 时按 lastSeenAt 淘汰最旧的 session。
+ * 仅从 Map 中移除并返回条目，由调用方负责关闭其 transport/server。
+ */
+export function evictOverflowSessions(store: Map<string, SessionEntry>, maxCount: number): SessionEntry[] {
+    const evicted: SessionEntry[] = [];
+    while (store.size > maxCount) {
+        let oldestId: string | undefined;
+        let oldestSeenAt = Number.POSITIVE_INFINITY;
+        for (const [sessionId, entry] of store) {
+            if (entry.lastSeenAt < oldestSeenAt) {
+                oldestSeenAt = entry.lastSeenAt;
+                oldestId = sessionId;
+            }
+        }
+        if (!oldestId) {
+            break;
+        }
+        const entry = store.get(oldestId);
+        store.delete(oldestId);
+        if (entry) {
+            evicted.push(entry);
+        }
+    }
+    return evicted;
+}
+
+/**
+ * 后台 session GC。
+ * 优先级：先按空闲 TTL 清理，再按数量上限淘汰最旧的 session；
+ * 两类淘汰都必须真正关闭 transport/server，而不是只删除 Map 引用。
+ */
+export async function collectSessions(
+    store: Map<string, SessionEntry>,
+    idleTtlSeconds: number,
+    maxCount: number
+): Promise<void> {
+    const now = Date.now();
+    const ttlMs = idleTtlSeconds * 1000;
+
+    const expired: SessionEntry[] = [];
+    for (const [sessionId, entry] of store) {
+        if (now - entry.lastSeenAt >= ttlMs) {
+            store.delete(sessionId);
+            expired.push(entry);
+        }
+    }
+
+    const overflow = evictOverflowSessions(store, maxCount);
+    await Promise.all([...expired, ...overflow].map(closeSessionEntry));
+}
 
 function buildRequestContext(
     req: Request,
@@ -61,7 +133,8 @@ async function handleMcpRequest(
     res: Response,
     runtimeConfig: ReturnType<typeof getRuntimeConfig>,
     rateLimiter: FixedWindowRateLimiter,
-    usageLogger: UsageLogger
+    usageLogger: UsageLogger,
+    sessionStore: Map<string, SessionEntry>
 ) {
     const serverName = String(req.params.serverName || '').trim();
     const factory = serverRegistry[serverName];
@@ -117,8 +190,14 @@ async function handleMcpRequest(
                         serverName,
                         server,
                         transport,
-                        context
+                        context,
+                        lastSeenAt: Date.now()
                     });
+
+                    // 超过数量上限时立即淘汰最旧的 session，避免恶意方用大量 initialize 快速放大内存。
+                    for (const evicted of evictOverflowSessions(sessionStore, runtimeConfig.sessionMaxCount)) {
+                        void closeSessionEntry(evicted);
+                    }
 
                     if (context.authContext.authorization) {
                         console.error(`MCP HTTP session created: ${serverName} ${describeAuthorization(context.authContext.authorization)}`);
@@ -131,6 +210,7 @@ async function handleMcpRequest(
             return;
         }
 
+        touchSessionEntry(entry);
         await entry.transport.handleRequest(req, res, req.body);
     } catch (error: any) {
         if (!res.headersSent) {
@@ -146,14 +226,17 @@ export function createHttpApp() {
         runtimeConfig.rateLimitPerTool
     );
     const usageLogger = new UsageLogger(runtimeConfig.usageLog);
+    const sessionStore = new Map<string, SessionEntry>();
     const app = express();
 
     app.disable('x-powered-by');
-    app.use(express.json({ limit: '4mb' }));
+    // 请求体上限与 Python 端 MCP_HTTP_MAX_BODY_BYTES 共用同一配置键与默认值。
+    app.use(express.json({ limit: runtimeConfig.httpMaxBodyBytes }));
 
     app.get('/healthz', (_req, res) => {
         res.status(200).json({
             ok: true,
+            session_count: sessionStore.size,
             rate_limiting: {
                 enabled: rateLimiter.enabled,
                 global_per_minute: runtimeConfig.rateLimitGlobalPerMinute ?? null,
@@ -171,7 +254,7 @@ export function createHttpApp() {
 
     app.post(
         `${runtimeConfig.httpBasePath}/:serverName`,
-        (req, res) => handleMcpRequest(req, res, runtimeConfig, rateLimiter, usageLogger)
+        (req, res) => handleMcpRequest(req, res, runtimeConfig, rateLimiter, usageLogger, sessionStore)
     );
     app.get(`${runtimeConfig.httpBasePath}/:serverName`, (_req, res) => {
         res.status(405).set('Allow', 'POST, DELETE').send('Method Not Allowed');
@@ -189,15 +272,35 @@ export function createHttpApp() {
             return;
         }
 
-        await entry.server.close();
-        await entry.transport.close();
         sessionStore.delete(sessionId);
+        await closeSessionEntry(entry);
         res.status(204).end();
     });
 
     app.use((req, res) => {
         sendJsonError(res, 404, 'NOT_FOUND', `未知路径: ${req.path}`);
     });
+
+    // body-parser 在请求体超过 limit 时抛出 PayloadTooLargeError；
+    // 这里转成与其它错误一致的 JSON 响应（413），而不是落入 Express 默认 HTML 错误页或直接断连。
+    app.use((error: any, _req: Request, res: Response, next: NextFunction) => {
+        if (error?.type === 'entity.too.large' || error?.status === 413) {
+            sendJsonError(
+                res,
+                413,
+                'REQUEST_BODY_TOO_LARGE',
+                `请求体超过上限 ${runtimeConfig.httpMaxBodyBytes} 字节。`
+            );
+            return;
+        }
+        next(error);
+    });
+
+    // 后台定时 GC：先按空闲 TTL 清理，再按数量上限淘汰最旧 session。
+    // unref() 保证该定时器不会阻止进程退出。
+    setInterval(() => {
+        void collectSessions(sessionStore, runtimeConfig.sessionIdleTtlSeconds, runtimeConfig.sessionMaxCount);
+    }, SESSION_GC_INTERVAL_MS).unref();
 
     return {
         app,
