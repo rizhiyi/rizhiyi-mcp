@@ -35,17 +35,37 @@ class SseChatResult:
     steps: list[SseStep] = field(default_factory=list)
 
 
-def _parse_sse_block(lines: list[str]) -> SseEvent | None:
+def _parse_sse_block(lines: list[str]) -> list[SseEvent]:
+    """把若干 SSE 行解析成 0..N 个事件，语义与 TS ``SseParser`` 逐条对齐。
+
+    - **隐式事件边界**：遇到新的 ``event:`` 行时，先把上一个 pending 事件产出，
+      再开始新事件（因此同一块内可以产出多个事件）。
+    - 只有 event 名、没有 data 行的 pending 事件不成型。
+    - 没有 event 名的孤儿 ``data:`` 行一律丢弃，绝不泄漏到下一个事件。
+    - 空行同样结束当前事件；注释行与未知字段忽略。
+    """
+    events: list[SseEvent] = []
     event_name = ""
     data_lines: list[str] = []
+
+    def flush_pending() -> None:
+        if event_name and data_lines:
+            events.append(SseEvent(event=event_name, data="\n".join(data_lines)))
+
     for line in lines:
         if line.startswith("event: "):
+            flush_pending()
             event_name = line[7:].strip()
+            data_lines = []
         elif line.startswith("data: "):
             data_lines.append(line[6:])
-    if not event_name or not data_lines:
-        return None
-    return SseEvent(event=event_name, data="\n".join(data_lines))
+        elif line.strip() == "":
+            flush_pending()
+            event_name = ""
+            data_lines = []
+
+    flush_pending()
+    return events
 
 
 def extract_spl_from_markdown(content: str) -> str:
@@ -89,20 +109,25 @@ async def request_sse(
                 )
 
             current_lines: list[str] = []
+
+            async def _flush(lines: list[str]) -> None:
+                for event in _parse_sse_block(lines):
+                    _process_event(event, result)
+                    if on_event is not None:
+                        callback_result = on_event(event)
+                        if callback_result is not None and inspect.isawaitable(callback_result):
+                            await callback_result
+
             async for line in response.aiter_lines():
-                stripped = line.strip()
-                if stripped:
+                if line.strip():
                     current_lines.append(line)
                     continue
-                event = _parse_sse_block(current_lines)
+                await _flush(current_lines)
                 current_lines = []
-                if event is None:
-                    continue
-                _process_event(event, result)
-                if on_event is not None:
-                    callback_result = on_event(event)
-                    if callback_result is not None and inspect.isawaitable(callback_result):
-                        await callback_result
+
+            # 流结束（EOF）：事件没有以空行收尾是合法的，最后的事件仍要产出，
+            # 不能静默丢弃。
+            await _flush(current_lines)
 
     return result
 
