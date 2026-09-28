@@ -17,6 +17,7 @@
     "test:usage-log": "npm run build && node scripts/usage-log-test.mjs",
     "test:guardrails": "npm run build && node scripts/guardrails-test.mjs",
     "test:analysis-parity": "npm run build && node scripts/analysis-parity-test.mjs",
+    "test:openapi-cache": "npm run build && node scripts/openapi-cache-test.mjs",
     "start": "npm run build && node dist/log-tools-server.js",
     "dev": "node --experimental-specifier-resolution=node --loader ts-node/esm src/log-tools-server.ts",
     "start:http": "npm run build && node dist/http-server.js",
