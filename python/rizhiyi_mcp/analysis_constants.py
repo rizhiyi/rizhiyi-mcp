@@ -36,6 +36,12 @@ class PanelSizeRules:
 
 
 @dataclass(frozen=True, slots=True)
+class SharedResultStoreRules:
+    cleanup_interval_seconds: int
+    corrupt_dir_name: str
+
+
+@dataclass(frozen=True, slots=True)
 class AnalysisConstants:
     time_buckets: tuple[TimeBucketRule, ...]
     z_score_min_samples: int
@@ -44,6 +50,7 @@ class AnalysisConstants:
     moving_average_min_window: int
     moving_average_clamp_to_length: bool
     panel_size: PanelSizeRules
+    shared_result_store: SharedResultStoreRules
 
 
 def _require_number(value: Any, path: str) -> float:
@@ -115,6 +122,12 @@ def _parse_constants(raw: Any) -> AnalysisConstants:
         _require_mapping(root.get("dashboard_aesthetics"), "dashboard_aesthetics").get("panel_size"),
         "dashboard_aesthetics.panel_size",
     )
+    raw_shared_store = _require_mapping(root.get("shared_result_store"), "shared_result_store")
+    corrupt_dir_name = raw_shared_store.get("corrupt_dir_name")
+    if not isinstance(corrupt_dir_name, str) or not corrupt_dir_name.strip():
+        raise ValueError("analysis-constants.yaml 的 shared_result_store.corrupt_dir_name 必须是非空字符串")
+    if "/" in corrupt_dir_name or "\\" in corrupt_dir_name:
+        raise ValueError("analysis-constants.yaml 的 shared_result_store.corrupt_dir_name 不能包含路径分隔符")
 
     return AnalysisConstants(
         time_buckets=tuple(time_buckets),
@@ -133,6 +146,13 @@ def _parse_constants(raw: Any) -> AnalysisConstants:
             min_width=_require_int(raw_panel_size.get("min_width"), "panel_size.min_width"),
             min_height=_require_int(raw_panel_size.get("min_height"), "panel_size.min_height"),
             integer_only=raw_panel_size.get("integer_only", True) is not False,
+        ),
+        shared_result_store=SharedResultStoreRules(
+            cleanup_interval_seconds=_require_int(
+                raw_shared_store.get("cleanup_interval_seconds"),
+                "shared_result_store.cleanup_interval_seconds",
+            ),
+            corrupt_dir_name=corrupt_dir_name,
         ),
     )
 

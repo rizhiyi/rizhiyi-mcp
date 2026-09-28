@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "cleanupIntervalSeconds": 60,
+  "corruptDirName": "corrupt",
+  "fileNameSamples": [
+    {
+      "expiresAtEpochMilliseconds": 1759000000000,
+      "handle": "0123456789abcdef0123456789abcdef",
+      "fileName": "1759000000000-0123456789abcdef0123456789abcdef.json"
+    },
+    {
+      "expiresAtEpochMilliseconds": 1700000000000,
+      "handle": "a1b2c3d4",
+      "fileName": "1700000000000-a1b2c3d4.json"
+    },
+    {
+      "expiresAtEpochMilliseconds": 9999999999999,
+      "handle": "ABCDEFGH_ij-klmnop",
+      "fileName": "9999999999999-ABCDEFGH_ij-klmnop.json"
+    }
+  ],
+  "legacyFileNames": [
+    "0123456789abcdef0123456789abcdef.json",
+    "a1b2c3d4.json",
+    "0123456789abcdef0123456789abcdef.expired.json"
+  ]
+}
