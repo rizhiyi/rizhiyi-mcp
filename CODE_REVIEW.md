@@ -18,7 +18,42 @@
 
 ---
 
-## 二、高优先级（建议优先修复）
+## 二、修复状态总览（2026-09-28 更新）
+
+本批次修复 H2、H3、H4、M1–M7 共 10 条，M8 已先行修复。各条状态：
+
+| 编号 | 状态 | 落地方式 |
+|---|---|---|
+| H2 | 已修复 | 新增 `UPSTREAM_TIMEOUT_SECONDS`（默认 30），与护栏**完全解耦**；TS 的 `timeoutMs` 与 `withTimeout` 无条件生效，Python 的 `asyncio.wait_for` 同样无条件生效。护栏只决定阈值，不再决定"是否超时"。 |
+| H3 | 已修复 | 新增 `MCP_HTTP_MAX_BODY_BYTES`（默认 4MB）；Python `_consume_request_body` 累计超限即中断并返回 413；TS 的 `'4mb'` 硬编码改为读同一配置键，并补 413 JSON 错误中间件。 |
+| H4 | 已修复 | 新增 `MCP_HTTP_SESSION_IDLE_TTL_SECONDS`（1800）与 `MCP_HTTP_SESSION_MAX_COUNT`（256）；记录 `lastSeenAt`，后台定时 GC（TS `unref()` / Python 随 lifespan 取消），淘汰时真正关闭 transport；`/healthz` 两端均暴露 `session_count`。 |
+| M1 | 已修复 | 解析失败不再冒泡：记录日志、按"不存在"处理，并将损坏文件移入 `corrupt/` 隔离目录。覆盖 cleanup / list / read 三条路径。 |
+| M2 | 已修复 | 过期时间编码进文件名 `<expiresAtEpochMilliseconds>-<handle>.json`，清理与列表按**文件名**判定，无需读内容；写路径清理降频。旧格式文件降级到"读内容判断"的慢路径，不被误删。契约由 `config/shared-store-parity.golden.json` 锁定。 |
+| M3 | 已修复 | openapi 的 YAML 解析与 Converter 构建提升为进程级 memoized **Promise** 缓存；解析失败不缓存 rejected promise（允许重试）；per-session 的客户端/context/handler 仍按 session 构建。 |
+| M4 | 已修复 | TS 抽出 `SseParser`，解析状态（行缓冲 / 事件名 / data 行）跨分片保持，仅在空行与流结束时产出事件；顺带修掉"EOF 残余行被丢弃"与"孤儿 data 行泄漏到下一事件"两个同类缺陷。Python 补 EOF flush 与隐式事件边界，两端统一为**宽松容错**语义。 |
+| M5 | 已修复 | 文件清单按目录 mtime 缓存失效；清理降频；`active` 缓存检查提前到 `listLogFiles()` 之前。 |
+| M6 | 已修复 | 改为**先判断后计数**，被拒绝的请求不占用配额；两端边界语义一致（计数达 limit 仍放行，第 limit+1 次拒绝）。 |
+| M7 | 已修复 | 新增 `TOOL_ANNOTATION_OVERRIDES` 显式覆盖表（优先于前缀推断），并把语义过宽的 `generate_` / `data_` 从只读前缀中移除。 |
+
+**注意：本节 M7 的证据有误。** 原文点名的 `assign_agent_to_group` 与 `apply_fieldconfig` 在代码中**不存在**；
+枚举 `ts/src/tools.ts` 全部 76 个工具名后确认，真实误标项是 `chat_spl`、`preview_alert`、`testrun_alert`、
+`replace_pipeline_groups`（以及被移除的宽泛前缀）。
+
+### 本批次过程中新发现、尚未修复的问题
+
+1. **openapi server 当前完全不可用（严重）**：`createOpenapiServer` 必抛
+   `TypeError: boolean true is not iterable`，位置 `ts/src/mcp-tool-helpers.ts:75`。
+   根因是 openapi2mcptools 在约 17 处产出**布尔型** `required`（JSON Schema 要求数组）。
+   与 M3 的缓存改造无关，是既有缺陷 —— 但它使 M3 的性能收益目前无法被端到端验证。
+2. `data_overview` 注册了 handler 却没有对应的 `ToolDefinition`。
+3. 未知 session 的状态码两端不一致：TS 返回 400，Python 返回 404。
+4. `python/tests/test_dashboard_server.py:340` 既有 ruff F821（`unittest` 未定义）。
+5. Python 的 `close_session` 依赖 MCP SDK 私有属性 `_server_instances` / `_session_owners`，
+   SDK 升级时需复查（当前实现已做形状校验并优雅降级）。
+
+---
+
+## 三、高优先级（建议优先修复）
 
 ### H1. 共享资源（大结果）无用户隔离，存在跨用户数据泄漏
 
@@ -107,7 +142,7 @@ MCP 客户端不主动发 DELETE 是常态，因此每个 session 都会长期�
 
 ---
 
-## 三、中优先级
+## 四、中优先级
 
 ### M1. 单个损坏的结果文件会让整个大结果存储不可用
 
@@ -285,7 +320,7 @@ chatspl `deep_think` 的进度事件与 `send_spl` 输出可能丢失或 JSON �
 
 ---
 
-## 四、低优先级（工程化与细节）
+## 五、低优先级（工程化与细节）
 
 ### L1. 无 CI，且测试依赖被 gitignore 的夹具 → 测试不可复现
 - 仓库无 `.github/`（无任何 CI 配置）。
@@ -339,7 +374,7 @@ chatspl `deep_think` 的进度事件与 `send_spl` 输出可能丢失或 JSON �
 
 ---
 
-## 五、建议的修复顺序
+## 六、建议的修复顺序
 
 | 阶段 | 内容 | 理由 |
 |---|---|---|
