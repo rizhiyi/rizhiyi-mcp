@@ -24,6 +24,93 @@ interface SseClientOptions {
     onEvent?: (event: SseEvent) => void;
 }
 
+/**
+ * SSE 增量解析器。
+ *
+ * 解析状态（行缓冲 / 当前事件名 / 当前 data 行）必须**跨网络分片保持**：
+ *   - 网络分片边界与 SSE 事件边界毫无关系，一行可能被切开，一个事件也可能
+ *     横跨多个分片；
+ *   - 事件只能由**空行**界定，绝不能因为"分片结束"就 flush。
+ *
+ * 因此这里把解析状态做成实例字段，`push()` 只消费完整的行，
+ * 事件仅在空行或 `flush()`（流结束）时产出。
+ */
+export class SseParser {
+    private lineBuffer = '';
+    private currentEvent = '';
+    private currentDataLines: string[] = [];
+
+    /** 喂入一段已解码文本，返回其中被完整界定的事件。 */
+    push(chunk: string): SseEvent[] {
+        this.lineBuffer += chunk;
+        const events: SseEvent[] = [];
+
+        let newlineIndex = this.lineBuffer.indexOf('\n');
+        while (newlineIndex !== -1) {
+            let line = this.lineBuffer.slice(0, newlineIndex);
+            this.lineBuffer = this.lineBuffer.slice(newlineIndex + 1);
+            if (line.endsWith('\r')) {
+                line = line.slice(0, -1);
+            }
+            this.consumeLine(line, events);
+            newlineIndex = this.lineBuffer.indexOf('\n');
+        }
+
+        return events;
+    }
+
+    /**
+     * 流结束（EOF）时调用：处理没有尾随换行的最后一行，并补一次事件 flush。
+     * 事件没有以空行收尾是合法的，不能在结束时静默丢弃。
+     */
+    flush(): SseEvent[] {
+        const events: SseEvent[] = [];
+
+        if (this.lineBuffer.length > 0) {
+            let line = this.lineBuffer;
+            this.lineBuffer = '';
+            if (line.endsWith('\r')) {
+                line = line.slice(0, -1);
+            }
+            this.consumeLine(line, events);
+        }
+
+        if (this.currentEvent && this.currentDataLines.length > 0) {
+            events.push({ event: this.currentEvent, data: this.currentDataLines.join('\n') });
+        }
+        this.currentEvent = '';
+        this.currentDataLines = [];
+
+        return events;
+    }
+
+    private consumeLine(line: string, events: SseEvent[]): void {
+        if (line.startsWith('event: ')) {
+            if (this.currentEvent && this.currentDataLines.length > 0) {
+                events.push({ event: this.currentEvent, data: this.currentDataLines.join('\n') });
+            }
+            this.currentEvent = line.slice(7).trim();
+            this.currentDataLines = [];
+            return;
+        }
+
+        if (line.startsWith('data: ')) {
+            this.currentDataLines.push(line.slice(6));
+            return;
+        }
+
+        if (line.trim() === '' && this.currentEvent) {
+            if (this.currentDataLines.length > 0) {
+                events.push({ event: this.currentEvent, data: this.currentDataLines.join('\n') });
+            }
+            this.currentEvent = '';
+            this.currentDataLines = [];
+        }
+
+        // 注释行（以 ':' 开头）与未知字段按原实现忽略。
+    }
+}
+
 export function requestSse(options: SseClientOptions): Promise<SseChatResult> {
     return new Promise((resolve, reject) => {
         const url = new URL(options.url);
@@ -47,7 +134,7 @@ export function requestSse(options: SseClientOptions): Promise<SseChatResult> {
         } as https.RequestOptions;
 
         const result: SseChatResult = { steps: [], raw_events: [] };
-        let buffer = '';
+        const parser = new SseParser();
         let finished = false;
 
         const finish = (err?: Error) => {
@@ -70,39 +157,17 @@ export function requestSse(options: SseClientOptions): Promise<SseChatResult> {
 
             res.setEncoding('utf8');
             res.on('data', (chunk: string) => {
-                buffer += chunk;
-                const lines = buffer.split('\n');
-                buffer = lines.pop() || '';
-
-                let currentEvent = '';
-                let currentDataLines: string[] = [];
-
-                for (const line of lines) {
-                    if (line.startsWith('event: ')) {
-                        if (currentEvent && currentDataLines.length > 0) {
-                            processEvent({ event: currentEvent, data: currentDataLines.join('\n') });
-                        }
-                        currentEvent = line.slice(7).trim();
-                        currentDataLines = [];
-                    } else if (line.startsWith('data: ')) {
-                        currentDataLines.push(line.slice(6));
-                    } else if (line.trim() === '' && currentEvent) {
-                        if (currentDataLines.length > 0) {
-                            processEvent({ event: currentEvent, data: currentDataLines.join('\n') });
-                        }
-                        currentEvent = '';
-                        currentDataLines = [];
-                    }
-                }
-
-                if (currentEvent && currentDataLines.length > 0) {
-                    processEvent({ event: currentEvent, data: currentDataLines.join('\n') });
-                    currentEvent = '';
-                    currentDataLines = [];
+                for (const evt of parser.push(chunk)) {
+                    processEvent(evt);
                 }
             });
 
-            res.on('end', () => finish());
+            res.on('end', () => {
+                for (const evt of parser.flush()) {
+                    processEvent(evt);
+                }
+                finish();
+            });
             res.on('error', (err) => finish(err));
         });
 
