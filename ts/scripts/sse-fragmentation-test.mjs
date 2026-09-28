@@ -167,4 +167,67 @@ function assertEvents(actual, expected, label) {
     assertEvents(events, [], '注释行忽略；缺少 event 名的 data 行不产出事件');
 }
 
+// ---------------------------------------------------------------------------
+// 回归：孤儿 data 行（有 data: 无 event:）绝不能泄漏到后续事件上
+//
+// 空行分支必须无条件重置状态：若只在 currentEvent 非空时重置，孤儿 data 行会
+// 残留在 currentDataLines 中。Python 侧 _parse_sse_block 对此是干净丢弃，
+// 两端必须一致。
+// ---------------------------------------------------------------------------
+{
+    // e1) 孤儿块后经空行再接正常事件
+    const events = parseChunks(['data: orphan\n\nevent: X\ndata: real\n\n']);
+    assertEvents(
+        events,
+        [{ event: 'X', data: 'real' }],
+        'e1) 孤儿 data 行不得泄漏到下一个事件'
+    );
+
+    // e2) 孤儿行与事件名之间没有空行（隐式边界）
+    const adjacent = parseChunks(['data: orphan\nevent: X\ndata: real\n\n']);
+    assertEvents(
+        adjacent,
+        [{ event: 'X', data: 'real' }],
+        'e2) 紧邻事件名的孤儿 data 行同样丢弃'
+    );
+
+    // e3) 事件尾部的孤儿行不得污染下一个事件
+    const trailing = parseChunks(['event: X\ndata: d1\n\ndata: orphan\n\nevent: Y\ndata: d2\n\n']);
+    assertEvents(
+        trailing,
+        [
+            { event: 'X', data: 'd1' },
+            { event: 'Y', data: 'd2' }
+        ],
+        'e3) 事件之间的孤儿 data 行既不产出也不污染后续事件'
+    );
+}
+
+// ---------------------------------------------------------------------------
+// 隐式事件边界：同一块内（无空行分隔）出现第二个 event: 行时，
+// 前一个 pending 事件必须先产出。与 Python _parse_sse_block 对齐。
+// ---------------------------------------------------------------------------
+{
+    const events = parseChunks(['event: A\ndata: 1\nevent: B\ndata: 2\n\n']);
+    assertEvents(
+        events,
+        [
+            { event: 'A', data: '1' },
+            { event: 'B', data: '2' }
+        ],
+        '遇到新 event: 行即产出前一个 pending 事件（同块可产多事件）'
+    );
+
+    // 隐式边界 + EOF：末尾事件无尾随空行也要产出
+    const atEof = parseChunks(['event: A\ndata: 1\nevent: B\ndata: 2']);
+    assertEvents(
+        atEof,
+        [
+            { event: 'A', data: '1' },
+            { event: 'B', data: '2' }
+        ],
+        '隐式边界与 EOF flush 叠加时两个事件都要产出'
+    );
+}
+
 console.log(`SSE 分片解析回归测试通过（共 ${checked} 项断言）。`);

@@ -99,8 +99,11 @@ export class SseParser {
             return;
         }
 
-        if (line.trim() === '' && this.currentEvent) {
-            if (this.currentDataLines.length > 0) {
+        if (line.trim() === '') {
+            // 空行无条件结束当前事件：无论是否已有事件名，都必须重置状态。
+            // 否则「只有 data: 没有 event:」的孤儿 data 行会残留在 currentDataLines
+            // 里，并泄漏/污染后续解析（Python 侧 _parse_sse_block 会干净丢弃）。
+            if (this.currentEvent && this.currentDataLines.length > 0) {
                 events.push({ event: this.currentEvent, data: this.currentDataLines.join('\n') });
             }
             this.currentEvent = '';
