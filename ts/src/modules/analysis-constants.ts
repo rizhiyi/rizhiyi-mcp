@@ -29,6 +29,10 @@ export interface AnalysisConstants {
         minHeight: number;
         integerOnly: boolean;
     };
+    sharedResultStore: {
+        cleanupIntervalSeconds: number;
+        corruptDirName: string;
+    };
 }
 
 const CONSTANTS_FILE_URL = new URL('../../../config/analysis-constants.yaml', import.meta.url);
@@ -92,6 +96,16 @@ function parseConstants(raw: unknown): AnalysisConstants {
     if (!rawPanelSize || typeof rawPanelSize !== 'object') {
         throw new Error('analysis-constants.yaml 缺少 dashboard_aesthetics.panel_size 段');
     }
+    const rawSharedStore = root.shared_result_store;
+    if (!rawSharedStore || typeof rawSharedStore !== 'object') {
+        throw new Error('analysis-constants.yaml 缺少 shared_result_store 段');
+    }
+    if (typeof rawSharedStore.corrupt_dir_name !== 'string' || !rawSharedStore.corrupt_dir_name.trim()) {
+        throw new Error('analysis-constants.yaml 的 shared_result_store.corrupt_dir_name 必须是非空字符串');
+    }
+    if (rawSharedStore.corrupt_dir_name.includes('/') || rawSharedStore.corrupt_dir_name.includes('\\')) {
+        throw new Error('analysis-constants.yaml 的 shared_result_store.corrupt_dir_name 不能包含路径分隔符');
+    }
 
     return {
         timeBuckets,
@@ -106,6 +120,13 @@ function parseConstants(raw: unknown): AnalysisConstants {
             minWidth: requireNumber(rawPanelSize.min_width, 'panel_size.min_width'),
             minHeight: requireNumber(rawPanelSize.min_height, 'panel_size.min_height'),
             integerOnly: rawPanelSize.integer_only !== false
+        },
+        sharedResultStore: {
+            cleanupIntervalSeconds: requireNumber(
+                rawSharedStore.cleanup_interval_seconds,
+                'shared_result_store.cleanup_interval_seconds'
+            ),
+            corruptDirName: rawSharedStore.corrupt_dir_name
         }
     };
 }
