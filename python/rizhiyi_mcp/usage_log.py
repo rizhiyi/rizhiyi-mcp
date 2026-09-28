@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 import json
 from pathlib import Path
@@ -11,6 +11,10 @@ from typing import Callable, Literal
 
 UsageLogRotateInterval = Literal["1d", "1h"]
 UsageLogStatus = Literal["ok", "ok-limited", "error"]
+
+# 清理降频阈值：没有超额文件时，最多每 N 次写入或每 60s 执行一次清理。
+_CLEANUP_EVERY_WRITES = 50
+_CLEANUP_MIN_INTERVAL_SECONDS = 60.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,6 +64,10 @@ class UsageLogger:
         self._lock = RLock()
         self._active_bucket: str | None = None
         self._active_path: Path | None = None
+        # (目录 mtime 纳秒, 文件清单)。按目录 mtime 失效，因此外部进程新建文件后会被发现。
+        self._file_cache: tuple[int, list[_LogFile]] | None = None
+        self._writes_since_cleanup = 0
+        self._last_cleanup_seconds: float | None = None
         self._filename_pattern = re.compile(
             rf"^{re.escape(config.name_prefix)}-(\d{{8}})(?:\.(\d+))?\.log$"
         )
@@ -71,11 +79,13 @@ class UsageLogger:
         with self._lock:
             self.config.directory.mkdir(parents=True, exist_ok=True)
             line = json.dumps(asdict(entry), ensure_ascii=False, separators=(",", ":")) + "\n"
+            line_bytes = len(line.encode("utf-8"))
             now = self._ensure_local(self._clock())
-            active_path = self._resolve_active_path(now, len(line.encode("utf-8")))
+            active_path = self._resolve_active_path(now, line_bytes)
             with active_path.open("a", encoding="utf-8") as stream:
                 stream.write(line)
-            self._cleanup_old_files(active_path)
+            self._note_appended(active_path, line_bytes, now)
+            self._cleanup_old_files(active_path, now)
 
     def _resolve_active_path(self, now: datetime, line_bytes: int) -> Path:
         date_key = now.strftime("%Y%m%d")
@@ -84,17 +94,19 @@ class UsageLogger:
             if self.config.rotate_bytes > 0
             else self._format_time_bucket(now)
         )
-        files = self._list_log_files()
 
+        # 快路径：active 缓存命中且文件缓存新鲜时直接复用，无需任何目录扫描。
+        # 缓存按目录 mtime 失效，因此外部进程新建文件后这里会自然回退到慢路径。
         if self._active_bucket == bucket_key and self._active_path is not None:
-            active_file = next((item for item in files if item.path == self._active_path), None)
-            if active_file is not None and (
+            cached = self._cached_file(self._active_path)
+            if cached is not None and (
                 self.config.rotate_bytes <= 0
-                or active_file.size == 0
-                or active_file.size + line_bytes <= self.config.rotate_bytes
+                or cached.size == 0
+                or cached.size + line_bytes <= self.config.rotate_bytes
             ):
                 return self._active_path
 
+        files = self._list_log_files()
         today_files = sorted(
             (item for item in files if item.date_key == date_key),
             key=self._sort_key,
@@ -122,8 +134,12 @@ class UsageLogger:
         return active_path
 
     def _list_log_files(self) -> list[_LogFile]:
-        if not self.config.directory.exists():
+        dir_mtime_ns = self._directory_mtime_ns()
+        if dir_mtime_ns is None:
+            self._file_cache = None
             return []
+        if self._file_cache is not None and self._file_cache[0] == dir_mtime_ns:
+            return self._file_cache[1]
 
         files: list[_LogFile] = []
         for path in self.config.directory.iterdir():
@@ -145,10 +161,43 @@ class UsageLogger:
                     modified_seconds=info.st_mtime,
                 )
             )
+        self._file_cache = (dir_mtime_ns, files)
         return files
 
-    def _cleanup_old_files(self, active_path: Path) -> None:
+    def _directory_mtime_ns(self) -> int | None:
+        try:
+            return self.config.directory.stat().st_mtime_ns
+        except FileNotFoundError:
+            return None
+
+    def _cached_file(self, path: Path) -> _LogFile | None:
+        """仅在文件缓存新鲜（目录 mtime 未变）时返回缓存元数据，否则返回 None。"""
+        dir_mtime_ns = self._directory_mtime_ns()
+        if dir_mtime_ns is None or self._file_cache is None or self._file_cache[0] != dir_mtime_ns:
+            return None
+        return next((item for item in self._file_cache[1] if item.path == path), None)
+
+    def _note_appended(self, path: Path, line_bytes: int, now: datetime) -> None:
+        """写入后更新缓存中的文件大小，避免快路径基于过期大小重复追加导致超出 rotate_bytes。"""
+        if self._file_cache is None:
+            return
+        files = self._file_cache[1]
+        for index, item in enumerate(files):
+            if item.path == path:
+                files[index] = replace(
+                    item,
+                    size=item.size + line_bytes,
+                    modified_seconds=now.timestamp(),
+                )
+                return
+        # 新建文件会改变目录 mtime，缓存自然失效，下一轮 _list_log_files 会重新扫描。
+
+    def _cleanup_old_files(self, active_path: Path, now: datetime) -> None:
         files = sorted(self._list_log_files(), key=self._sort_key)
+        self._writes_since_cleanup += 1
+        if not self._should_run_cleanup(len(files), now):
+            return
+
         excess = len(files) - self.config.keep_files
         for item in files:
             if excess <= 0:
@@ -161,6 +210,20 @@ class UsageLogger:
                 pass
             else:
                 excess -= 1
+        self._writes_since_cleanup = 0
+        self._last_cleanup_seconds = now.timestamp()
+        # 删除改变了目录，缓存失效。
+        self._file_cache = None
+
+    def _should_run_cleanup(self, file_count: int, now: datetime) -> bool:
+        if file_count > self.config.keep_files:
+            # 存在超额文件时立即清理，保证 keep_files 语义不被降频破坏。
+            return True
+        if self._writes_since_cleanup >= _CLEANUP_EVERY_WRITES:
+            return True
+        if self._last_cleanup_seconds is None:
+            return False
+        return now.timestamp() - self._last_cleanup_seconds >= _CLEANUP_MIN_INTERVAL_SECONDS
 
     def _file_path(self, date_key: str, sequence: int) -> Path:
         sequence_suffix = f".{sequence}" if sequence > 0 else ""

@@ -42,9 +42,21 @@ interface ActiveLogFile {
     path: string;
 }
 
+interface FileCache {
+    dirMtimeMs: number;
+    files: LogFile[];
+}
+
+// 清理降频阈值：没有超额文件时，最多每 N 次写入或每 60s 执行一次清理。
+const CLEANUP_EVERY_WRITES = 50;
+const CLEANUP_MIN_INTERVAL_MS = 60_000;
+
 export class UsageLogger {
     private pending: Promise<void> = Promise.resolve();
     private active?: ActiveLogFile;
+    private fileCache?: FileCache;
+    private writesSinceCleanup = 0;
+    private lastCleanupMs?: number;
 
     constructor(
         readonly config: UsageLogConfig,
@@ -61,9 +73,11 @@ export class UsageLogger {
         await mkdir(this.config.directory, { recursive: true });
         const line = `${JSON.stringify(entry)}\n`;
         const now = this.clock();
-        const active = await this.resolveActiveFile(now, Buffer.byteLength(line, 'utf8'));
+        const lineBytes = Buffer.byteLength(line, 'utf8');
+        const active = await this.resolveActiveFile(now, lineBytes);
         await appendFile(active.path, line, { encoding: 'utf8', flag: 'a' });
-        await this.cleanupOldFiles(active.path);
+        this.noteAppended(active.path, lineBytes, now);
+        await this.cleanupOldFiles(active.path, now);
     }
 
     private async resolveActiveFile(now: Date, lineBytes: number): Promise<ActiveLogFile> {
@@ -71,18 +85,20 @@ export class UsageLogger {
         const bucketKey = this.config.rotateBytes > 0
             ? dateKey
             : formatTimeBucket(now, this.config.rotateInterval);
-        const files = await this.listLogFiles();
 
+        // 快路径：active 缓存命中且文件缓存新鲜时直接复用，无需任何目录扫描。
+        // 缓存按目录 mtime 失效，因此外部进程新建文件后这里会自然回退到慢路径。
         if (this.active?.bucketKey === bucketKey) {
-            const activeFile = files.find((file) => file.path === this.active?.path);
+            const cached = await this.cachedFile(this.active.path);
             if (
-                activeFile
-                && (this.config.rotateBytes <= 0 || activeFile.size === 0 || activeFile.size + lineBytes <= this.config.rotateBytes)
+                cached
+                && (this.config.rotateBytes <= 0 || cached.size === 0 || cached.size + lineBytes <= this.config.rotateBytes)
             ) {
                 return this.active;
             }
         }
 
+        const files = await this.listLogFiles();
         const todayFiles = files
             .filter((file) => file.dateKey === dateKey)
             .sort(compareLogFiles);
@@ -110,11 +126,21 @@ export class UsageLogger {
     }
 
     private async listLogFiles(): Promise<LogFile[]> {
+        const dirMtimeMs = await this.directoryMtimeMs();
+        if (typeof dirMtimeMs === 'undefined') {
+            this.fileCache = undefined;
+            return [];
+        }
+        if (this.fileCache && this.fileCache.dirMtimeMs === dirMtimeMs) {
+            return this.fileCache.files;
+        }
+
         let names: string[];
         try {
             names = await readdir(this.config.directory);
         } catch (error: any) {
             if (error?.code === 'ENOENT') {
+                this.fileCache = undefined;
                 return [];
             }
             throw error;
@@ -141,11 +167,52 @@ export class UsageLogger {
             };
         }));
 
-        return files.filter((file): file is LogFile => Boolean(file));
+        const result = files.filter((file): file is LogFile => Boolean(file));
+        this.fileCache = { dirMtimeMs, files: result };
+        return result;
     }
 
-    private async cleanupOldFiles(activePath: string): Promise<void> {
-        const files = (await this.listLogFiles()).sort(compareLogFiles);
+    private async directoryMtimeMs(): Promise<number | undefined> {
+        try {
+            const info = await stat(this.config.directory);
+            return info.mtimeMs;
+        } catch (error: any) {
+            if (error?.code === 'ENOENT') {
+                return undefined;
+            }
+            throw error;
+        }
+    }
+
+    // 仅在文件缓存新鲜（目录 mtime 未变）时返回指定文件的缓存元数据，否则返回 undefined。
+    private async cachedFile(filePath: string): Promise<LogFile | undefined> {
+        const dirMtimeMs = await this.directoryMtimeMs();
+        if (typeof dirMtimeMs === 'undefined' || !this.fileCache || this.fileCache.dirMtimeMs !== dirMtimeMs) {
+            return undefined;
+        }
+        return this.fileCache.files.find((file) => file.path === filePath);
+    }
+
+    // 写入后更新缓存中的文件大小，避免快路径基于过期大小重复追加导致超出 rotateBytes。
+    private noteAppended(filePath: string, lineBytes: number, now: Date): void {
+        if (!this.fileCache) {
+            return;
+        }
+        const entry = this.fileCache.files.find((file) => file.path === filePath);
+        if (entry) {
+            entry.size += lineBytes;
+            entry.modifiedMs = now.getTime();
+        }
+        // 新建文件会改变目录 mtime，缓存自然失效，下一轮 listLogFiles 会重新扫描。
+    }
+
+    private async cleanupOldFiles(activePath: string, now: Date): Promise<void> {
+        const files = [...(await this.listLogFiles())].sort(compareLogFiles);
+        this.writesSinceCleanup += 1;
+        if (!this.shouldRunCleanup(files.length, now)) {
+            return;
+        }
+
         let excess = files.length - this.config.keepFiles;
         for (const file of files) {
             if (excess <= 0) {
@@ -163,6 +230,22 @@ export class UsageLogger {
                 }
             }
         }
+        this.writesSinceCleanup = 0;
+        this.lastCleanupMs = now.getTime();
+        // 删除改变了目录，缓存失效。
+        this.fileCache = undefined;
+    }
+
+    private shouldRunCleanup(fileCount: number, now: Date): boolean {
+        if (fileCount > this.config.keepFiles) {
+            // 存在超额文件时立即清理，保证 keepFiles 语义不被降频破坏。
+            return true;
+        }
+        if (this.writesSinceCleanup >= CLEANUP_EVERY_WRITES) {
+            return true;
+        }
+        return typeof this.lastCleanupMs === 'number'
+            && now.getTime() - this.lastCleanupMs >= CLEANUP_MIN_INTERVAL_MS;
     }
 
     private filePath(dateKey: string, sequence: number): string {

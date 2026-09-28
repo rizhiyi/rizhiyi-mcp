@@ -55,30 +55,33 @@ export class FixedWindowRateLimiter {
             this.toolCounts.clear();
         }
 
-        if (typeof this.globalLimit !== 'undefined') {
-            this.globalCount += 1;
-        }
-
-        let toolCount = 0;
-        if (typeof toolLimit !== 'undefined') {
-            toolCount = (this.toolCounts.get(toolCounterKey) || 0) + 1;
-            this.toolCounts.set(toolCounterKey, toolCount);
-        }
+        // 先判断后计数：被拒绝的请求不占用配额。
+        // 边界语义：计数达到 limit 时仍放行，第 limit+1 次才拒绝（`>` 比较）。
+        const globalCount = this.globalCount;
+        const toolCount = typeof toolLimit !== 'undefined' ? (this.toolCounts.get(toolCounterKey) || 0) : 0;
 
         let scope: RateLimitScope | undefined;
         let limit: number | undefined;
         let current = 0;
-        if (typeof this.globalLimit !== 'undefined' && this.globalCount > this.globalLimit) {
+        if (typeof this.globalLimit !== 'undefined' && globalCount + 1 > this.globalLimit) {
             scope = 'global';
             limit = this.globalLimit;
-            current = this.globalCount;
-        } else if (typeof toolLimit !== 'undefined' && toolCount > toolLimit) {
+            current = globalCount + 1;
+        } else if (typeof toolLimit !== 'undefined' && toolCount + 1 > toolLimit) {
             scope = 'tool';
             limit = toolLimit;
-            current = toolCount;
+            current = toolCount + 1;
         }
 
         const allowed = typeof scope === 'undefined';
+        if (allowed) {
+            if (typeof this.globalLimit !== 'undefined') {
+                this.globalCount = globalCount + 1;
+            }
+            if (typeof toolLimit !== 'undefined') {
+                this.toolCounts.set(toolCounterKey, toolCount + 1);
+            }
+        }
         return {
             allowed,
             scope,
