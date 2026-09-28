@@ -323,8 +323,7 @@ export const statisticalAnalysisTools: ToolDefinition[] = [
                 },
                 bucket: { 
                     type: 'string', 
-                    description: '可选，固定聚合桶(如 1m/5m/1h)',
-                    default: '5m'
+                    description: '可选，固定聚合桶(如 1m/5m/1h)；不传则按 time_range 自动选择。'
                 },
                 metric_field: { 
                     type: 'string', 
@@ -360,8 +359,7 @@ export const statisticalAnalysisTools: ToolDefinition[] = [
                 },
                 bucket: { 
                     type: 'string', 
-                    description: '可选，固定聚合桶(如 1m/5m/1h)',
-                    default: '5m'
+                    description: '可选，固定聚合桶(如 1m/5m/1h)；不传则按 time_range 自动选择。'
                 },
                 metric_field: { 
                     type: 'string', 
@@ -433,8 +431,7 @@ export const intelligentAnalysisTools: ToolDefinition[] = [
                 },
                 bucket: { 
                     type: 'string', 
-                    description: '时间桶大小，如"1m"、"5m"、"1h"',
-                    default: '5m'
+                    description: '时间桶大小，如"1m"、"5m"、"1h"；不传则按 time_range 自动选择。'
                 },
                 compare_fields: { 
                     type: 'array',
@@ -610,8 +607,7 @@ export const predictiveAnalysisTools: ToolDefinition[] = [
                 },
                 bucket: { 
                     type: 'string', 
-                    description: '时间桶大小，如"1m"、"5m"、"1h"',
-                    default: '5m'
+                    description: '时间桶大小，如"1m"、"5m"、"1h"；不传则按 time_range 自动选择。'
                 },
                 horizon: {
                     type: 'integer',
@@ -668,8 +664,7 @@ export const predictiveAnalysisTools: ToolDefinition[] = [
                 },
                 bucket: { 
                     type: 'string', 
-                    description: '时间桶大小，如"1m"、"5m"、"1h"',
-                    default: '5m'
+                    description: '时间桶大小，如"1m"、"5m"、"1h"；不传则按 time_range 自动选择。'
                 },
                 method: {
                     type: 'string',

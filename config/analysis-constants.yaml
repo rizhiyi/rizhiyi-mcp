@@ -1,0 +1,61 @@
+# rizhiyi-mcp 跨实现共享常量（TypeScript / Python 单一事实来源）
+#
+# 本文件同时被两端读取：
+#   - TypeScript: ts/src/modules/analysis-constants.ts
+#   - Python:     python/rizhiyi_mcp/analysis_constants.py
+#
+# 任何"业务算法阈值 / 默认值"都应当写在这里，而不是分别硬编码在两端，
+# 否则 TS 与 Python 会再次出现行为漂移（见 CODE_REVIEW.md M8）。
+#
+# 修改本文件会同时改变两端行为，请配合运行：
+#   - npm --prefix ts run test:analysis-parity   （跨实现一致性校验）
+#   - python -m pytest python/tests/test_analysis_constants.py
+version: 1
+
+# ---------------------------------------------------------------------------
+# 时间聚合桶：按顺序匹配第一个满足 duration_ms <= max_ms 的档位；
+# max_ms 为 null 表示兜底档位。目标是在常见时间窗下产出约 60 个数据点。
+# ---------------------------------------------------------------------------
+time_buckets:
+  - { max_ms: 60000, bin: "1s", seconds: 1 }
+  - { max_ms: 300000, bin: "5s", seconds: 5 }
+  - { max_ms: 600000, bin: "10s", seconds: 10 }
+  - { max_ms: 1800000, bin: "30s", seconds: 30 }
+  - { max_ms: 3600000, bin: "1m", seconds: 60 }
+  - { max_ms: 7200000, bin: "2m", seconds: 120 }
+  - { max_ms: 18000000, bin: "5m", seconds: 300 }
+  - { max_ms: 36000000, bin: "10m", seconds: 600 }
+  - { max_ms: 86400000, bin: "30m", seconds: 1800 }
+  - { max_ms: 172800000, bin: "1h", seconds: 3600 }
+  - { max_ms: 604800000, bin: "6h", seconds: 21600 }
+  - { max_ms: null, bin: "1d", seconds: 86400 }
+
+# ---------------------------------------------------------------------------
+# 时序统计
+# ---------------------------------------------------------------------------
+statistics:
+  # Z-score 异常判定所需的最小样本数；少于该值一律返回空结果
+  z_score_min_samples: 3
+  # trend_summary 使用的 Z-score 阈值
+  z_score_default_threshold: 2.0
+  # 线性趋势预测的置信区间 z 值：按 min_confidence 降序匹配第一个 confidence >= min_confidence
+  confidence_z_values:
+    - { min_confidence: 0.95, z: 1.96 }
+    - { min_confidence: 0.9, z: 1.64 }
+    - { min_confidence: 0.0, z: 1.28 }
+  moving_average:
+    # 窗口下界；窗口大于样本数时收敛到样本数（而不是返回 0）
+    min_window: 1
+    clamp_window_to_length: true
+
+# ---------------------------------------------------------------------------
+# 仪表盘美观度评分：panel 尺寸归一化
+# ---------------------------------------------------------------------------
+dashboard_aesthetics:
+  panel_size:
+    default_width: 6
+    default_height: 5
+    min_width: 1
+    min_height: 2
+    # 栅格坐标必须为整数
+    integer_only: true

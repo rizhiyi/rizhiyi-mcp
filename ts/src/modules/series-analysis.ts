@@ -1,3 +1,5 @@
+import { ANALYSIS_CONSTANTS } from './analysis-constants.js';
+
 export interface TimelineRow {
     start_ts: number;
     end_ts: number;
@@ -168,8 +170,12 @@ export function identifyQuietPeriods(counts: number[]): QuietPeriod[] {
     return quietPeriods;
 }
 
-export function detectStatisticalAnomalies(counts: number[], threshold: number = 2): StatisticalAnomaly[] {
-    if (counts.length < 3) return [];
+export function detectStatisticalAnomalies(
+    counts: number[],
+    threshold: number = ANALYSIS_CONSTANTS.zScoreDefaultThreshold
+): StatisticalAnomaly[] {
+    // 样本数不足时不判定异常：阈值与最小样本数均来自共享常量，与 Python 保持一致
+    if (counts.length < ANALYSIS_CONSTANTS.zScoreMinSamples) return [];
 
     const mean = counts.reduce((sum, count) => sum + count, 0) / counts.length;
     const variance = counts.reduce((sum, count) => sum + Math.pow(count - mean, 2), 0) / counts.length;

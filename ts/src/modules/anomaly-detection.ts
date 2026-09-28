@@ -1,6 +1,6 @@
 import { LogEaseClient } from '../client.js';
 import { ApiResponse, PeriodComparisonResult, CorrelationResult, RootCauseAnalysisResult, TimeSeriesPoint } from '../types.js';
-import { analyzeTimeline } from './series-analysis.js';
+import { analyzeTimeline, detectStatisticalAnomalies } from './series-analysis.js';
 import { StatisticsModule } from './statistics.js';
 
 type DistributionValueChange = RootCauseAnalysisResult['distribution_drift'][number]['changed_values'][number];
@@ -264,8 +264,8 @@ export class AnomalyDetectionModule {
 
         const counts = pattern.timeline.rows.map((row: any) => row.count || 0);
         
-        // 使用统计学方法检测异常
-        const anomalies = this.detectStatisticalAnomalies(counts);
+        // 使用统计学方法检测异常（阈值/最小样本数来自共享常量，与 Python 一致）
+        const anomalies = detectStatisticalAnomalies(counts);
         
         // 检测时间模式异常
         const temporalAnomalies = this.detectTemporalAnomalies(pattern.timeline);
@@ -420,34 +420,6 @@ export class AnomalyDetectionModule {
         // 使用对数缩放避免大数值主导
         const ratio = count / total;
         return Math.log(1 + ratio * 100) / Math.log(101);
-    }
-
-    /**
-     * 检测统计异常
-     */
-    private detectStatisticalAnomalies(counts: number[]): any[] {
-        if (counts.length < 3) return [];
-        
-        const mean = counts.reduce((a, b) => a + b, 0) / counts.length;
-        const variance = counts.reduce((sum: number, count: number) => sum + Math.pow(count - mean, 2), 0) / counts.length;
-        const stdDev = Math.sqrt(variance);
-        
-        const anomalies = [];
-        const threshold = 2.0; // 2个标准差
-        
-        for (let i = 0; i < counts.length; i++) {
-            const zScore = stdDev > 0 ? Math.abs(counts[i] - mean) / stdDev : 0;
-            if (zScore > threshold) {
-                anomalies.push({
-                    index: i,
-                    value: counts[i],
-                    z_score: zScore,
-                    type: counts[i] > mean ? 'spike' : 'drop'
-                });
-            }
-        }
-        
-        return anomalies;
     }
 
     /**

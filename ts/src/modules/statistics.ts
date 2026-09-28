@@ -2,15 +2,55 @@ import { LogEaseClient } from '../client.js';
 import { ApiResponse, TrendAnalysisResult, AnomalyDetectionResult, TimeSeriesPoint } from '../types.js';
 import { analyzeTimeline, detectStatisticalAnomalies } from './series-analysis.js';
 import { TimechartQueryModule } from './timechart-query.js';
+import { ANALYSIS_CONSTANTS, resolveMovingAverageWindow, zValueForConfidence } from './analysis-constants.js';
 import {
     chooseBucket as chooseTimeBucket,
     parseDurationMs as parseTimeRangeDurationMs,
     parseTimeString as parseTimeValue
 } from './time-utils.js';
 
+/**
+ * 按 Python `f"{value}"` 的浮点输出习惯格式化数字（整数值补 `.0`）。
+ *
+ * 异常原因文本里的阈值由两端各自拼接，若格式化不一致会产生肉眼可见的输出漂移，
+ * 因此这里刻意对齐 Python 的 `str(float)` 表现。
+ */
+export function formatPythonFloat(value: number): string {
+    if (!Number.isFinite(value)) {
+        return String(value);
+    }
+    return Number.isInteger(value) ? value.toFixed(1) : String(value);
+}
+
+const FIXED_FORMATTERS = new Map<number, Intl.NumberFormat>();
+
+/**
+ * 按 Python `f"{value:.Nf}"` 的语义格式化定点小数。
+ *
+ * JS 的 `toFixed` 使用"四舍五入（远离零）"，而 Python 使用"四舍六入五成双"
+ * （round-half-to-even）。当数值恰好落在中点时两者结果不同，例如
+ * `13.625` → TS `13.63` / Python `13.62`，会直接体现在趋势摘要文本里。
+ * 这里用 `Intl.NumberFormat` 的 `roundingMode: 'halfEven'` 复刻 Python 行为。
+ */
+export function formatFixed(value: number, digits: number): string {
+    if (!Number.isFinite(value)) {
+        return String(value);
+    }
+    let formatter = FIXED_FORMATTERS.get(digits);
+    if (!formatter) {
+        formatter = new Intl.NumberFormat('en-US', {
+            minimumFractionDigits: digits,
+            maximumFractionDigits: digits,
+            useGrouping: false,
+            roundingMode: 'halfEven'
+        });
+        FIXED_FORMATTERS.set(digits, formatter);
+    }
+    return formatter.format(value);
+}
+
 export class StatisticsModule {
     private timechartQuery: TimechartQueryModule;
-
     constructor(private client: LogEaseClient) {
         this.timechartQuery = new TimechartQueryModule(client);
     }
@@ -51,6 +91,15 @@ export class StatisticsModule {
         const avg = this.mean(arr);
         const squareDiffs = arr.map(value => Math.pow(value - avg, 2));
         return Math.sqrt(this.mean(squareDiffs));
+    }
+
+    /**
+     * 安全除法：分母接近 0 时返回 0，避免 NaN / Infinity 泄漏到结果里。
+     * 与 Python `LogToolsBusinessService._safe_divide` 保持一致。
+     */
+    safeDivide(numerator: number, denominator: number): number {
+        if (Math.abs(denominator) <= 1e-9) return 0;
+        return numerator / denominator;
     }
 
     /**
@@ -137,7 +186,7 @@ export class StatisticsModule {
             }
         }
         
-        return peaks.sort((a, b) => b.value - a.value).slice(0, limit);
+        return peaks.sort((a, b) => b.value - a.value).slice(0, Math.max(1, limit));
     }
 
     /**
@@ -162,14 +211,14 @@ export class StatisticsModule {
                     index,
                     value,
                     threshold: lowerBound,
-                    reason: `值 ${value} 小于下界 ${lowerBound.toFixed(2)}`
+                    reason: `值 ${formatPythonFloat(value)} 小于下界 ${formatFixed(lowerBound, 2)}`
                 });
             } else if (value > upperBound) {
                 anomalies.push({
                     index,
                     value,
                     threshold: upperBound,
-                    reason: `值 ${value} 大于上界 ${upperBound.toFixed(2)}`
+                    reason: `值 ${formatPythonFloat(value)} 大于上界 ${formatFixed(upperBound, 2)}`
                 });
             }
         });
@@ -185,7 +234,7 @@ export class StatisticsModule {
             index: anomaly.index,
             value: anomaly.value,
             threshold: anomaly.z_score,
-            reason: `Z-score ${anomaly.z_score.toFixed(2)} 超过阈值 ${threshold}`
+            reason: `Z-score ${formatFixed(anomaly.z_score, 2)} 超过阈值 ${formatPythonFloat(threshold)}`
         }));
     }
 
@@ -196,23 +245,23 @@ export class StatisticsModule {
         const avg = this.mean(series);
         const max = Math.max(...series);
         const min = Math.min(...series);
-        
-        let summary = `时间序列分析结果：平均值=${avg.toFixed(2)}, 最大值=${max.toFixed(2)}, 最小值=${min.toFixed(2)}。`;
-        
+
+        let summary = `时间序列分析结果：平均值=${formatFixed(avg, 2)}，最大值=${formatFixed(max, 2)}，最小值=${formatFixed(min, 2)}。`;
+
         if (Math.abs(changeRate) < 0.05) {
             summary += '整体趋势平稳，';
         } else if (changeRate > 0) {
-            summary += `整体呈上升趋势，变化率${(changeRate * 100).toFixed(1)}%，`;
+            summary += `整体呈上升趋势，变化率 ${formatFixed(changeRate * 100, 1)}%，`;
         } else {
-            summary += `整体呈下降趋势，变化率${(changeRate * 100).toFixed(1)}%，`;
+            summary += `整体呈下降趋势，变化率 ${formatFixed(changeRate * 100, 1)}%，`;
         }
-        
+
         if (Math.abs(slope) > 0.1) {
-            summary += `斜率为${slope.toFixed(3)}，表明趋势较为明显。`;
+            summary += `斜率为 ${formatFixed(slope, 3)}，表明趋势较为明显。`;
         } else {
             summary += '斜率较小，趋势变化缓慢。';
         }
-        
+
         return summary;
     }
 
@@ -262,15 +311,23 @@ export class StatisticsModule {
 
         const values = series.map(point => point.value);
         const { slope, intercept } = this.linearRegression(values);
-        const changeRate = values.length > 1 ? (values[values.length - 1] - values[0]) / values[0] : 0;
-        const peaks = this.detectPeaks(values, limitPeaks);
+        // values[0] 接近 0 时不做除法，避免 NaN/Infinity 泄漏到 changeRate 与摘要文本
+        const changeRate = values.length > 1 && Math.abs(values[0]) > 1e-9
+            ? (values[values.length - 1] - values[0]) / values[0]
+            : 0;
+        const peaks = this.detectPeaks(values, limitPeaks).map((peak) => ({
+            index: peak.index,
+            value: peak.value,
+            timestamp: series[peak.index]?.timestamp
+        }));
         const timeline = this.buildTimelineFromSeries(series);
         const seriesAnalysis = analyzeTimeline(timeline);
         const anomalies = seriesAnalysis.statistical_anomalies.map((anomaly) => ({
             index: anomaly.index,
             value: anomaly.value,
             threshold: anomaly.z_score,
-            reason: `Z-score ${anomaly.z_score.toFixed(2)} 超过阈值 2`
+            reason: `Z-score ${formatFixed(anomaly.z_score, 2)} 超过阈值 ${formatPythonFloat(ANALYSIS_CONSTANTS.zScoreDefaultThreshold)}`,
+            timestamp: series[anomaly.index]?.timestamp
         }));
         const summary = this.generateTrendSummary(values, slope, changeRate);
 
@@ -314,7 +371,7 @@ export class StatisticsModule {
                 index: anomaly.index,
                 value: anomaly.value,
                 threshold: anomaly.z_score,
-                reason: `Z-score ${anomaly.z_score.toFixed(2)} 超过阈值 ${sensitivity}`
+                reason: `Z-score ${formatFixed(anomaly.z_score, 2)} 超过阈值 ${formatPythonFloat(sensitivity)}`
             }));
         }
 
@@ -325,7 +382,10 @@ export class StatisticsModule {
         return {
             status,
             data: {
-                anomalies,
+                anomalies: anomalies.map((item) => ({
+                    ...item,
+                    timestamp: series[item.index]?.timestamp
+                })),
                 method,
                 threshold: sensitivity,
                 series
@@ -546,27 +606,30 @@ export class StatisticsModule {
 
     /**
      * 计算移动平均
+     *
+     * 窗口会收敛到 [minWindow, data.length]（见 config/analysis-constants.yaml），
+     * 而不是在 window > data.length 时直接返回 0，与 Python 实现保持一致。
      */
     simpleMovingAverage(data: number[], window: number): { forecast: number, trend: string } {
-        if (data.length === 0 || window <= 0 || window > data.length) {
+        if (data.length === 0) {
             return { forecast: 0, trend: 'stable' };
         }
-        
-        const recent = data.slice(-window);
+
+        const resolvedWindow = resolveMovingAverageWindow(window, data.length);
+        const recent = data.slice(-resolvedWindow);
         const forecast = this.mean(recent);
-        
-        const firstHalf = recent.slice(0, Math.floor(recent.length / 2));
-        const secondHalf = recent.slice(Math.floor(recent.length / 2));
-        
-        const firstAvg = this.mean(firstHalf);
-        const secondAvg = this.mean(secondHalf);
-        
-        const change = (secondAvg - firstAvg) / firstAvg;
-        
+
+        // 中点至少为 1，保证单元素窗口也能算出趋势而不是 0/0
+        const midpoint = Math.max(1, Math.floor(recent.length / 2));
+        const firstAvg = this.mean(recent.slice(0, midpoint));
+        const secondAvg = this.mean(recent.slice(midpoint));
+
+        const change = this.safeDivide(secondAvg - firstAvg, firstAvg);
+
         let trend = 'stable';
         if (change > 0.1) trend = 'increasing';
         else if (change < -0.1) trend = 'decreasing';
-        
+
         return { forecast, trend };
     }
 
@@ -578,36 +641,36 @@ export class StatisticsModule {
         smoothed: number[];
         trend: string;
     } {
+        const resolvedHorizon = Math.max(1, Math.floor(horizon) || 1);
         if (data.length === 0) {
             return { forecast: [], smoothed: [], trend: 'stable' };
         }
-        
+
+        const resolvedAlpha = Math.min(1, Math.max(0, Number.isFinite(alpha) ? alpha : 0.3));
         const smoothed: number[] = [];
         let s = data[0];
-        
+
         for (let i = 0; i < data.length; i++) {
-            s = alpha * data[i] + (1 - alpha) * s;
+            s = resolvedAlpha * data[i] + (1 - resolvedAlpha) * s;
             smoothed.push(s);
         }
-        
+
         const forecast: number[] = [];
-        for (let i = 0; i < horizon; i++) {
+        for (let i = 0; i < resolvedHorizon; i++) {
             forecast.push(s);
         }
-        
-        // 计算趋势
-        const recent = smoothed.slice(-Math.floor(smoothed.length / 2));
-        const older = smoothed.slice(0, Math.floor(smoothed.length / 2));
-        
-        const recentAvg = this.mean(recent);
-        const olderAvg = this.mean(older);
-        
-        const change = (recentAvg - olderAvg) / olderAvg;
-        
+
+        // 计算趋势：中点至少为 1，避免 slice(-0) 取到整个数组
+        const midpoint = Math.max(1, Math.floor(smoothed.length / 2));
+        const olderAvg = this.mean(smoothed.slice(0, midpoint));
+        const recentAvg = this.mean(smoothed.slice(midpoint));
+
+        const change = this.safeDivide(recentAvg - olderAvg, olderAvg);
+
         let trend = 'stable';
         if (change > 0.1) trend = 'increasing';
         else if (change < -0.1) trend = 'decreasing';
-        
+
         return { forecast, smoothed, trend };
     }
 
@@ -621,50 +684,46 @@ export class StatisticsModule {
         trend: string;
         r_squared: number;
     } {
+        const resolvedHorizon = Math.max(1, Math.floor(horizon) || 1);
         if (data.length === 0) {
             return {
-                forecast: new Array(horizon).fill(0),
-                confidence_lower: new Array(horizon).fill(0),
-                confidence_upper: new Array(horizon).fill(0),
+                forecast: new Array(resolvedHorizon).fill(0),
+                confidence_lower: new Array(resolvedHorizon).fill(0),
+                confidence_upper: new Array(resolvedHorizon).fill(0),
                 trend: 'stable',
                 r_squared: 0
             };
         }
-        
+
         const { slope, intercept } = this.linearRegression(data);
         const n = data.length;
-        
+
         // 计算预测值
         const forecast: number[] = [];
-        for (let i = 0; i < horizon; i++) {
+        for (let i = 0; i < resolvedHorizon; i++) {
             const x = n + i;
             forecast.push(slope * x + intercept);
         }
-        
+
         // 计算R²
         const predicted = data.map((_, i) => slope * i + intercept);
         const r_squared = this.calculateRSquared(data, predicted);
-        
+
         // 计算残差标准差
         const residuals = data.map((actual, i) => actual - predicted[i]);
         const residualStdDev = this.stddev(residuals);
-        
-        // 计算置信区间
-        const t_value = 1.96; // 95%置信度
-        const confidence_lower: number[] = [];
-        const confidence_upper: number[] = [];
-        
-        for (let i = 0; i < horizon; i++) {
-            const margin = t_value * residualStdDev;
-            confidence_lower.push(forecast[i] - margin);
-            confidence_upper.push(forecast[i] + margin);
-        }
-        
+
+        // 计算置信区间：z 值按 confidence 取值（与 Python 共用同一张表）
+        const z_value = zValueForConfidence(confidence);
+        const margin = z_value * residualStdDev;
+        const confidence_lower = forecast.map((value) => value - margin);
+        const confidence_upper = forecast.map((value) => value + margin);
+
         // 确定趋势
         let trend = 'stable';
         if (slope > 0.1) trend = 'increasing';
         else if (slope < -0.1) trend = 'decreasing';
-        
+
         return {
             forecast,
             confidence_lower,

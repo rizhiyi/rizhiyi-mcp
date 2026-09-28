@@ -335,8 +335,7 @@ STATISTICAL_ANALYSIS_TOOLS: list[ToolDefinition] = [
                 },
                 "bucket": {
                     "type": "string",
-                    "description": '可选，固定聚合桶（如 1m/5m/1h）。',
-                    "default": "5m",
+                    "description": '可选，固定聚合桶（如 1m/5m/1h）；不传则按 time_range 自动选择。',
                 },
                 "metric_field": {
                     "type": "string",
@@ -371,8 +370,7 @@ STATISTICAL_ANALYSIS_TOOLS: list[ToolDefinition] = [
                 },
                 "bucket": {
                     "type": "string",
-                    "description": '可选，固定聚合桶（如 1m/5m/1h）。',
-                    "default": "5m",
+                    "description": '可选，固定聚合桶（如 1m/5m/1h）；不传则按 time_range 自动选择。',
                 },
                 "metric_field": {
                     "type": "string",
@@ -447,8 +445,7 @@ INTELLIGENT_ANALYSIS_TOOLS: list[ToolDefinition] = [
                 },
                 "bucket": {
                     "type": "string",
-                    "description": '时间桶大小，如 "1m"、"5m"、"1h"。',
-                    "default": "5m",
+                    "description": '时间桶大小，如 "1m"、"5m"、"1h"；不传则按 time_range 自动选择。',
                 },
                 "compare_fields": {
                     "type": "array",
@@ -621,8 +618,7 @@ PREDICTIVE_ANALYSIS_TOOLS: list[ToolDefinition] = [
                 },
                 "bucket": {
                     "type": "string",
-                    "description": '时间桶大小，如 "1m"、"5m"、"1h"。',
-                    "default": "5m",
+                    "description": '时间桶大小，如 "1m"、"5m"、"1h"；不传则按 time_range 自动选择。',
                 },
                 "horizon": {
                     "type": "integer",
@@ -675,8 +671,7 @@ PREDICTIVE_ANALYSIS_TOOLS: list[ToolDefinition] = [
                 },
                 "bucket": {
                     "type": "string",
-                    "description": '时间桶大小，如 "1m"、"5m"、"1h"。',
-                    "default": "5m",
+                    "description": '时间桶大小，如 "1m"、"5m"、"1h"；不传则按 time_range 自动选择。',
                 },
                 "method": {
                     "type": "string",

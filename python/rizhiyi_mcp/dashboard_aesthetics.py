@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from .analysis_constants import normalize_panel_size
 from .dashboard_utils import (
     DASHBOARD_SCHEME_COLORS,
     DEFAULT_DASHBOARD_SCHEME,
@@ -75,8 +76,8 @@ def _extract_items(widgets: list[dict[str, Any]]) -> list[dict[str, Any]]:
     for index, widget in enumerate(widgets):
         x = int(widget.get("x", 0) or 0)
         y = int(widget.get("y", 0) or 0)
-        w = max(1, int(widget.get("w", 6) or 6))
-        h = max(2, int(widget.get("h", 5) or 5))
+        # 尺寸归一化（默认值 / 下界 / 整数化）来自共享常量，与 TypeScript 侧一致
+        w, h = normalize_panel_size(widget.get("w"), widget.get("h"))
         area = w * h
         normalized = normalize_panel_kind(widget.get("type") or widget.get("panel_type"), _get_chart_type(widget))
         chart_type = normalized["chartType"]

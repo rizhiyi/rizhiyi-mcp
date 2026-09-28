@@ -4,7 +4,7 @@ import {
     ForecastResult,
     TimeSeriesPoint
 } from '../types.js';
-import { StatisticsModule } from './statistics.js';
+import { StatisticsModule, formatFixed, formatPythonFloat } from './statistics.js';
 import { TimechartQueryModule } from './timechart-query.js';
 
 export class TrendForecastModule {
@@ -47,6 +47,8 @@ export class TrendForecastModule {
             alpha = 0.3
         } = options;
         const values = series.map(point => point.value);
+        // 预测步数下界为 1，与 Python 的 `max(1, horizon)` 一致
+        const resolvedHorizon = Math.max(1, Math.floor(horizon) || 1);
 
         let forecastResult: {
             forecast: number[];
@@ -60,13 +62,13 @@ export class TrendForecastModule {
             case 'moving_average': {
                 const maResult = this.statistics.simpleMovingAverage(values, window);
                 forecastResult = {
-                    forecast: new Array(horizon).fill(maResult.forecast),
+                    forecast: new Array(resolvedHorizon).fill(maResult.forecast),
                     trend: maResult.trend
                 };
                 break;
             }
             case 'exponential_smoothing': {
-                const esResult = this.statistics.exponentialSmoothing(values, alpha, horizon);
+                const esResult = this.statistics.exponentialSmoothing(values, alpha, resolvedHorizon);
                 forecastResult = {
                     forecast: esResult.forecast,
                     trend: esResult.trend
@@ -75,7 +77,7 @@ export class TrendForecastModule {
             }
             case 'linear_regression':
             default: {
-                const lrResult = this.statistics.linearTrendForecast(values, horizon, confidence);
+                const lrResult = this.statistics.linearTrendForecast(values, resolvedHorizon, confidence);
                 forecastResult = {
                     forecast: lrResult.forecast,
                     confidence_lower: lrResult.confidence_lower,
@@ -146,72 +148,56 @@ export class TrendForecastModule {
         const values: number[] = series.map((item) => Number(item.value ?? item.count ?? 0));
         const timestamps: string[] = series.map((item) => String(item.timestamp));
 
+        // 非法 alert_on 归一为 both，与 Python 侧一致
+        const resolvedAlertOn = ['upper', 'lower', 'both'].includes(alert_on) ? alert_on : 'both';
+        // 预测窗口收敛到 [1, values.length]，避免越界取到 undefined
+        const resolvedHorizon = Math.max(1, Math.min(Math.floor(forecast_horizon) || 1, values.length));
+
         let anomalies: Array<{index: number, value: number, threshold: number, reason: string}> = [];
-        let alertTriggered = false;
-        let alertReasons: string[] = [];
 
-        switch (method) {
-            case 'prediction_band': {
-                const lrResult = this.statistics.linearTrendForecast(values, forecast_horizon);
-                const lastValues = values.slice(-forecast_horizon);
+        if (method === 'prediction_band') {
+            const lrResult = this.statistics.linearTrendForecast(values, resolvedHorizon, 0.95);
+            const recentValues = values.slice(-resolvedHorizon);
 
-                lastValues.forEach((value: number, index: number) => {
-                    const lowerBound = lrResult.confidence_lower[index];
-                    const upperBound = lrResult.confidence_upper[index];
+            recentValues.forEach((value: number, index: number) => {
+                const lowerBound = lrResult.confidence_lower[index];
+                const upperBound = lrResult.confidence_upper[index];
+                const actualIndex = values.length - resolvedHorizon + index;
 
-                    if (value < lowerBound && (alert_on === 'lower' || alert_on === 'both')) {
-                        anomalies.push({
-                            index: values.length - forecast_horizon + index,
-                            value,
-                            threshold: lowerBound,
-                            reason: `值 ${value} 低于预测区间下界 ${lowerBound.toFixed(2)}`
-                        });
-                    } else if (value > upperBound && (alert_on === 'upper' || alert_on === 'both')) {
-                        anomalies.push({
-                            index: values.length - forecast_horizon + index,
-                            value,
-                            threshold: upperBound,
-                            reason: `值 ${value} 高于预测区间上界 ${upperBound.toFixed(2)}`
-                        });
-                    }
-                });
-                break;
-            }
-            case 'statistical': {
-                const mean = this.statistics.mean(values);
-                const stddev = this.statistics.stddev(values);
-
-                values.forEach((value: number, index: number) => {
-                    const zScore = Math.abs((value - mean) / stddev);
-                    if (zScore > threshold) {
-                        const isUpper = value > mean;
-                        if ((isUpper && (alert_on === 'upper' || alert_on === 'both')) ||
-                            (!isUpper && (alert_on === 'lower' || alert_on === 'both'))) {
-                            anomalies.push({
-                                index,
-                                value,
-                                threshold: zScore,
-                                reason: `Z-score ${zScore.toFixed(2)} 超过阈值 ${threshold}`
-                            });
-                        }
-                    }
-                });
-                break;
-            }
-            case 'adaptive':
-                anomalies = this.statistics.detectAnomaliesIQR(values, threshold);
-                anomalies = anomalies.filter(item => {
-                    const isUpper = item.value > this.statistics.mean(values);
-                    return (isUpper && (alert_on === 'upper' || alert_on === 'both')) ||
-                           (!isUpper && (alert_on === 'lower' || alert_on === 'both'));
-                });
-                break;
+                if (value < lowerBound && (resolvedAlertOn === 'lower' || resolvedAlertOn === 'both')) {
+                    anomalies.push({
+                        index: actualIndex,
+                        value,
+                        threshold: lowerBound,
+                        reason: `值 ${formatPythonFloat(value)} 低于预测区间下界 ${formatFixed(lowerBound, 2)}`
+                    });
+                } else if (value > upperBound && (resolvedAlertOn === 'upper' || resolvedAlertOn === 'both')) {
+                    anomalies.push({
+                        index: actualIndex,
+                        value,
+                        threshold: upperBound,
+                        reason: `值 ${formatPythonFloat(value)} 高于预测区间上界 ${formatFixed(upperBound, 2)}`
+                    });
+                }
+            });
+        } else if (method === 'adaptive') {
+            anomalies = this.statistics.detectAnomaliesIQR(values, threshold);
+        } else {
+            // statistical 及未识别的方法统一走 Z-score，与 Python 的 else 分支一致
+            anomalies = this.statistics.detectAnomaliesZScore(values, threshold);
         }
 
-        if (anomalies.length >= min_anomaly_points) {
-            alertTriggered = true;
-            alertReasons = anomalies.slice(0, 5).map(item => item.reason);
+        if (method !== 'prediction_band') {
+            const mean = this.statistics.mean(values);
+            anomalies = anomalies.filter((item) => (
+                resolvedAlertOn === 'both'
+                || (resolvedAlertOn === 'upper' && item.value > mean)
+                || (resolvedAlertOn === 'lower' && item.value < mean)
+            ));
         }
+
+        const alertTriggered = anomalies.length >= Math.max(1, Math.floor(min_anomaly_points) || 1);
+        const alertReasons = alertTriggered ? anomalies.slice(0, 5).map(item => item.reason) : [];
 
         return {
             status,
@@ -220,10 +206,13 @@ export class TrendForecastModule {
                 anomaly_count: anomalies.length,
                 min_anomaly_points,
                 alert_reasons: alertReasons,
-                anomalies: anomalies.slice(0, 10),
+                anomalies: anomalies.slice(0, 10).map((item) => ({
+                    ...item,
+                    timestamp: series[item.index]?.timestamp
+                })),
                 method,
                 threshold,
-                alert_on,
+                alert_on: resolvedAlertOn,
                 timestamps,
                 values,
                 series

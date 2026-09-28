@@ -7,6 +7,7 @@ import {
     normalizeDashboardScheme,
     normalizePanelKind
 } from './panel-utils.js';
+import { normalizePanelSize } from '../analysis-constants.js';
 
 type Severity = 'high' | 'medium' | 'low';
 
@@ -85,10 +86,10 @@ export function buildAestheticsAnalysis(widgets: any[], options: { scheme?: stri
 
 function extractAestheticItems(widgets: any[]) {
     return widgets.map((widget: any, index: number) => {
-        const x = Number.isFinite(widget?.x) ? Number(widget.x) : 0;
-        const y = Number.isFinite(widget?.y) ? Number(widget.y) : 0;
-        const w = Number.isFinite(widget?.w) && Number(widget.w) > 0 ? Number(widget.w) : 6;
-        const h = Number.isFinite(widget?.h) && Number(widget.h) > 0 ? Number(widget.h) : 5;
+        // 栅格坐标必须为整数，与 Python `int(widget.get("x", 0) or 0)` 保持一致
+        const x = Number.isFinite(widget?.x) ? Math.trunc(Number(widget.x)) : 0;
+        const y = Number.isFinite(widget?.y) ? Math.trunc(Number(widget.y)) : 0;
+        const { w, h } = normalizePanelSize(widget?.w, widget?.h);
         const area = w * h;
         const normalized = normalizePanelKind(
             widget?.type || widget?.panel_type || 'trend',

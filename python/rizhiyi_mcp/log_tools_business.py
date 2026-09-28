@@ -9,12 +9,30 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from .analysis_constants import (
+    choose_time_bucket,
+    get_analysis_constants,
+    resolve_moving_average_window,
+    z_value_for_confidence,
+)
 from .types import ApiResponse
 
 RequestJson = Callable[..., Awaitable[ApiResponse[dict[str, Any]]]]
 
 _DURATION_RE = re.compile(r"^([+-])?(\d+)([smhdw])$")
 _NUMBER_RE = re.compile(r"^-?\d+(?:\.\d+)?$")
+
+
+def _format_float(value: Any) -> str:
+    """按 ``str(float)`` 语义渲染数字（整数值补 ``.0``）。
+
+    异常原因文本由 TS/Python 两端各自拼接，若数值格式化不一致会产生肉眼可见的
+    输出漂移，因此统一走这里。TypeScript 侧对应 ``statistics.formatPythonFloat``。
+    """
+    try:
+        return str(float(value))
+    except (TypeError, ValueError):
+        return str(value)
 
 
 class LogToolsBusinessService:
@@ -638,7 +656,7 @@ class LogToolsBusinessService:
             return ApiResponse(error="无数据", message="未找到符合条件的时间序列数据")
 
         values = [item["value"] for item in series]
-        resolved_horizon = max(1, horizon)
+        resolved_horizon = max(1, int(horizon))
         if method == "moving_average":
             ma = self._simple_moving_average(values, max(1, window))
             result = {
@@ -718,7 +736,7 @@ class LogToolsBusinessService:
         values = [item["value"] for item in series]
         anomalies: list[dict[str, Any]] = []
         resolved_alert_on = alert_on if alert_on in {"upper", "lower", "both"} else "both"
-        resolved_horizon = max(1, min(forecast_horizon, len(values)))
+        resolved_horizon = max(1, min(int(forecast_horizon), len(values)))
 
         if method == "prediction_band":
             forecast = self._linear_trend_forecast(values, resolved_horizon, 0.95)
@@ -762,14 +780,15 @@ class LogToolsBusinessService:
                 )
             ]
 
-        alert_triggered = len(anomalies) >= max(1, min_anomaly_points)
+        alert_triggered = len(anomalies) >= max(1, int(min_anomaly_points))
         return ApiResponse(
             status=status,
             data={
                 "alert_triggered": alert_triggered,
                 "anomaly_count": len(anomalies),
                 "min_anomaly_points": min_anomaly_points,
-                "alert_reasons": [item["reason"] for item in anomalies[:5]],
+                # 仅在告警真正触发时返回原因，否则"未告警 + 有原因"是自相矛盾的
+                "alert_reasons": [item["reason"] for item in anomalies[:5]] if alert_triggered else [],
                 "anomalies": [
                     {
                         "index": item["index"],
@@ -1885,20 +1904,9 @@ class LogToolsBusinessService:
         return parsed
 
     def _choose_bucket(self, duration_ms: int) -> tuple[str, int]:
-        minute = 60 * 1000
-        hour = 60 * minute
-        day = 24 * hour
-        if duration_ms <= 30 * minute:
-            return ("1m", 60)
-        if duration_ms <= 6 * hour:
-            return ("5m", 300)
-        if duration_ms <= day:
-            return ("15m", 900)
-        if duration_ms <= 7 * day:
-            return ("1h", 3600)
-        if duration_ms <= 30 * day:
-            return ("6h", 21600)
-        return ("1d", 86400)
+        # 档位表来自 config/analysis-constants.yaml，与 TypeScript 侧共用同一份定义，
+        # 避免两端在相同时间窗下选出不同粒度。
+        return choose_time_bucket(duration_ms)
 
     def _mean(self, values: list[float]) -> float:
         if not values:
@@ -1937,7 +1945,8 @@ class LogToolsBusinessService:
         return peaks[: max(1, limit)]
 
     def _detect_anomalies_zscore(self, values: list[float], threshold: float) -> list[dict[str, Any]]:
-        if len(values) < 2:
+        # 最小样本数来自共享常量，与 TypeScript 侧保持一致
+        if len(values) < get_analysis_constants().z_score_min_samples:
             return []
         mean_value = self._mean(values)
         std_value = self._stddev(values)
@@ -1952,7 +1961,7 @@ class LogToolsBusinessService:
                         "index": index,
                         "value": value,
                         "threshold": z_score,
-                        "reason": f"Z-score {z_score:.2f} 超过阈值 {threshold}",
+                        "reason": f"Z-score {z_score:.2f} 超过阈值 {_format_float(threshold)}",
                     }
                 )
         return anomalies
@@ -2004,7 +2013,7 @@ class LogToolsBusinessService:
     def _simple_moving_average(self, values: list[float], window: int) -> dict[str, Any]:
         if not values:
             return {"forecast": 0.0, "trend": "stable"}
-        resolved_window = min(max(1, window), len(values))
+        resolved_window = resolve_moving_average_window(window, len(values))
         recent = values[-resolved_window:]
         forecast = self._mean(recent)
         midpoint = max(1, len(recent) // 2)
@@ -2055,7 +2064,7 @@ class LogToolsBusinessService:
         predicted = [slope * index + intercept for index in range(len(values))]
         residuals = [actual - estimate for actual, estimate in zip(values, predicted, strict=False)]
         residual_std = self._stddev(residuals)
-        z_value = 1.96 if confidence >= 0.95 else 1.64 if confidence >= 0.9 else 1.28
+        z_value = z_value_for_confidence(confidence)
         margin = z_value * residual_std
         total_ss = sum((value - self._mean(values)) ** 2 for value in values)
         residual_ss = sum((actual - estimate) ** 2 for actual, estimate in zip(values, predicted, strict=False))

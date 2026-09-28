@@ -1,8 +1,9 @@
+import { chooseTimeBucket } from './analysis-constants.js';
+
 export type TimeBucket = {
     bin: string;
     seconds: number;
 };
-
 /**
  * 解析时间字符串
  */
@@ -47,20 +48,10 @@ export function parseDurationMs(timeRange: string): number {
 
 /**
  * 选择合适的时间桶
+ *
+ * 档位表来自 config/analysis-constants.yaml，与 Python 实现共用同一份定义，
+ * 避免两端在相同时间窗下选出不同粒度。
  */
 export function chooseBucket(durationMs: number): TimeBucket {
-    const seconds = Math.floor(durationMs / 1000);
-
-    if (seconds <= 60) return { bin: '1s', seconds: 1 };
-    if (seconds <= 300) return { bin: '5s', seconds: 5 };
-    if (seconds <= 600) return { bin: '10s', seconds: 10 };
-    if (seconds <= 1800) return { bin: '30s', seconds: 30 };
-    if (seconds <= 3600) return { bin: '1m', seconds: 60 };
-    if (seconds <= 7200) return { bin: '2m', seconds: 120 };
-    if (seconds <= 18000) return { bin: '5m', seconds: 300 };
-    if (seconds <= 36000) return { bin: '10m', seconds: 600 };
-    if (seconds <= 86400) return { bin: '30m', seconds: 1800 };
-    if (seconds <= 172800) return { bin: '1h', seconds: 3600 };
-    if (seconds <= 604800) return { bin: '6h', seconds: 21600 };
-    return { bin: '1d', seconds: 86400 };
+    return chooseTimeBucket(durationMs);
 }

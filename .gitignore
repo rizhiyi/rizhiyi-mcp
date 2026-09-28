@@ -170,3 +170,7 @@ __pycache__/
 .venv/
 python/.venv/
 *.egg-info/
+.pytest-tmp-*/
+
+# agent workspace (local memory & session data)
+.workbuddy-ai/

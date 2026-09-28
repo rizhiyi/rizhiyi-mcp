@@ -1,0 +1,503 @@
+{
+  "version": 1,
+  "timeBuckets": [
+    {
+      "durationMs": -1000,
+      "bin": "1s",
+      "seconds": 1
+    },
+    {
+      "durationMs": 0,
+      "bin": "1s",
+      "seconds": 1
+    },
+    {
+      "durationMs": 60000,
+      "bin": "1s",
+      "seconds": 1
+    },
+    {
+      "durationMs": 60001,
+      "bin": "5s",
+      "seconds": 5
+    },
+    {
+      "durationMs": 300000,
+      "bin": "5s",
+      "seconds": 5
+    },
+    {
+      "durationMs": 300001,
+      "bin": "10s",
+      "seconds": 10
+    },
+    {
+      "durationMs": 600000,
+      "bin": "10s",
+      "seconds": 10
+    },
+    {
+      "durationMs": 600001,
+      "bin": "30s",
+      "seconds": 30
+    },
+    {
+      "durationMs": 1800000,
+      "bin": "30s",
+      "seconds": 30
+    },
+    {
+      "durationMs": 1800001,
+      "bin": "1m",
+      "seconds": 60
+    },
+    {
+      "durationMs": 3600000,
+      "bin": "1m",
+      "seconds": 60
+    },
+    {
+      "durationMs": 3600001,
+      "bin": "2m",
+      "seconds": 120
+    },
+    {
+      "durationMs": 7200000,
+      "bin": "2m",
+      "seconds": 120
+    },
+    {
+      "durationMs": 7200001,
+      "bin": "5m",
+      "seconds": 300
+    },
+    {
+      "durationMs": 18000000,
+      "bin": "5m",
+      "seconds": 300
+    },
+    {
+      "durationMs": 18000001,
+      "bin": "10m",
+      "seconds": 600
+    },
+    {
+      "durationMs": 36000000,
+      "bin": "10m",
+      "seconds": 600
+    },
+    {
+      "durationMs": 36000001,
+      "bin": "30m",
+      "seconds": 1800
+    },
+    {
+      "durationMs": 86400000,
+      "bin": "30m",
+      "seconds": 1800
+    },
+    {
+      "durationMs": 86400001,
+      "bin": "1h",
+      "seconds": 3600
+    },
+    {
+      "durationMs": 172800000,
+      "bin": "1h",
+      "seconds": 3600
+    },
+    {
+      "durationMs": 172800001,
+      "bin": "6h",
+      "seconds": 21600
+    },
+    {
+      "durationMs": 604800000,
+      "bin": "6h",
+      "seconds": 21600
+    },
+    {
+      "durationMs": 604800001,
+      "bin": "1d",
+      "seconds": 86400
+    }
+  ],
+  "nonFiniteDurations": [
+    {
+      "input": "NaN",
+      "bin": "1d",
+      "seconds": 86400
+    },
+    {
+      "input": "Infinity",
+      "bin": "1d",
+      "seconds": 86400
+    },
+    {
+      "input": "-Infinity",
+      "bin": "1d",
+      "seconds": 86400
+    }
+  ],
+  "zValues": [
+    {
+      "confidence": 1,
+      "z": 1.96
+    },
+    {
+      "confidence": 0.95,
+      "z": 1.96
+    },
+    {
+      "confidence": 0.9499,
+      "z": 1.64
+    },
+    {
+      "confidence": 0.9,
+      "z": 1.64
+    },
+    {
+      "confidence": 0.8999,
+      "z": 1.28
+    },
+    {
+      "confidence": 0,
+      "z": 1.28
+    },
+    {
+      "confidence": -1,
+      "z": 1.28
+    }
+  ],
+  "movingAverageWindows": [
+    {
+      "window": 0,
+      "length": 5,
+      "resolved": 1
+    },
+    {
+      "window": 1,
+      "length": 5,
+      "resolved": 1
+    },
+    {
+      "window": 3,
+      "length": 5,
+      "resolved": 3
+    },
+    {
+      "window": 10,
+      "length": 5,
+      "resolved": 5
+    },
+    {
+      "window": 2.9,
+      "length": 5,
+      "resolved": 2
+    },
+    {
+      "window": 1,
+      "length": 1,
+      "resolved": 1
+    },
+    {
+      "window": 0,
+      "length": 0,
+      "resolved": 1
+    },
+    {
+      "window": 4,
+      "length": 4,
+      "resolved": 4
+    }
+  ],
+  "panelSizes": [
+    {
+      "w": null,
+      "h": null,
+      "resolvedW": 6,
+      "resolvedH": 5
+    },
+    {
+      "w": 0,
+      "h": 0,
+      "resolvedW": 6,
+      "resolvedH": 5
+    },
+    {
+      "w": 1,
+      "h": 1,
+      "resolvedW": 1,
+      "resolvedH": 2
+    },
+    {
+      "w": 6.5,
+      "h": 3.7,
+      "resolvedW": 6,
+      "resolvedH": 3
+    },
+    {
+      "w": -3,
+      "h": -4,
+      "resolvedW": 6,
+      "resolvedH": 5
+    },
+    {
+      "w": 12,
+      "h": 8,
+      "resolvedW": 12,
+      "resolvedH": 8
+    },
+    {
+      "w": 2,
+      "h": 2,
+      "resolvedW": 2,
+      "resolvedH": 2
+    },
+    {
+      "w": 0.5,
+      "h": 1.2,
+      "resolvedW": 1,
+      "resolvedH": 2
+    }
+  ],
+  "formattedFloats": [
+    {
+      "input": 3,
+      "text": "3.0"
+    },
+    {
+      "input": 2,
+      "text": "2.0"
+    },
+    {
+      "input": 1.5,
+      "text": "1.5"
+    },
+    {
+      "input": -3,
+      "text": "-3.0"
+    },
+    {
+      "input": 0,
+      "text": "0.0"
+    },
+    {
+      "input": 2.5,
+      "text": "2.5"
+    },
+    {
+      "input": 100,
+      "text": "100.0"
+    }
+  ],
+  "formattedFixed": [
+    {
+      "value": 13.625,
+      "digits": 2,
+      "text": "13.62"
+    },
+    {
+      "value": 0.125,
+      "digits": 2,
+      "text": "0.12"
+    },
+    {
+      "value": 2.5,
+      "digits": 0,
+      "text": "2"
+    },
+    {
+      "value": 3.5,
+      "digits": 0,
+      "text": "4"
+    },
+    {
+      "value": -0.125,
+      "digits": 2,
+      "text": "-0.12"
+    },
+    {
+      "value": 1.005,
+      "digits": 2,
+      "text": "1.00"
+    },
+    {
+      "value": 40,
+      "digits": 2,
+      "text": "40.00"
+    },
+    {
+      "value": -0.27380952380952384,
+      "digits": 3,
+      "text": "-0.274"
+    }
+  ],
+  "timechartBucketSchemas": [
+    {
+      "name": "anomaly_alert",
+      "declaresDefault": false,
+      "required": false
+    },
+    {
+      "name": "anomaly_points",
+      "declaresDefault": false,
+      "required": false
+    },
+    {
+      "name": "correlation_analysis",
+      "declaresDefault": false,
+      "required": false
+    },
+    {
+      "name": "period_compare",
+      "declaresDefault": false,
+      "required": false
+    },
+    {
+      "name": "trend_forecast",
+      "declaresDefault": false,
+      "required": false
+    },
+    {
+      "name": "trend_summary",
+      "declaresDefault": false,
+      "required": false
+    }
+  ],
+  "businessOutputs": {
+    "trendSummary": {
+      "slope": -0.27380952380952384,
+      "intercept": 14.583333333333334,
+      "changeRate": 0.4,
+      "peaks": [
+        {
+          "index": 3,
+          "value": 40,
+          "timestamp": "2024-01-01T00:15:00Z"
+        }
+      ],
+      "anomalies": [
+        {
+          "index": 3,
+          "value": 40,
+          "threshold": 2.4516658798880537,
+          "reason": "Z-score 2.45 超过阈值 2.0",
+          "timestamp": "2024-01-01T00:15:00Z"
+        }
+      ],
+      "summary": "时间序列分析结果：平均值=13.62，最大值=40.00，最小值=0.00。整体呈上升趋势，变化率 40.0%，斜率为 -0.274，表明趋势较为明显。"
+    },
+    "anomalyPointsZscore": {
+      "anomalies": [],
+      "method": "zscore",
+      "threshold": 3
+    },
+    "anomalyPointsIqr": {
+      "anomalies": [
+        {
+          "index": 3,
+          "value": 40,
+          "threshold": 19,
+          "reason": "值 40.0 大于上界 19.00",
+          "timestamp": "2024-01-01T00:15:00Z"
+        },
+        {
+          "index": 5,
+          "value": 0,
+          "threshold": 3,
+          "reason": "值 0.0 小于下界 3.00",
+          "timestamp": "2024-01-01T00:25:00Z"
+        }
+      ],
+      "method": "iqr",
+      "threshold": 1.5
+    },
+    "trendForecastMovingAverage": {
+      "forecast": [
+        13.625,
+        13.625,
+        13.625
+      ],
+      "trend": "decreasing",
+      "method": "moving_average"
+    },
+    "trendForecastLinearRegression": {
+      "forecast": [
+        12.392857142857142,
+        12.11904761904762,
+        11.845238095238095
+      ],
+      "confidence_lower": [
+        -5.220221669153414,
+        -5.494031192962936,
+        -5.7678407167724615
+      ],
+      "confidence_upper": [
+        30.0059359548677,
+        29.732126431058177,
+        29.45831690724865
+      ],
+      "trend": "decreasing",
+      "r_squared": 0.0034009013352876982,
+      "method": "linear_regression"
+    },
+    "trendForecastExponentialSmoothing": {
+      "forecast": [
+        12.5278208,
+        12.5278208,
+        12.5278208
+      ],
+      "trend": "stable",
+      "method": "exponential_smoothing"
+    },
+    "anomalyAlertAdaptive": {
+      "alert_triggered": false,
+      "anomaly_count": 1,
+      "min_anomaly_points": 2,
+      "alert_reasons": [],
+      "anomalies": [
+        {
+          "index": 3,
+          "value": 40,
+          "threshold": 25,
+          "reason": "值 40.0 大于上界 25.00",
+          "timestamp": "2024-01-01T00:15:00Z"
+        }
+      ],
+      "method": "adaptive",
+      "threshold": 3,
+      "alert_on": "both"
+    },
+    "anomalyAlertAdaptiveTriggered": {
+      "alert_triggered": true,
+      "anomaly_count": 1,
+      "min_anomaly_points": 1,
+      "alert_reasons": [
+        "值 40.0 大于上界 25.00"
+      ],
+      "anomalies": [
+        {
+          "index": 3,
+          "value": 40,
+          "threshold": 25,
+          "reason": "值 40.0 大于上界 25.00",
+          "timestamp": "2024-01-01T00:15:00Z"
+        }
+      ],
+      "method": "adaptive",
+      "threshold": 3,
+      "alert_on": "both"
+    },
+    "anomalyAlertPredictionBand": {
+      "alert_triggered": false,
+      "anomaly_count": 0,
+      "min_anomaly_points": 1,
+      "alert_reasons": [],
+      "anomalies": [],
+      "method": "prediction_band",
+      "threshold": 3,
+      "alert_on": "lower"
+    }
+  }
+}
