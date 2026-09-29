@@ -18,7 +18,7 @@
 | 管理采集 Agent、pipeline     | `rizhiyi_ingest`        | `list_agent_groups`、`assign_agent_to_group`、`list_pipelines`、`query_agent_status`                  |
 | 管理监控 / 告警配置（关键字/字段统计/SPL/流式/联合） | `rizhiyi_alert`     | `create_keyword_alert` 等 8 个按类型创建工具、`update_alert`、`preview_alert`、`testrun_alert`、`list_alerts`、`get_alert_category_reference` |
 | 管理类通用 OpenAPI           | `rizhiyi_manage`        | 按 tag 分类的增删改查工具（面较小，上下文友好）                                                                         |
-| 完整 OpenAPI 直通（慎用）       | `openapi_server`        | 直接把 API schema 暴露为工具（接口多，易撑爆上下文）                                                                   |
+| 完整 OpenAPI 直通（已废弃）     | `openapi_server`        | TypeScript 独立 server 已废弃；请使用 Python HTTP 版的 `openapi` 路由                                                               |
 
 > 工具的具体参数以 MCP 客户端里 `tools/list` 返回的自描述为准，在 AI 平台里导入后即可直接查看。
 
@@ -129,14 +129,6 @@ AI 客户端（如 Claude Desktop、Trae、Cursor）直接起子进程调用，�
         "LOGEASE_BASE_URL": "https://your-logease.example.com",
         "LOGEASE_API_KEY": "<USERNAME>:<API_KEY>"
       }
-    },
-    "openapi_server": {
-      "command": "node",
-      "args": ["/your/absolute/path/to/rizhiyi-mcp/ts/dist/openapi_server.js"],
-      "env": {
-        "LOGEASE_BASE_URL": "https://your-logease.example.com",
-        "LOGEASE_API_KEY": "<USERNAME>:<API_KEY>"
-      }
     }
   }
 }
@@ -162,11 +154,10 @@ AI 客户端（如 Claude Desktop、Trae、Cursor）直接起子进程调用，�
 | `rizhiyi_ingest`      | `ingest-server.js`             |
 | `rizhiyi_alert`       | `alert-server.js`              |
 | `rizhiyi_manage`      | `manage-server.js`             |
-| `openapi_server`      | `openapi_server.js`            |
 
 > **要点**
 >
-> - 每个服务器是独立子进程：配几个 server 就拉起几个 `node` 进程。不需要的（例如接口量巨大的 `openapi_server`）整段删除即可。
+> - 每个服务器是独立子进程：配几个 server 就拉起几个 `node` 进程。
 > - stdio 子进程**不读取 `.env`**（工作目录不一定是仓库目录），所以日志易地址和凭据必须写进每个 server 的 `env` 字段。
 > - 完整示例也可从 [`mcp-stdio.json.example`](mcp-stdio.json.example) 复制，替换三处占位符后合并进客户端配置。
 
@@ -223,7 +214,7 @@ npm run start:http   # 等价于 npm run build && node dist/http-server.js
 | `/mcp/{serverName}` | POST   | MCP 请求入口（initialize / tools/list / tools/call 等） |
 | `/mcp/{serverName}` | DELETE | 关闭指定 session                                     |
 
-可用的 `{serverName}`：`log-tools`、`chatspl`、`dashboard`、`manage`、`parserule`、`fieldconfig`、`ingest`、`openapi`、`alert`。
+可用的 `{serverName}`：`log-tools`、`chatspl`、`dashboard`、`manage`、`parserule`、`fieldconfig`、`ingest`、`alert`。
 
 ##### 3. 客户端接入配置
 

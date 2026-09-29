@@ -91,14 +91,6 @@
         "LOGEASE_BASE_URL": "http://<LOGEASE_BASE_URL>",
         "LOGEASE_API_KEY": "<USERNAME>:<API_KEY>"
       }
-    },
-    "openapi_server": {
-      "command": "node",
-      "args": ["/CHANGE/ME/rizhiyi-mcp/ts/dist/openapi_server.js"],
-      "env": {
-        "LOGEASE_BASE_URL": "http://<LOGEASE_BASE_URL>",
-        "LOGEASE_API_KEY": "<USERNAME>:<API_KEY>"
-      }
     }
   }
 }

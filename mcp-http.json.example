@@ -55,13 +55,6 @@
       "headers": {
         "Authorization": "apikey <USERNAME>:<API_KEY>"
       }
-    },
-    "openapi_server": {
-      "type": "http",
-      "url": "http://<MCP_HTTP_HOST>:3000/mcp/openapi",
-      "headers": {
-        "Authorization": "apikey <USERNAME>:<API_KEY>"
-      }
     }
   }
 }

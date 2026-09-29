@@ -62,6 +62,11 @@ export function getOpenapiSpecLoadCount(): number {
   return specLoadCount;
 }
 
+/**
+ * @deprecated The TypeScript OpenAPI bridge is not supported in new deployments.
+ * Use the Python HTTP `openapi` route instead. The third-party converter emits
+ * invalid JSON Schema for part of the bundled spec and fails during registration.
+ */
 export async function createOpenapiServer(context: ServerContext): Promise<McpServer> {
   const httpClientConfig = createHttpClientConfig(context);
   const httpClient = axios.create({
