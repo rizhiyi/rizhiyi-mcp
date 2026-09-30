@@ -73,6 +73,12 @@ class RuntimeConfig(BaseSettings):
     log_tools_result_inline_max_bytes: int = 24 * 1024
     log_tools_result_max_file_bytes: int = 5 * 1024 * 1024
     upstream_timeout_seconds: float = 30.0
+    mcp_query_cache_timechart_ttl_seconds: float = 30.0
+    mcp_query_cache_overview_ttl_seconds: float = 30.0
+    mcp_query_cache_fields_ttl_seconds: float = 60.0
+    mcp_query_cache_field_values_ttl_seconds: float = 30.0
+    mcp_query_cache_sample_rows_ttl_seconds: float = 15.0
+    mcp_query_cache_exact_count_ttl_seconds: float = 15.0
     mcp_guardrails_enabled: bool = False
     mcp_guardrail_enforce_mode: Literal["audit", "enforce"] = "audit"
     mcp_guardrail_deny_commands: list[str] = Field(
@@ -151,6 +157,21 @@ class RuntimeConfig(BaseSettings):
     def validate_timeout(cls, value: float) -> float:
         if value <= 0:
             raise ValueError("超时时间必须大于 0")
+        return value
+
+    @field_validator(
+        "mcp_query_cache_timechart_ttl_seconds",
+        "mcp_query_cache_overview_ttl_seconds",
+        "mcp_query_cache_fields_ttl_seconds",
+        "mcp_query_cache_field_values_ttl_seconds",
+        "mcp_query_cache_sample_rows_ttl_seconds",
+        "mcp_query_cache_exact_count_ttl_seconds",
+        mode="after",
+    )
+    @classmethod
+    def validate_cache_ttl(cls, value: float) -> float:
+        if value <= 0:
+            raise ValueError("查询缓存 TTL 必须大于 0")
         return value
 
     @field_validator(

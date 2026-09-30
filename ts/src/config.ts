@@ -5,6 +5,7 @@ import { AuthContext, buildAuthContextFromEnv } from './auth-context.js';
 import type { FixedWindowRateLimiter } from './rate-limiting.js';
 import type { GuardrailConfig } from './spl-guardrails.js';
 import type { UsageLogConfig, UsageLogger, UsageLogRotateInterval } from './usage-log.js';
+import { QueryCache } from './query-cache.js';
 
 dotenv.config({ path: ['.env.local', '.env'] });
 
@@ -64,6 +65,7 @@ export interface ServerContext {
     requestMeta: RequestMeta;
     rateLimiter?: FixedWindowRateLimiter;
     usageLogger?: UsageLogger;
+    queryCache?: QueryCache;
 }
 
 function parseBooleanEnv(rawValue: string | undefined, defaultValue: boolean): boolean {
@@ -341,7 +343,8 @@ export function createHttpClientConfig(context: ServerContext): HttpClientConfig
         httpsAgent: createHttpsAgent(context.runtimeConfig),
         username: context.authContext.username,
         // 上游请求超时与护栏解耦：无论护栏是否开启都无条件生效，避免请求永久挂起。
-        timeoutMs: context.runtimeConfig.upstreamTimeoutSeconds * 1000
+        timeoutMs: context.runtimeConfig.upstreamTimeoutSeconds * 1000,
+        queryCache: context.queryCache
     };
 }
 
@@ -362,6 +365,7 @@ export function createServerContextForStdio(
         requestMeta: {
             source: 'stdio',
             ...(routeName ? { routeName, serverName: routeName } : {})
-        }
+        },
+        queryCache: new QueryCache()
     };
 }

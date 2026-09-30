@@ -1,0 +1,52 @@
+使用说明：
+
+## 一、先识别用户意图
+
+- 概览、数量、整体情况：优先使用 data_overview。
+- 趋势、上涨/下降、峰值：使用 trend_summary。
+- 时间序列异常点：使用 anomaly_points；优先复用 trend_summary 返回的 resource_uri。
+- 两个窗口对比：使用 period_compare；优先复用已有的时间序列或 resource_uri。
+- 异常原因和字段漂移：使用 root_cause_suggestions。
+- 重复日志模板和模式：使用 log_reduce_pattern，再按需使用 log_reduce_preview。
+- 字段关联、共现或数值相关性：使用 correlation_analysis。
+- 预测未来走势：使用 trend_forecast。
+- 判断是否触发告警：使用 anomaly_alert。
+- query_precheck 只用于 dashboard 查询校验，或用户明确要求检查 SPL。
+
+## 二、默认执行策略
+
+1. 先执行一次低成本的统计或时间序列查询，确认数据量和走势。
+2. 只有发现异常证据、用户明确要求定位，或用户已经给出异常窗口时，才继续执行根因分析。
+3. trend_summary 和 anomaly_points 应复用相同的时间序列结果，优先传 resource_uri。
+4. correlation_analysis、log_reduce_pattern、trend_forecast、anomaly_alert 不作为默认补充步骤，只在用户意图匹配时调用。
+5. 不要为了“完整”调用所有分析工具。
+6. 相互独立的工具调用应并行执行。
+7. 相同 query、time_range、bucket、metric_field 的查询不得重复执行。
+8. 优先使用已有 resource_uri、previous_time_series 和工具返回的共享结果。
+9. 未发现异常证据时停止扩展分析，并明确说明检查范围和结果。
+
+## 三、分析深度
+
+- quick：只做概览、趋势和异常点，适合普通“最近是否异常”问题。
+- standard：在 quick 基础上，对异常窗口做有限采样和有限字段分析，是默认深度。
+- deep：只有用户明确要求深入根因、完整排查或详细字段对比时使用。
+
+除非用户明确要求，不要从 quick 自动升级到 deep。升级前应先根据已有结果确定异常窗口、查询范围和候选字段。
+
+## 四、停止条件
+
+- 根因分析默认最多分析 4～6 个候选字段。
+- 可疑切片优先在样例中筛选，只对排名靠前的 3～5 个候选做精确验证。
+- 未发现异常证据时停止扩展分析，并明确说明检查范围和结果。
+
+## 五、结果交付
+
+- 大结果优先使用 MCP resource，不要把完整日志、完整字段列表或完整时间序列重复放入上下文。
+- 结果中优先保留摘要、异常时间点、Top-N 候选、证据和建议查询。
+- 如果工具返回 resource_uri，后续工具应优先复用；资源不可用时再重新查询。
+
+## 六、其他规则
+
+- 如需减少上下文，请优先传 fields 仅选择关键字段。
+- 若用户已明确要求“最近 N 条日志并做关联/根因分析”，优先一次 log_search_sheet 后直接复用其返回的 resource_uri，不要额外补做趋势或字段探测。
+- 遇到错误时，优先根据 suggestion 字段修正参数后自动重试一次。

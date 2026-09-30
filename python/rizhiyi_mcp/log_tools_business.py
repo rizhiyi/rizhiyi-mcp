@@ -16,6 +16,7 @@ from .analysis_constants import (
     z_value_for_confidence,
 )
 from .types import ApiResponse
+from .concurrency import ANALYSIS_MAX_CONCURRENCY
 
 RequestJson = Callable[..., Awaitable[ApiResponse[dict[str, Any]]]]
 
@@ -74,11 +75,14 @@ class LogToolsBusinessService:
         *,
         sid: str,
         max_retries: int = 10,
-        retry_interval_ms: int = 5000,
+        retry_interval_ms: int = 1000,
+        deadline_ms: int = 30000,
     ) -> ApiResponse[dict[str, Any]]:
         last_response: ApiResponse[dict[str, Any]] | None = None
         retries = max(1, max_retries)
-        wait_seconds = max(0, retry_interval_ms) / 1000
+        deadline_seconds = max(1000, deadline_ms) / 1000
+        started_at = asyncio.get_running_loop().time()
+        initial_delay = max(500, retry_interval_ms) / 1000
 
         for attempt in range(retries):
             response = await self._request_json(
@@ -109,8 +113,11 @@ class LogToolsBusinessService:
                     message="日志聚类结果获取成功" if job_status != "FAILED" else "日志聚类任务失败",
                 )
 
-            if attempt < retries - 1 and wait_seconds > 0:
-                await asyncio.sleep(wait_seconds)
+            elapsed = asyncio.get_running_loop().time() - started_at
+            if attempt < retries - 1 and elapsed < deadline_seconds:
+                delay = min(initial_delay * (2**attempt), 8.0, deadline_seconds - elapsed)
+                if delay > 0:
+                    await asyncio.sleep(delay)
 
         if last_response is not None and last_response.data is not None:
             data = last_response.data
@@ -118,16 +125,16 @@ class LogToolsBusinessService:
                 status=last_response.status,
                 error="聚类任务未完成",
                 error_code="LOG_REDUCE_TIMEOUT",
-                suggestion="请增大 max_retries 或 retry_interval 后重试。",
+                suggestion=f"任务仍在处理中，请稍后使用 sid={sid} 再次调用 log_reduce_preview。",
                 retryable=True,
-                details={"sid": sid, "job_status": data.get("job_status")},
-                message="在指定重试次数内未拿到聚类完成结果",
+                details={"sid": sid, "job_status": data.get("job_status"), "deadline_ms": max(1000, deadline_ms), "max_retries": retries},
+                message="达到日志聚类轮询 deadline，已返回可继续查询的任务信息",
             )
 
         return ApiResponse(
             error="聚类任务未完成",
             error_code="LOG_REDUCE_TIMEOUT",
-            suggestion="请增大 max_retries 或 retry_interval 后重试。",
+            suggestion=f"任务仍在处理中，请稍后使用 sid={sid} 再次调用 log_reduce_preview。",
             retryable=True,
             message="在指定重试次数内未拿到聚类完成结果",
         )
@@ -507,6 +514,7 @@ class LogToolsBusinessService:
         slice_max_depth: int = 2,
         min_slice_support: float = 0.05,
         min_slice_lift: float = 2,
+        max_candidates: int = 6,
         input_rows: list[dict[str, Any]] | None = None,
     ) -> ApiResponse[dict[str, Any]]:
         anomaly_rows = [row for row in (input_rows or []) if isinstance(row, dict)]
@@ -531,16 +539,17 @@ class LogToolsBusinessService:
 
         available_anomaly_fields = self._extract_row_fields(anomaly_rows)
         available_baseline_fields = self._extract_row_fields(baseline_rows)
-        fields_to_analyze = [field for field in (candidate_fields or []) if field]
+        fields_to_analyze = [field for field in (candidate_fields or []) if field and self._is_root_cause_field_eligible(field)]
         if not fields_to_analyze:
             fields_to_analyze = self._select_root_cause_fields(
                 baseline_fields=available_baseline_fields,
                 anomaly_fields=available_anomaly_fields,
-                limit=max(topk * 2, 6),
+                limit=min(max(1, max_candidates), max(4, topk)),
             )
+        # 深度分析最多检查 6 个字段；用户显式传入的候选字段也受同一上限约束。
+        fields_to_analyze = list(dict.fromkeys(fields_to_analyze))[: min(6, max(1, max_candidates))]
 
-        distribution_drift: list[dict[str, Any]] = []
-        for field in fields_to_analyze:
+        async def analyze_field(field: str) -> dict[str, Any] | None:
             baseline_counts, anomaly_counts = await asyncio.gather(
                 self._get_field_distribution(
                     query=query,
@@ -561,10 +570,20 @@ class LogToolsBusinessService:
                 topk=max(1, min(field_value_limit, 10)),
             )
             if drift is None or drift["drift_score"] < significance_threshold:
-                continue
+                return None
             drift["field"] = field
             drift["hypothesis"] = self._generate_distribution_hypothesis(field, drift["changed_values"])
-            distribution_drift.append(drift)
+            return drift
+
+        distribution_results: list[dict[str, Any] | None] = [None] * len(fields_to_analyze)
+        semaphore = asyncio.Semaphore(ANALYSIS_MAX_CONCURRENCY)
+
+        async def run_field(index: int, field: str) -> None:
+            async with semaphore:
+                distribution_results[index] = await analyze_field(field)
+
+        await asyncio.gather(*(run_field(index, field) for index, field in enumerate(fields_to_analyze)))
+        distribution_drift = [item for item in distribution_results if item is not None]
         distribution_drift.sort(key=lambda item: item["drift_score"], reverse=True)
 
         suspicious_slices = await self._mine_suspicious_slices(
@@ -589,6 +608,11 @@ class LogToolsBusinessService:
             status=200,
             data={
                 "analyzed_fields": fields_to_analyze,
+                "sample_based": True,
+                "query_budget": {
+                    "candidate_fields": len(fields_to_analyze),
+                    "max_exact_slices": min(5, max(3, topk)),
+                },
                 "distribution_drift": distribution_drift[: max(1, topk)],
                 "suspicious_slices": suspicious_slices[: max(1, topk)],
                 "suggested_queries": self._generate_root_cause_queries(
@@ -890,6 +914,19 @@ class LogToolsBusinessService:
             message="日志搜索成功",
         )
 
+    async def execute_data_overview(
+        self, *, query: str, time_range: str, metric_field: str | None = None
+    ) -> ApiResponse[dict[str, Any]]:
+        response = await self._search_rows(query=query, time_range=time_range, size=1)
+        if response.error or response.data is None:
+            return response
+        total = self._coerce_int(response.data.get("total"), default=0, minimum=0)
+        return ApiResponse(
+            status=response.status,
+            data={"total": total, "count": total, "query": query, "time_range": time_range, "metric_field": metric_field},
+            message="数据概览获取成功",
+        )
+
     async def _list_fields(
         self,
         *,
@@ -966,34 +1003,32 @@ class LogToolsBusinessService:
         fields: list[str],
         topk: int,
     ) -> list[dict[str, Any]]:
-        differences: list[dict[str, Any]] = []
-        for field in fields:
-            counts_a, counts_b = await asyncio.gather(
-                self._get_field_distribution(
-                    query=query,
-                    time_range=time_range_a,
-                    field=field,
-                    limit=max(20, topk),
-                ),
-                self._get_field_distribution(
-                    query=query,
-                    time_range=time_range_b,
-                    field=field,
-                    limit=max(20, topk),
-                ),
-            )
-            for item in self._calculate_distribution_differences(counts_a, counts_b, topk):
-                differences.append(
-                    {
-                        "field": field,
-                        "value": item["value"],
-                        "count_a": item["baseline_count"],
-                        "count_b": item["anomaly_count"],
-                        "change": item["change_ratio"],
-                        "jsd": item["jsd"],
-                    }
-                )
+        semaphore = asyncio.Semaphore(ANALYSIS_MAX_CONCURRENCY)
 
+        async def compare_field(field: str) -> list[dict[str, Any]]:
+            async with semaphore:
+                counts_a, counts_b = await asyncio.gather(
+                    self._get_field_distribution(
+                        query=query, time_range=time_range_a, field=field, limit=max(20, topk)
+                    ),
+                    self._get_field_distribution(
+                        query=query, time_range=time_range_b, field=field, limit=max(20, topk)
+                    ),
+                )
+            return [
+                {
+                    "field": field,
+                    "value": item["value"],
+                    "count_a": item["baseline_count"],
+                    "count_b": item["anomaly_count"],
+                    "change": item["change_ratio"],
+                    "jsd": item["jsd"],
+                }
+                for item in self._calculate_distribution_differences(counts_a, counts_b, topk)
+            ]
+
+        field_results = await asyncio.gather(*(compare_field(field) for field in fields))
+        differences = [item for result in field_results for item in result]
         differences.sort(key=lambda item: item["jsd"], reverse=True)
         return differences[: max(1, topk)]
 
@@ -1211,9 +1246,11 @@ class LogToolsBusinessService:
                 )
 
         exact_slices: list[dict[str, Any]] = []
-        for candidate in sorted(approximate_candidates, key=lambda item: item["score"], reverse=True)[
-            : max(10, topk * 3)
-        ]:
+        exact_candidates = sorted(approximate_candidates, key=lambda item: item["score"], reverse=True)[
+            : min(5, max(3, topk))
+        ]
+
+        async def verify_candidate(candidate: dict[str, Any]) -> dict[str, Any] | None:
             terms = candidate["terms"]
             slice_query = self._build_slice_query(query, terms)
             exact_anomaly, exact_baseline = await asyncio.gather(
@@ -1224,9 +1261,8 @@ class LogToolsBusinessService:
             baseline_support = exact_baseline / baseline_total
             lift = self._calculate_lift(anomaly_support, baseline_support, baseline_total)
             if anomaly_support < min_slice_support or lift < min_slice_lift:
-                continue
-            exact_slices.append(
-                {
+                return None
+            return {
                     "slice": {term["field"]: term["value"] for term in terms},
                     "slice_terms": [f'{term["field"]}={term["value"]}' for term in terms],
                     "depth": len(terms),
@@ -1238,7 +1274,16 @@ class LogToolsBusinessService:
                     "score": self._calculate_slice_score(anomaly_support, lift, len(terms)),
                     "query": slice_query,
                 }
-            )
+
+        exact_results: list[dict[str, Any] | None] = [None] * len(exact_candidates)
+        semaphore = asyncio.Semaphore(ANALYSIS_MAX_CONCURRENCY)
+
+        async def run_candidate(index: int, candidate: dict[str, Any]) -> None:
+            async with semaphore:
+                exact_results[index] = await verify_candidate(candidate)
+
+        await asyncio.gather(*(run_candidate(index, candidate) for index, candidate in enumerate(exact_candidates)))
+        exact_slices = [item for item in exact_results if item is not None]
 
         unique: dict[str, dict[str, Any]] = {}
         for item in exact_slices:
@@ -1653,10 +1698,18 @@ class LogToolsBusinessService:
         ranked = [
             item
             for item in baseline_fields
-            if item["name"] in anomaly_names and not item["name"].startswith("_")
+            if item["name"] in anomaly_names and self._is_root_cause_field_eligible(item["name"])
         ]
         ranked.sort(key=lambda item: item.get("sample_count", 0), reverse=True)
         return [item["name"] for item in ranked[: max(1, limit)]]
+
+    @staticmethod
+    def _is_root_cause_field_eligible(name: str) -> bool:
+        normalized = str(name or "").strip().lower()
+        if not normalized or normalized.startswith("_"):
+            return False
+        blocked = ("trace", "span", "session", "request", "correlation", "url", "uri", "raw", "message", "body", "payload", "stack")
+        return not any(token in normalized for token in blocked)
 
     def _analyze_field_distribution_drift(
         self,

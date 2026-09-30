@@ -2,6 +2,7 @@ import { LogEaseClient } from '../client.js';
 import { ApiResponse, PeriodComparisonResult, CorrelationResult, RootCauseAnalysisResult, TimeSeriesPoint } from '../types.js';
 import { analyzeTimeline, detectStatisticalAnomalies } from './series-analysis.js';
 import { StatisticsModule } from './statistics.js';
+import { ANALYSIS_MAX_CONCURRENCY } from '../concurrency.js';
 
 type DistributionValueChange = RootCauseAnalysisResult['distribution_drift'][number]['changed_values'][number];
 type DistributionDriftItem = RootCauseAnalysisResult['distribution_drift'][number];
@@ -839,28 +840,21 @@ export class AnomalyDetectionModule {
         fields: string[],
         topk: number
     ): Promise<any[]> {
-        const fieldDifferences: any[] = [];
-
-        for (const field of fields) {
-            // 获取两个时间段的字段值分布
+        const fieldResults = await this.mapWithConcurrency(fields, ANALYSIS_MAX_CONCURRENCY, async (field) => {
             const [distA, distB] = await Promise.all([
                 this.getFieldDistribution(query, timeRangeA, field),
                 this.getFieldDistribution(query, timeRangeB, field)
             ]);
-
-            const differences = this.calculateDistributionDifferences(distA, distB, topk);
-            
-            differences.forEach(diff => {
-                fieldDifferences.push({
+            return this.calculateDistributionDifferences(distA, distB, topk).map(diff => ({
                     field,
                     value: diff.value,
                     count_a: diff.baseline_count,
                     count_b: diff.anomaly_count,
                     change: diff.change_ratio,
                     jsd: diff.jsd
-                });
-            });
-        }
+            }));
+        });
+        const fieldDifferences = fieldResults.flat();
 
         return fieldDifferences
             .sort((a, b) => b.jsd - a.jsd)
@@ -1744,6 +1738,7 @@ export class AnomalyDetectionModule {
         slice_max_depth?: number;
         min_slice_support?: number;
         min_slice_lift?: number;
+        max_candidates?: number;
         input_rows?: Array<Record<string, any>>;
     }): Promise<ApiResponse<RootCauseAnalysisResult>> {
         try {
@@ -1759,20 +1754,22 @@ export class AnomalyDetectionModule {
                 slice_max_depth = 2,
                 min_slice_support = 0.05,
                 min_slice_lift = 2,
+                max_candidates = 6,
                 input_rows = []
             } = params;
 
             const anomalyInputRows = Array.isArray(input_rows) ? input_rows : [];
+            // 优先获取样例行并从样例推断字段，避免在根因分析开始时额外调用 list_fields。
             const [anomalyFields, baselineFields, anomalyOverview, baselineOverview] = await Promise.all([
                 anomalyInputRows.length > 0
-                    ? Promise.resolve<ApiResponse<{ fields: Array<{ name: string; type: string }> }>>({
+                    ? Promise.resolve<ApiResponse<{ hits: Array<Record<string, any>> }>>({
                         status: 200,
                         data: {
-                            fields: this.inferFieldsFromHits(anomalyInputRows)
+                            hits: anomalyInputRows
                         }
                     })
-                    : this.logSearch.executeListFields(query, anomaly_window),
-                this.logSearch.executeListFields(query, baseline_window),
+                    : this.logSearch.executeLogSearchSheet(query, anomaly_window, { page: 0, size: sample_size }),
+                this.logSearch.executeLogSearchSheet(query, baseline_window, { page: 0, size: sample_size }),
                 anomalyInputRows.length > 0
                     ? Promise.resolve<ApiResponse<{ total: number }>>({
                         status: 200,
@@ -1791,16 +1788,19 @@ export class AnomalyDetectionModule {
                 };
             }
 
+            const inferredAnomalyFields = this.inferFieldsFromHits(anomalyFields.data?.hits || []);
+            const inferredBaselineFields = this.inferFieldsFromHits(baselineFields.data?.hits || []);
+            const maxCandidates = Math.min(6, Math.max(1, Number(max_candidates)));
             const fieldsToAnalyze = candidate_fields.length > 0
-                ? Array.from(new Set(candidate_fields.filter(Boolean)))
+                ? Array.from(new Set(candidate_fields.filter(Boolean))).filter((field) => this.isRootCauseFieldEligible(field)).slice(0, maxCandidates)
                 : this.selectRootCauseFields(
-                    baselineFields.data?.fields || [],
-                    anomalyFields.data?.fields || [],
-                    Math.max(topk * 2, 6)
+                    inferredBaselineFields,
+                    inferredAnomalyFields,
+                    Math.min(maxCandidates, Math.max(4, topk))
                 );
 
             const distributionDrift: DistributionDriftItem[] = [];
-            for (const field of fieldsToAnalyze) {
+            const distributionResults = await this.mapWithConcurrency(fieldsToAnalyze, ANALYSIS_MAX_CONCURRENCY, async (field) => {
                 const [baselineCounts, anomalyCounts] = await Promise.all([
                     this.getFieldDistribution(query, baseline_window, field, field_value_limit),
                     this.getFieldDistribution(query, anomaly_window, field, field_value_limit)
@@ -1811,16 +1811,14 @@ export class AnomalyDetectionModule {
                     anomalyCounts,
                     Math.max(topk, Math.min(field_value_limit, 10))
                 );
-                if (!drift || drift.drift_score < significance_threshold) {
-                    continue;
-                }
-
-                distributionDrift.push({
+                if (!drift || drift.drift_score < significance_threshold) return null;
+                return {
                     field,
                     ...drift,
                     hypothesis: this.generateDistributionHypothesis(field, drift.changed_values)
-                });
-            }
+                } as DistributionDriftItem;
+            });
+            distributionDrift.push(...distributionResults.filter((item): item is DistributionDriftItem => Boolean(item)));
 
             distributionDrift.sort((a, b) => b.drift_score - a.drift_score);
 
@@ -1829,7 +1827,8 @@ export class AnomalyDetectionModule {
                 anomaly_window,
                 baseline_window,
                 fields: fieldsToAnalyze,
-                anomaly_hits: anomalyInputRows.length > 0 ? anomalyInputRows : undefined,
+                anomaly_hits: (anomalyInputRows.length > 0 ? anomalyInputRows : (anomalyFields.data?.hits || [])),
+                baseline_hits: baselineFields.data?.hits || [],
                 sample_size,
                 slice_max_depth,
                 min_slice_support,
@@ -1859,6 +1858,8 @@ export class AnomalyDetectionModule {
                 ),
                 data: {
                     analyzed_fields: fieldsToAnalyze,
+                    sample_based: true,
+                    query_budget: { candidate_fields: fieldsToAnalyze.length, max_exact_slices: Math.min(5, Math.max(3, topk)) },
                     distribution_drift: distributionDrift.slice(0, topk),
                     suspicious_slices: suspiciousSlices.slice(0, topk),
                     suggested_queries: suggestedQueries,
@@ -1875,17 +1876,22 @@ export class AnomalyDetectionModule {
     }
 
     private inferFieldsFromHits(hits: Array<Record<string, any>>): Array<{ name: string; type: string }> {
-        const fields = new Map<string, string>();
+        const fields = new Map<string, { type: string; values: Set<string> }>();
 
         hits.forEach((hit) => {
             Object.entries(hit || {}).forEach(([key, value]) => {
-                if (!fields.has(key)) {
-                    fields.set(key, this.detectFieldTypeFromValue(value));
-                }
+                const current = fields.get(key) || { type: this.detectFieldTypeFromValue(value), values: new Set<string>() };
+                if (value !== null && value !== undefined && typeof value !== 'object') current.values.add(String(value));
+                fields.set(key, current);
             });
         });
 
-        return Array.from(fields.entries()).map(([name, type]) => ({ name, type }));
+        return Array.from(fields.entries()).map(([name, item]) => ({
+            name,
+            type: item.type,
+            distinct_count: item.values.size,
+            total: hits.length
+        } as any));
     }
 
     private detectFieldTypeFromValue(value: any): string {
@@ -1924,6 +1930,7 @@ export class AnomalyDetectionModule {
                 const fieldName = String(field?.name || '');
                 return fieldName.length > 0 &&
                     !fieldName.startsWith('_') &&
+                    this.isRootCauseFieldEligible(fieldName) &&
                     distinctCount > 1 &&
                     distinctCount <= 200;
             })
@@ -1936,6 +1943,13 @@ export class AnomalyDetectionModule {
             })
             .map((field) => field.name)
             .slice(0, limit);
+    }
+
+    private isRootCauseFieldEligible(fieldName: string): boolean {
+        const normalized = String(fieldName || '').trim().toLowerCase();
+        if (!normalized || normalized.startsWith('_')) return false;
+        return !/(^|[_\.\-])(trace|span|session|request|correlation|url|uri|raw|message|body|payload|id)$/.test(normalized)
+            && !/(trace|session|request[_-]?id|url|uri|raw[_-]?message|stack|payload|body)/.test(normalized);
     }
 
     /**
@@ -2015,6 +2029,7 @@ export class AnomalyDetectionModule {
         baseline_window: string;
         fields: string[];
         anomaly_hits?: Array<Record<string, any>>;
+        baseline_hits?: Array<Record<string, any>>;
         sample_size: number;
         slice_max_depth: number;
         min_slice_support: number;
@@ -2027,6 +2042,7 @@ export class AnomalyDetectionModule {
             baseline_window,
             fields,
             anomaly_hits,
+            baseline_hits,
             sample_size,
             slice_max_depth,
             min_slice_support,
@@ -2047,9 +2063,12 @@ export class AnomalyDetectionModule {
                 }
             })
             : this.logSearch.executeLogSearchSheet(query, anomaly_window, { page: 0, size: sample_size }, sampledFields);
+        const baselineSamplePromise = Array.isArray(baseline_hits) && baseline_hits.length > 0
+            ? Promise.resolve<ApiResponse<{ hits: Array<Record<string, any>> }>>({ status: 200, data: { hits: baseline_hits } })
+            : this.logSearch.executeLogSearchSheet(query, baseline_window, { page: 0, size: sample_size }, sampledFields);
         const [anomalySample, baselineSample, anomalyTotal, baselineTotal] = await Promise.all([
             anomalySamplePromise,
-            this.logSearch.executeLogSearchSheet(query, baseline_window, { page: 0, size: sample_size }, sampledFields),
+            baselineSamplePromise,
             this.getExactQueryCount(query, anomaly_window),
             this.getExactQueryCount(query, baseline_window)
         ]);
@@ -2107,10 +2126,10 @@ export class AnomalyDetectionModule {
             })
             .filter((item) => item.anomalySupport >= min_slice_support && item.lift >= min_slice_lift)
             .sort((a, b) => b.score - a.score)
-            .slice(0, Math.max(topk * 3, 10));
+            // 精确验证只保留排名靠前的 3～5 个候选，避免候选组合导致查询爆炸。
+            .slice(0, Math.min(5, Math.max(3, topk)));
 
-        const exactSlices: SuspiciousSliceItem[] = [];
-        for (const candidate of preliminarySlices) {
+        const exactResults = await this.mapWithConcurrency(preliminarySlices, ANALYSIS_MAX_CONCURRENCY, async (candidate) => {
             const sliceQuery = this.buildSliceQuery(query, candidate.terms);
             const [anomalyCount, baselineCount] = await Promise.all([
                 this.getExactQueryCount(sliceQuery, anomaly_window),
@@ -2123,10 +2142,10 @@ export class AnomalyDetectionModule {
             const score = this.calculateSliceScore(anomalySupport, lift, candidate.terms.length);
 
             if (anomalySupport < min_slice_support || lift < min_slice_lift) {
-                continue;
+                return null;
             }
 
-            exactSlices.push({
+            return {
                 slice: Object.fromEntries(candidate.terms.map((term) => [term.field, term.value])),
                 slice_terms: candidate.terms.map((term) => `${term.field}=${term.value}`),
                 depth: candidate.terms.length,
@@ -2137,13 +2156,31 @@ export class AnomalyDetectionModule {
                 lift,
                 score,
                 query: sliceQuery
-            });
-        }
+            } as SuspiciousSliceItem;
+        });
 
-        return exactSlices
+        return exactResults.filter((item): item is SuspiciousSliceItem => Boolean(item))
             .sort((a, b) => b.score - a.score)
             .filter((item, index, array) => array.findIndex((candidate) => candidate.query === item.query) === index)
             .slice(0, topk);
+    }
+
+    private async mapWithConcurrency<T, R>(
+        items: T[],
+        concurrency: number,
+        worker: (item: T, index: number) => Promise<R>
+    ): Promise<R[]> {
+        const results = new Array<R>(items.length);
+        let next = 0;
+        const run = async () => {
+            while (true) {
+                const index = next++;
+                if (index >= items.length) return;
+                results[index] = await worker(items[index], index);
+            }
+        };
+        await Promise.all(Array.from({ length: Math.min(Math.max(1, concurrency), items.length) }, run));
+        return results;
     }
 
     private generateSliceCandidates(termsByField: Map<string, SliceTerm[]>, maxDepth: number): SliceTerm[][] {
@@ -2324,25 +2361,6 @@ export class AnomalyDetectionModule {
             params.bucket,
             params.metric_field,
             params.limit_peaks || 3
-        );
-    }
-
-    /**
-     * 数据概览
-     */
-    async executeDataOverview(params: {
-        query?: string;
-        time_range: string;
-        metric_field?: string;
-        percentiles?: number[];
-    }): Promise<ApiResponse<any>> {
-        // 使用统计模块的数据概览功能
-        const statistics = new StatisticsModule(this.client);
-        return statistics.executeDataOverview(
-            params.query || '*',
-            params.time_range,
-            params.metric_field,
-            params.percentiles || [50, 90, 99]
         );
     }
 

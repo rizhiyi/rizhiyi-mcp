@@ -158,6 +158,7 @@ export interface SharedResultEnvelope<TPayload = unknown> {
     created_at: string;
     expires_at: string;
     tool_name: string;
+    route_name?: string;
     result_kind: SharedResultKind;
     source_query?: string;
     time_range?: string;
@@ -283,6 +284,11 @@ export interface PeriodComparisonResult {
 // 根因分析接口
 export interface RootCauseAnalysisResult {
     analyzed_fields: string[];
+    sample_based?: boolean;
+    query_budget?: {
+        candidate_fields: number;
+        max_exact_slices: number;
+    };
     distribution_drift: Array<{
         field: string;
         drift_score: number;
@@ -335,6 +341,7 @@ export interface HttpClientConfig {
     httpsAgent?: any;
     username?: string;
     timeoutMs?: number;
+    queryCache?: import('./query-cache.js').QueryCache;
 }
 
 // 通用查询参数

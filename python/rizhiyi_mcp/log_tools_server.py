@@ -8,36 +8,18 @@ from .log_tools_business import LogToolsBusinessService
 from .log_tools_definitions import SEARCH_TOOLS
 from .config import RuntimeConfig
 from .http_client import LogEaseHttpClient
+from .query_cache import QueryCache
 from .shared_result_store import SharedResultStoreError, read_shared_result, save_shared_result
 from .servers import McpServerError, RizhiyiFastMCPServer, ServiceRuntimeState, get_current_server_context
 from .types import ApiResponse, SharedResultSummary, ToolCallResult
+from .instructions import load_log_tools_instructions
 
-SERVER_LEVEL_INSTRUCTIONS = """使用说明:
-## 核心原则：先统计，后采样
-1. 数量：时间窗口内有多少日志？
-2. 分布：涉及哪些服务/级别/错误类型？
-3. 趋势：数量在增加、稳定还是减少？
-4. 再采样：先摸清全局，再获取具体条目
-5. 若后续要创建或更新 dashboard 图表，请先调用 query_precheck，确认 query 语法、数据和字段映射都没问题。
+SERVER_LEVEL_INSTRUCTIONS = load_log_tools_instructions()
 
-## 分析框架
-### 第一步：俯瞰全局
-- 日志总量
-- 错误率及其分布
-- 受影响最大的服务
 
-### 第二步：识别模式
-- 错误聚集（短时间内大量错误）
-- 时间规律（从 X 时间点开始）
-- 服务关联（服务 A 报错 -> 服务 B 报错）
+class ResourceKindMismatch(Exception):
+    """resource_uri 的 result_kind 与消费方期望不匹配，需要模型可自我修正的错误。"""
 
-### 第三步：精准采样
-- 在错误高峰处采样
-- 获取每种不同错误类型的示例
-- 与基线时段对比
-## 如需减少上下文，请优先传 fields 仅选择关键字段。
-## 若用户已明确要求“最近 N 条日志并做关联/根因分析”，优先一次 log_search_sheet 后直接复用其返回的 resource_uri，不要额外补做趋势/字段探测。
-## 遇到错误时，优先根据 suggestion 字段修正参数后自动重试一次。"""
 
 class LogToolsServer(RizhiyiFastMCPServer):
     def __init__(self, runtime_config: RuntimeConfig, service_state: ServiceRuntimeState) -> None:
@@ -53,11 +35,30 @@ class LogToolsServer(RizhiyiFastMCPServer):
         base_url = runtime_config.logease_base_url.rstrip("/")
         self._web_base_url = base_url if base_url else ""
         self._business_service = LogToolsBusinessService(self._request_json)
+        self._query_cache = QueryCache({
+            "timechart": runtime_config.mcp_query_cache_timechart_ttl_seconds,
+            "overview": runtime_config.mcp_query_cache_overview_ttl_seconds,
+            "fields": runtime_config.mcp_query_cache_fields_ttl_seconds,
+            "field_values": runtime_config.mcp_query_cache_field_values_ttl_seconds,
+            "sample_rows": runtime_config.mcp_query_cache_sample_rows_ttl_seconds,
+            "exact_count": runtime_config.mcp_query_cache_exact_count_ttl_seconds,
+        })
 
     def _custom_tool_definitions(self) -> list[Any]:
         return SEARCH_TOOLS
 
     async def call_tool(self, name: str, arguments: dict | None) -> ToolCallResult:
+        try:
+            return await self._dispatch_tool(name, arguments)
+        except ResourceKindMismatch as exc:
+            return self._build_tool_error(
+                "RESOURCE_KIND_MISMATCH",
+                str(exc),
+                "请改用对应分析工具产出的 resource_uri；例如时间序列请用 trend_summary，"
+                "日志样例请用 log_search_sheet。",
+            )
+
+    async def _dispatch_tool(self, name: str, arguments: dict | None) -> ToolCallResult:
         safe_arguments = arguments or {}
 
         if name == "log_search_sheet":
@@ -68,6 +69,18 @@ class LogToolsServer(RizhiyiFastMCPServer):
                     "请传入 time_range，例如 now-15m,now。",
                 )
             result = await self._execute_log_search_sheet(safe_arguments)
+            return self._format_result(name, result, safe_arguments)
+
+        if name == "data_overview":
+            if not self._require_non_empty_str(safe_arguments, "time_range"):
+                return self._build_tool_error(
+                    "MISSING_REQUIRED_PARAM", "缺少必填参数 time_range。", "请传入 time_range，例如 now-15m,now。"
+                )
+            result = await self._business_service.execute_data_overview(
+                query=self._coerce_str(safe_arguments.get("query"), default="*"),
+                time_range=self._coerce_str(safe_arguments.get("time_range"), default="now-15m,now"),
+                metric_field=self._optional_str(safe_arguments.get("metric_field")),
+            )
             return self._format_result(name, result, safe_arguments)
 
         if name == "list_fields":
@@ -132,8 +145,9 @@ class LogToolsServer(RizhiyiFastMCPServer):
                 sid=sid,
                 max_retries=self._coerce_int(safe_arguments.get("max_retries"), default=10, minimum=1),
                 retry_interval_ms=self._coerce_int(
-                    safe_arguments.get("retry_interval"), default=5000, minimum=0
+                    safe_arguments.get("retry_interval"), default=1000, minimum=0
                 ),
+                deadline_ms=self._coerce_int(safe_arguments.get("deadline_ms"), default=30000, minimum=1000),
             )
             if (
                 not result.error
@@ -156,7 +170,7 @@ class LogToolsServer(RizhiyiFastMCPServer):
             return self._format_result(name, result, safe_arguments)
 
         if name == "trend_summary":
-            reused_series = self._resolve_reused_time_series(safe_arguments, key="resource_uri")
+            reused_series = self._resolve_reused_time_series(safe_arguments, key="resource_uri", consumer="trend_summary")
             if reused_series is not None:
                 result = self._business_service.execute_trend_summary_with_data(
                     reused_series,
@@ -179,7 +193,7 @@ class LogToolsServer(RizhiyiFastMCPServer):
             return self._format_result(name, result, safe_arguments)
 
         if name == "anomaly_points":
-            reused_series = self._resolve_reused_time_series(safe_arguments, key="resource_uri")
+            reused_series = self._resolve_reused_time_series(safe_arguments, key="resource_uri", consumer="anomaly_points")
             if reused_series is not None:
                 result = self._business_service.execute_anomaly_points_with_data(
                     reused_series,
@@ -270,7 +284,7 @@ class LogToolsServer(RizhiyiFastMCPServer):
                 min_confidence=self._coerce_float(safe_arguments.get("min_confidence"), default=0.6),
                 sample_size=self._coerce_int(safe_arguments.get("sample_size"), default=500, minimum=1),
                 limit=self._coerce_int(safe_arguments.get("limit"), default=20, minimum=1),
-                input_rows=self._resolve_reused_rows(safe_arguments, key="resource_uri"),
+                input_rows=self._resolve_reused_rows(safe_arguments, key="resource_uri", consumer="correlation_analysis"),
             )
             return self._format_result(name, result, safe_arguments)
 
@@ -301,12 +315,13 @@ class LogToolsServer(RizhiyiFastMCPServer):
                     safe_arguments.get("min_slice_support"), default=0.05
                 ),
                 min_slice_lift=self._coerce_float(safe_arguments.get("min_slice_lift"), default=2.0),
-                input_rows=self._resolve_reused_rows(safe_arguments, key="resource_uri"),
+                max_candidates=self._coerce_int(safe_arguments.get("max_candidates"), default=6, minimum=1),
+                input_rows=self._resolve_reused_rows(safe_arguments, key="resource_uri", consumer="root_cause_suggestions"),
             )
             return self._format_result(name, result, safe_arguments)
 
         if name == "trend_forecast":
-            reused_series = self._resolve_reused_time_series(safe_arguments, key="resource_uri")
+            reused_series = self._resolve_reused_time_series(safe_arguments, key="resource_uri", consumer="trend_forecast")
             if reused_series is not None:
                 result = self._business_service.execute_trend_forecast_with_data(
                     reused_series,
@@ -337,7 +352,7 @@ class LogToolsServer(RizhiyiFastMCPServer):
             return self._format_result(name, result, safe_arguments)
 
         if name == "anomaly_alert":
-            reused_series = self._resolve_reused_time_series(safe_arguments, key="resource_uri")
+            reused_series = self._resolve_reused_time_series(safe_arguments, key="resource_uri", consumer="anomaly_alert")
             if reused_series is not None:
                 result = self._business_service.execute_anomaly_alert_with_data(
                     reused_series,
@@ -387,11 +402,17 @@ class LogToolsServer(RizhiyiFastMCPServer):
         params: dict[str, Any] | None = None,
     ) -> ApiResponse[dict[str, Any]]:
         context = get_current_server_context()
-        client = LogEaseHttpClient(context.runtime_config.create_http_client_config(context.auth_context))
-        try:
-            return await client.get(path, params=params)
-        finally:
-            await client.close()
+        safe_params = dict(params or {})
+        identity = f"{context.auth_context.username or ''}|{context.auth_context.headers.get('Authorization', '')}"
+        async def fetch() -> ApiResponse[dict[str, Any]]:
+            client = LogEaseHttpClient(context.runtime_config.create_http_client_config(context.auth_context))
+            try:
+                return await client.get(path, params=safe_params)
+            finally:
+                await client.close()
+        return await self._query_cache.get_or_fetch(
+            path=path, params=safe_params, identity=identity, fetch=fetch
+        )
 
     async def _execute_log_search_sheet(self, arguments: dict[str, Any]) -> ApiResponse[dict[str, Any]]:
         page = self._coerce_int(arguments.get("page"), default=0, minimum=0)
@@ -740,6 +761,8 @@ class LogToolsServer(RizhiyiFastMCPServer):
                     "resource_mime_type": envelope.resource_mime_type,
                     "tool_name": envelope.tool_name,
                     "result_kind": envelope.result_kind,
+                    "source_query": envelope.source_query,
+                    "time_range": envelope.time_range,
                     "created_at": envelope.created_at,
                     "expires_at": envelope.expires_at,
                     "payload_bytes": envelope.payload_bytes,
@@ -896,19 +919,41 @@ class LogToolsServer(RizhiyiFastMCPServer):
         if not resource_uri:
             return ""
         try:
-            envelope = read_shared_result(self.runtime_config, resource_uri)
+            envelope = read_shared_result(self.runtime_config, resource_uri, route_name=self.route_name)
         except SharedResultStoreError:
             return ""
         return self._extract_sid_from_payload(envelope.payload) or self._optional_str(envelope.upstream_sid) or ""
 
-    def _resolve_reused_rows(self, arguments: dict[str, Any], *, key: str) -> list[dict[str, Any]]:
-        payload = self._read_resource_payload(arguments.get(key))
+    def _assert_resource_kind(self, envelope: Any, expected: tuple[str, ...], consumer: str) -> None:
+        kind = getattr(envelope, "result_kind", None)
+        if kind in expected:
+            return
+        tool_name = getattr(envelope, "tool_name", "unknown")
+        raise ResourceKindMismatch(
+            f"resource_uri 的类型是 {kind}（{tool_name}），"
+            f"{consumer} 需要 {' / '.join(expected)}。建议：改用对应分析工具产出的 resource_uri。"
+        )
+
+    def _resolve_reused_rows(
+        self,
+        arguments: dict[str, Any],
+        *,
+        key: str,
+        consumer: str,
+    ) -> list[dict[str, Any]]:
+        payload = self._read_resource_payload(arguments.get(key), expected=("rows",), consumer=consumer)
         if payload is None:
             return []
         return self._extract_rows_from_payload(payload)
 
-    def _resolve_reused_time_series(self, arguments: dict[str, Any], *, key: str) -> list[dict[str, Any]] | None:
-        payload = self._read_resource_payload(arguments.get(key))
+    def _resolve_reused_time_series(
+        self,
+        arguments: dict[str, Any],
+        *,
+        key: str,
+        consumer: str,
+    ) -> list[dict[str, Any]] | None:
+        payload = self._read_resource_payload(arguments.get(key), expected=("timeseries",), consumer=consumer)
         if payload is None:
             return None
         return self._extract_time_series_from_payload(payload)
@@ -925,16 +970,28 @@ class LogToolsServer(RizhiyiFastMCPServer):
             return direct_value
         if isinstance(direct_value, list):
             return direct_value
-        return self._read_resource_payload(arguments.get(resource_key))
+        return self._read_resource_payload(
+            arguments.get(resource_key),
+            expected=("timeseries",),
+            consumer="period_compare",
+        )
 
-    def _read_resource_payload(self, value: Any) -> dict[str, Any] | None:
+    def _read_resource_payload(
+        self,
+        value: Any,
+        *,
+        expected: tuple[str, ...] = (),
+        consumer: str = "",
+    ) -> dict[str, Any] | None:
         resource_uri = self._optional_str(value)
         if not resource_uri:
             return None
         try:
-            envelope = read_shared_result(self.runtime_config, resource_uri)
+            envelope = read_shared_result(self.runtime_config, resource_uri, route_name=self.route_name)
         except SharedResultStoreError:
             return None
+        if expected:
+            self._assert_resource_kind(envelope, expected, consumer)
         if isinstance(envelope.payload, dict):
             return envelope.payload
         return None

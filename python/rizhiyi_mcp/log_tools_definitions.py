@@ -64,7 +64,46 @@ def with_shared_resource_hint(tools: list[ToolDefinition]) -> list[ToolDefinitio
     return enriched
 
 
+ANALYSIS_GUIDANCE = {
+    "trend_summary": " 这是时间序列基础结果；后续识别异常点应优先复用本工具返回的 resource_uri。没有明显峰值或异常迹象时，不要自动继续调用根因、关联或日志聚类工具。",
+    "anomaly_points": " 优先复用 trend_summary 的时间序列。若没有异常点，默认停止扩展分析；只有用户明确要求继续检查字段或根因时才继续。",
+    "period_compare": " 如果已有两个窗口的时间序列，应传 previous_time_series_a/b 或 resource_uri_a/b；只有用户要求字段差异时才传 compare_fields。",
+    "root_cause_suggestions": " 这是深度分析工具，只有异常窗口和基线窗口已确定，或用户明确要求根因定位时调用；优先复用已有样例和候选字段。",
+    "correlation_analysis": " 仅在用户要求字段关联、共现或数值滞后关系时调用；不要把它作为异常概要的默认步骤。",
+    "log_reduce_pattern": " 仅用于重复日志模板和模式发现，不用于普通趋势或异常概要。",
+    "log_reduce_preview": " 仅在用户明确要求日志模式，或已有证据表明错误模板聚集时调用；该工具可能需要轮询。",
+    "trend_forecast": " 用于预测未来走势，不作为普通异常排查的默认步骤。",
+    "anomaly_alert": " 用于告警判断，不作为普通异常排查的默认步骤。",
+}
+
+
+def with_analysis_guidance(tools: list[ToolDefinition]) -> list[ToolDefinition]:
+    return [
+        ToolDefinition(
+            name=tool.name,
+            description=(tool.description + ANALYSIS_GUIDANCE[tool.name])
+            if tool.name in ANALYSIS_GUIDANCE and "不要自动继续调用" not in tool.description
+            else tool.description,
+            input_schema=tool.input_schema,
+        )
+        for tool in tools
+    ]
+
+
 BASIC_LOG_TOOLS: list[ToolDefinition] = [
+    ToolDefinition(
+        name="data_overview",
+        description="数据概览：返回指定时间范围内的日志总量和基础统计。只用于数量/整体情况概览；趋势、异常和根因请使用对应分析工具。",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": '搜索查询语句，默认 "*"。', "default": "*"},
+                "time_range": {"type": "string", "description": '时间范围，例如 "now-1h,now"。', "default": "now-15m,now"},
+                "metric_field": {"type": "string", "description": "可选数值字段。"},
+                "percentiles": {"type": "array", "items": {"type": "number"}, "default": [50, 90, 99]},
+            },
+        },
+    ),
     ToolDefinition(
         name="log_search_sheet",
         description=(
@@ -198,8 +237,13 @@ BASIC_LOG_TOOLS: list[ToolDefinition] = [
                 },
                 "retry_interval": {
                     "type": "integer",
-                    "description": "重试间隔（毫秒）。",
-                    "default": 5000,
+                    "description": "首次重试延迟（毫秒），后续按指数退避。",
+                    "default": 1000,
+                },
+                "deadline_ms": {
+                    "type": "integer",
+                    "description": "轮询总 deadline（毫秒），超时返回 sid 和 job_status 供后续继续查询。",
+                    "default": 30000,
                 },
                 "analyze_patterns": {
                     "type": "boolean",
@@ -564,6 +608,12 @@ INTELLIGENT_ANALYSIS_TOOLS: list[ToolDefinition] = [
                     "description": "返回最重要的 K 个漂移字段和可疑切片。",
                     "default": 5,
                 },
+                "max_candidates": {
+                    "type": "integer",
+                    "description": "根因分析最多检查的候选字段数，默认6，最大6。",
+                    "default": 6,
+                    "maximum": 6,
+                },
                 "field_value_limit": {
                     "type": "integer",
                     "description": "每个字段显式查询的值分布上限。",
@@ -715,7 +765,7 @@ PREDICTIVE_ANALYSIS_TOOLS: list[ToolDefinition] = [
 
 
 SEARCH_TOOLS: list[ToolDefinition] = with_output_controls(
-    with_shared_resource_hint(
+    with_analysis_guidance(with_shared_resource_hint(
         BASIC_LOG_TOOLS + STATISTICAL_ANALYSIS_TOOLS + INTELLIGENT_ANALYSIS_TOOLS + PREDICTIVE_ANALYSIS_TOOLS
-    )
+    ))
 )

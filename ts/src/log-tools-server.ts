@@ -23,6 +23,7 @@ import { TrendForecastModule } from './modules/trend-forecast.js';
 import { AnomalyDetectionModule } from './modules/anomaly-detection.js';
 import { registerToolDefinitions } from './mcp-tool-helpers.js';
 import { buildToolSuccessResult, formatErrorPayload } from './result-formatter.js';
+import { QueryCache } from './query-cache.js';
 import {
     listSharedResults,
     SharedResultStoreError,
@@ -30,35 +31,12 @@ import {
     readSharedResult,
     saveSharedResult
 } from './shared-result-store.js';
+import { loadLogToolsInstructions } from './instructions.js';
 
-const SERVER_LEVEL_INSTRUCTIONS = `使用说明:
-## 核心原则：先统计，后采样
-1. 数量：时间窗口内有多少日志？
-2. 分布：涉及哪些服务/级别/错误类型？
-3. 趋势：数量在增加、稳定还是减少？
-4. 再采样：先摸清全局，再获取具体条目
-5. 若后续要创建或更新 dashboard 图表，请先调用 query_precheck，确认 query 语法、数据和字段映射都没问题。
-
-## 分析框架
-### 第一步：俯瞰全局
-- 日志总量
-- 错误率及其分布
-- 受影响最大的服务
-
-### 第二步：识别模式
-- 错误聚集（短时间内大量错误）
-- 时间规律（从 X 时间点开始）
-- 服务关联（服务 A 报错 → 服务 B 报错）
-
-### 第三步：精准采样
-- 在错误高峰处采样
-- 获取每种不同错误类型的示例
-- 与基线时段对比
-## 如需减少上下文，请优先传 fields 仅选择关键字段。
-## 若用户已明确要求“最近 N 条日志并做关联/根因分析”，优先一次 log_search_sheet 后直接复用其返回的 resource_uri，不要额外补做趋势/字段探测。
-## 遇到错误时，优先根据 suggestion 字段修正参数后自动重试一次。`;
+const SERVER_LEVEL_INSTRUCTIONS = loadLogToolsInstructions();
 
 export function createLogToolsServer(context: ServerContext): McpServer {
+    context.queryCache ||= new QueryCache();
     const httpClientConfig = createHttpClientConfig(context);
     const client = new LogEaseClient(httpClientConfig);
     const logSearchModule = new LogSearchModule(client, context.runtimeConfig.logeaseBaseURL);
@@ -99,7 +77,7 @@ server.server.registerCapabilities({
     }, context);
 
 server.server.setRequestHandler(ListResourcesRequestSchema, async () => {
-    const resources = await listSharedResults(sharedResultStoreConfig);
+    const resources = await listSharedResults(sharedResultStoreConfig, 'log-tools');
     return {
         resources: resources.map((envelope) => ({
             uri: envelope.resource_uri,
@@ -112,7 +90,7 @@ server.server.setRequestHandler(ListResourcesRequestSchema, async () => {
 
 server.server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
     try {
-        const envelope = await readSharedResult(request.params.uri, sharedResultStoreConfig);
+        const envelope = await readSharedResult(request.params.uri, sharedResultStoreConfig, 'log-tools');
         return {
             contents: [{
                 uri: envelope.resource_uri,
@@ -150,6 +128,7 @@ async function handleLogSearchSheet(params: any) {
     return formatResult(result, params);
 }
 
+
 async function handleLogReducePattern(params: any) {
     if (!params?.time_range) {
         return buildToolError(
@@ -171,7 +150,7 @@ async function handleLogReducePreview(params: any) {
     let sid = params?.sid;
     if (!sid && sharedResultRef) {
         try {
-            const envelope = await readSharedResult(sharedResultRef, sharedResultStoreConfig);
+            const envelope = await readSharedResult(sharedResultRef, sharedResultStoreConfig, 'log-tools');
             sid = envelope.upstream_sid || extractSidFromPayload(envelope.payload);
         } catch (error: any) {
             return buildSharedStoreError(error, '请确认 resource_uri 是否来自 log_reduce_pattern，或重新传入 sid。');
@@ -187,8 +166,9 @@ async function handleLogReducePreview(params: any) {
     }
     const result = await logSearchModule.executeLogReducePreview(
         sid,
-        params.max_retries || 10,
-        params.retry_interval || 5000
+        params.max_retries ?? 10,
+        params.retry_interval ?? 1000,
+        params.deadline_ms ?? 30000
     );
 
     if (result.error || !params?.analyze_patterns) {
@@ -301,7 +281,8 @@ async function handleTrendSummary(params: any) {
 
     if (sharedResultRef) {
         try {
-            const envelope = await readSharedResult(sharedResultRef, sharedResultStoreConfig);
+            const envelope = await readSharedResult(sharedResultRef, sharedResultStoreConfig, 'log-tools');
+            assertResourceKind(envelope, ['timeseries'], 'trend_summary');
             const reusedSeries = extractTimeSeriesFromPayload(envelope.payload);
             const reusedResult = await statisticsModule.executeTrendSummaryWithData(
                 reusedSeries,
@@ -335,7 +316,8 @@ async function handleAnomalyPoints(params: any) {
 
     if (sharedResultRef) {
         try {
-            const envelope = await readSharedResult(sharedResultRef, sharedResultStoreConfig);
+            const envelope = await readSharedResult(sharedResultRef, sharedResultStoreConfig, 'log-tools');
+            assertResourceKind(envelope, ['timeseries'], 'anomaly_points');
             const reusedSeries = extractTimeSeriesFromPayload(envelope.payload);
             const reusedResult = await statisticsModule.executeAnomalyPointsWithData(
                 reusedSeries,
@@ -377,9 +359,11 @@ async function handlePeriodCompare(params: any) {
         }
         try {
             const [envelopeA, envelopeB] = await Promise.all([
-                readSharedResult(sharedResultRefA, sharedResultStoreConfig),
-                readSharedResult(sharedResultRefB, sharedResultStoreConfig)
+                readSharedResult(sharedResultRefA, sharedResultStoreConfig, 'log-tools'),
+                readSharedResult(sharedResultRefB, sharedResultStoreConfig, 'log-tools')
             ]);
+            assertResourceKind(envelopeA, ['timeseries'], 'period_compare');
+            assertResourceKind(envelopeB, ['timeseries'], 'period_compare');
             previousTimeSeriesA = { series: extractTimeSeriesFromPayload(envelopeA.payload) };
             previousTimeSeriesB = { series: extractTimeSeriesFromPayload(envelopeB.payload) };
         } catch (error: any) {
@@ -470,7 +454,8 @@ async function handleCorrelationAnalysis(params: any) {
     const sharedResultRef = getSharedResultReference(params, ['resource_uri']);
     if (sharedResultRef) {
         try {
-            const envelope = await readSharedResult(sharedResultRef, sharedResultStoreConfig);
+            const envelope = await readSharedResult(sharedResultRef, sharedResultStoreConfig, 'log-tools');
+            assertResourceKind(envelope, ['rows'], 'correlation_analysis');
             inputRows = extractRowsFromPayload(envelope.payload);
         } catch (error: any) {
             return buildSharedStoreError(error, '请确认 resource_uri 有效，或改为直接传 query/time_range 重新分析。');
@@ -498,7 +483,8 @@ async function handleRootCauseSuggestions(params: any) {
     const sharedResultRef = getSharedResultReference(params, ['resource_uri']);
     if (sharedResultRef) {
         try {
-            const envelope = await readSharedResult(sharedResultRef, sharedResultStoreConfig);
+            const envelope = await readSharedResult(sharedResultRef, sharedResultStoreConfig, 'log-tools');
+            assertResourceKind(envelope, ['rows'], 'root_cause_suggestions');
             inputRows = extractRowsFromPayload(envelope.payload);
         } catch (error: any) {
             return buildSharedStoreError(error, '请确认 resource_uri 有效，或改为直接传异常窗口参数重新分析。');
@@ -517,6 +503,7 @@ async function handleRootCauseSuggestions(params: any) {
         slice_max_depth: params.slice_max_depth ?? 2,
         min_slice_support: params.min_slice_support ?? 0.05,
         min_slice_lift: params.min_slice_lift ?? 2,
+        max_candidates: params.max_candidates ?? 6,
         input_rows: inputRows
     });
     return formatResult(result, params);
@@ -534,7 +521,8 @@ async function handleTrendForecast(params: any) {
 
     if (sharedResultRef) {
         try {
-            const envelope = await readSharedResult(sharedResultRef, sharedResultStoreConfig);
+            const envelope = await readSharedResult(sharedResultRef, sharedResultStoreConfig, 'log-tools');
+            assertResourceKind(envelope, ['timeseries'], 'trend_forecast');
             const reusedSeries = extractTimeSeriesFromPayload(envelope.payload);
             const reusedResult = await trendForecastModule.executeTrendForecastWithData({
                 time_series: reusedSeries,
@@ -576,7 +564,8 @@ async function handleAnomalyAlert(params: any) {
 
     if (sharedResultRef) {
         try {
-            const envelope = await readSharedResult(sharedResultRef, sharedResultStoreConfig);
+            const envelope = await readSharedResult(sharedResultRef, sharedResultStoreConfig, 'log-tools');
+            assertResourceKind(envelope, ['timeseries'], 'anomaly_alert');
             const reusedSeries = extractTimeSeriesFromPayload(envelope.payload);
             const reusedResult = await trendForecastModule.executeAnomalyAlertWithData({
                 time_series: reusedSeries,
@@ -694,6 +683,8 @@ function buildSharedResourceResponse(envelope: SharedResultEnvelope): Record<str
         resource_mime_type: envelope.resource_mime_type,
         tool_name: envelope.tool_name,
         result_kind: envelope.result_kind,
+        source_query: envelope.source_query,
+        time_range: envelope.time_range,
         created_at: envelope.created_at,
         expires_at: envelope.expires_at,
         payload_bytes: envelope.payload_bytes,
@@ -892,6 +883,12 @@ function extractTimeSeriesFromPayload(payload: any): Array<Record<string, any>> 
     return [];
 }
 
+function assertResourceKind(envelope: SharedResultEnvelope, expected: SharedResultKind[], consumer: string): void {
+    if (expected.includes(envelope.result_kind)) return;
+    const allowed = expected.join(' / ');
+    throw new Error(`resource_uri 的类型是 ${envelope.result_kind}（${envelope.tool_name}），${consumer} 需要 ${allowed}。建议：改用对应分析工具产出的 resource_uri。`);
+}
+
 function buildSharedResultReadResponse(
     envelope: SharedResultEnvelope,
     options: {
@@ -1017,6 +1014,9 @@ function buildSharedResourceDescription(envelope: SharedResultEnvelope): string 
 function buildSharedStoreError(error: any, suggestion: string): any {
     if (error instanceof SharedResultStoreError) {
         return buildToolError(error.code, error.message, getSharedStoreSuggestion(error, suggestion));
+    }
+    if (error instanceof Error && error.message.includes('resource_uri 的类型是')) {
+        return buildToolError('RESOURCE_KIND_MISMATCH', error.message, suggestion);
     }
     return buildToolError(
         'SHARED_RESULT_ERROR',

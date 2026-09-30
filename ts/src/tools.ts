@@ -48,6 +48,27 @@ function withSharedResourceHint(tools: ToolDefinition[]): ToolDefinition[] {
     }));
 }
 
+const analysisGuidance: Record<string, string> = {
+    trend_summary: ' 这是时间序列基础结果；后续识别异常点应优先复用本工具返回的 resource_uri。没有明显峰值或异常迹象时，不要自动继续调用根因、关联或日志聚类工具。',
+    anomaly_points: ' 优先复用 trend_summary 的时间序列。若没有异常点，默认停止扩展分析；只有用户明确要求继续检查字段或根因时才继续。',
+    period_compare: ' 如果已有两个窗口的时间序列，应传 previous_time_series_a/b 或 resource_uri_a/b；只有用户要求字段差异时才传 compare_fields。',
+    root_cause_suggestions: ' 这是深度分析工具，只有异常窗口和基线窗口已确定，或用户明确要求根因定位时调用；优先复用已有样例和候选字段。',
+    correlation_analysis: ' 仅在用户要求字段关联、共现或数值滞后关系时调用；不要把它作为异常概要的默认步骤。',
+    log_reduce_pattern: ' 仅用于重复日志模板和模式发现，不用于普通趋势或异常概要。',
+    log_reduce_preview: ' 仅在用户明确要求日志模式，或已有证据表明错误模板聚集时调用；该工具可能需要轮询。',
+    trend_forecast: ' 用于预测未来走势，不作为普通异常排查的默认步骤。',
+    anomaly_alert: ' 用于告警判断，不作为普通异常排查的默认步骤。'
+};
+
+function withAnalysisGuidance(tools: ToolDefinition[]): ToolDefinition[] {
+    return tools.map((tool) => ({
+        ...tool,
+        description: analysisGuidance[tool.name] && !tool.description.includes('不要自动继续调用')
+            ? `${tool.description}${analysisGuidance[tool.name]}`
+            : tool.description
+    }));
+}
+
 // 基础日志工具
 export const basicLogTools: ToolDefinition[] = [
     {
@@ -184,8 +205,13 @@ export const basicLogTools: ToolDefinition[] = [
                 },
                 retry_interval: {
                     type: 'integer',
-                    description: '重试间隔(毫秒)',
-                    default: 5000
+                    description: '首次重试延迟(毫秒)，后续按指数退避，默认 1000',
+                    default: 1000
+                },
+                deadline_ms: {
+                    type: 'integer',
+                    description: '轮询总 deadline（毫秒），默认 30000；超时返回 sid 和 job_status 供后续继续查询',
+                    default: 30000
                 },
                 analyze_patterns: {
                     type: 'boolean',
@@ -300,7 +326,36 @@ export const basicLogTools: ToolDefinition[] = [
             required: ['query']
         }
     },
-    
+    {
+        name: 'data_overview',
+        description: '数据概览：返回指定时间窗口内的日志总量与每秒事件数（events per second），用于快速判断数据规模；当提供 metric_field 时，额外返回该数值字段的 count/min/max/avg/sum 与百分位数。适合在深入分析前俯瞰全局。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                query: {
+                    type: 'string',
+                    description: '搜索查询语句，默认"*"',
+                    default: '*'
+                },
+                time_range: {
+                    type: 'string',
+                    description: '时间范围，例如："now-1h,now"',
+                    default: 'now-15m,now'
+                },
+                metric_field: {
+                    type: 'string',
+                    description: '可选，数值型字段名。提供后会额外返回该字段的统计值与百分位数。'
+                },
+                percentiles: {
+                    type: 'array',
+                    items: { type: 'number' },
+                    description: '当提供 metric_field 时计算的百分位数，默认[50,90,99]',
+                    default: [50, 90, 99]
+                }
+            },
+            required: ['time_range']
+        }
+    }
 ];
 
 // 统计分析工具
@@ -551,6 +606,12 @@ export const intelligentAnalysisTools: ToolDefinition[] = [
                     type: 'integer',
                     description: '返回最重要的 K 个漂移字段和可疑切片，默认5',
                     default: 5
+                },
+                max_candidates: {
+                    type: 'integer',
+                    description: '根因分析最多检查的候选字段数，默认6，最大6。',
+                    default: 6,
+                    maximum: 6
                 },
                 field_value_limit: {
                     type: 'integer',
@@ -1941,10 +2002,10 @@ export const ingestTools: ToolDefinition[] = [
 ];
 
 export const searchTools: ToolDefinition[] = [
-    ...withOutputControls(withSharedResourceHint(basicLogTools)),
-    ...withOutputControls(withSharedResourceHint(statisticalAnalysisTools)),
-    ...withOutputControls(withSharedResourceHint(intelligentAnalysisTools)),
-    ...withOutputControls(withSharedResourceHint(predictiveAnalysisTools))
+    ...withOutputControls(withAnalysisGuidance(withSharedResourceHint(basicLogTools))),
+    ...withOutputControls(withAnalysisGuidance(withSharedResourceHint(statisticalAnalysisTools))),
+    ...withOutputControls(withAnalysisGuidance(withSharedResourceHint(intelligentAnalysisTools))),
+    ...withOutputControls(withAnalysisGuidance(withSharedResourceHint(predictiveAnalysisTools)))
 ];
 
 export const dashboardServerTools: ToolDefinition[] = [

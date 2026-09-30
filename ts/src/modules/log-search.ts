@@ -368,26 +368,19 @@ export class LogSearchModule {
     async executeLogReducePreview(
         sid: string,
         maxRetries: number = 10,
-        retryInterval: number = 5000
+        retryInterval: number = 1000,
+        deadlineMs: number = 30000
     ): Promise<ApiResponse<LogReduceResponse>> {
         try {
             const apiPath = `/api/v3/search/preview/logreduce/`;
-            
-            // 轮询获取结果
-            const result = await this.client.pollUntilComplete<any>(
-                apiPath,
-                (response) => {
-                    // 检查是否完成
-                    return response.data?.job_status === 'COMPLETED' || 
-                           response.data?.job_status === 'FAILED' ||
-                           response.error !== undefined;
-                },
-                maxRetries,
-                retryInterval,
-                {
-                    sid: sid
-                },
-                {
+            const startedAt = Date.now();
+            const retries = Math.max(1, Math.floor(maxRetries));
+            const deadline = Math.max(1000, deadlineMs);
+            const initialDelay = Math.max(500, retryInterval);
+            let lastResult: ApiResponse<any> | undefined;
+
+            for (let attempt = 0; attempt < retries; attempt += 1) {
+                const result = await this.client.get<any>(apiPath, { sid }, {
                     timeout: 30000, // 增加超时时间到 30 秒
                     transformResponse: [(data: any) => {
                         // 处理 API 返回重复 result 键的问题
@@ -403,9 +396,37 @@ export class LogSearchModule {
                         }
                         return data;
                     }]
+                });
+                lastResult = result;
+                if (result.error) return result;
+                const status = String(result.data?.job_status || '').toUpperCase();
+                if (status === 'COMPLETED' || status === 'FAILED' || result.data?.result?.body || result.data?.tree_layer?.clusters) {
+                    return this.normalizeLogReducePreviewResult(result);
                 }
-            );
-            
+                if (Date.now() - startedAt >= deadline || attempt >= retries - 1) break;
+                const delay = Math.min(initialDelay * (2 ** attempt), 8000, deadline - (Date.now() - startedAt));
+                if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
+            }
+
+            const data = lastResult?.data;
+            return {
+                status: lastResult?.status,
+                error: '聚类任务未完成',
+                error_code: 'LOG_REDUCE_TIMEOUT',
+                suggestion: `任务仍在处理中，请稍后使用 sid=${sid} 再次调用 log_reduce_preview。`,
+                retryable: true,
+                details: { sid, job_status: data?.job_status, deadline_ms: deadline, max_retries: retries },
+                message: '达到日志聚类轮询 deadline，已返回可继续查询的任务信息'
+            };
+        } catch (error: any) {
+            return {
+                error: error.message,
+                message: `获取日志聚类分析结果出错: ${error.message}`
+            };
+        }
+    }
+
+    private normalizeLogReducePreviewResult(result: ApiResponse<any>): ApiResponse<LogReduceResponse> {
             if (result.error) {
                 return result;
             }
@@ -438,12 +459,6 @@ export class LogSearchModule {
                     result: patterns
                 }
             };
-        } catch (error: any) {
-            return {
-                error: error.message,
-                message: `获取日志聚类分析结果出错: ${error.message}`
-            };
-        }
     }
 
     /**
@@ -837,86 +852,4 @@ export class LogSearchModule {
         }
     }
 
-    /**
-     * 获取数据概览 - 使用stats管道命令
-     */
-    async executeDataOverview(
-        query: string,
-        timeRange: string,
-        metricField?: string,
-        percentiles: number[] = [50, 90, 99]
-    ): Promise<ApiResponse<any>> {
-        try {
-            const durationMs = this.parseDurationMs(timeRange);
-            
-            if (metricField) {
-                // 获取基础统计数据
-                const statsQuery = `${query || '*'} | stats count, min(${metricField}), max(${metricField}), avg(${metricField}), sum(${metricField})`;
-                const statsResponse = await this.executeLogSearchSheet(statsQuery, timeRange, 100);
-                const statsRows = this.extractRows(statsResponse.data);
-                
-                if (statsRows.length > 0) {
-                    const stats = statsRows[0];
-                    
-                    // 获取百分位数数据
-                    let percentilesData = {};
-                    if (percentiles.length > 0) {
-                        const percentileList = percentiles.join(', ');
-                        const percQuery = `${query || '*'} | stats pct(${metricField}, ${percentileList}) as p`;
-                        const percResponse = await this.executeLogSearchSheet(percQuery, timeRange, 100);
-                        const percRows = this.extractRows(percResponse.data);
-                        
-                        if (percRows.length > 0) {
-                            const percResult = percRows[0];
-                            percentilesData = percentiles.reduce((acc, p) => {
-                                const key = `p.${p}`;
-                                if (percResult[key] !== undefined) {
-                                    acc[`p${p}`] = percResult[key];
-                                }
-                                return acc;
-                            }, {} as Record<string, number>);
-                        }
-                    }
-                    
-                    return {
-                        status: 200,
-                        data: {
-                            overview: {
-                                total_count: stats.count || 0,
-                                min: stats[`min(${metricField})`] || 0,
-                                max: stats[`max(${metricField})`] || 0,
-                                avg: stats[`avg(${metricField})`] || 0,
-                                sum: stats[`sum(${metricField})`] || 0,
-                                percentiles: percentilesData,
-                                window_ms: durationMs,
-                                metric_field: metricField
-                            },
-                            time_range: timeRange
-                        }
-                    };
-                }
-            }
-            
-            // 默认行为：计算总命中数和每秒事件数
-            const summary = await this.executeLogSearchSheet(query || '*', timeRange, 1);
-            const total = (summary.data as any)?.results?.total_hits ?? 0;
-            const eps = durationMs > 0 ? (total / (durationMs / 1000)) : 0;
-            return {
-                status: 200,
-                data: {
-                    overview: {
-                        total_hits: total,
-                        window_ms: durationMs,
-                        events_per_second: Number(eps.toFixed(4))
-                    },
-                    time_range: timeRange
-                }
-            };
-        } catch (error: any) {
-            return {
-                error: error.message,
-                message: `获取数据概览出错: ${error.message}`
-            };
-        }
-    }
 }

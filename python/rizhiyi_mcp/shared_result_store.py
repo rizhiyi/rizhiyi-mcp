@@ -139,7 +139,12 @@ def save_shared_result(
     return envelope
 
 
-def read_shared_result(runtime_config: RuntimeConfig, resource_uri: str) -> SharedResultEnvelope[Any]:
+def read_shared_result(
+    runtime_config: RuntimeConfig,
+    resource_uri: str,
+    *,
+    route_name: str | None = None,
+) -> SharedResultEnvelope[Any]:
     _ensure_store_dir(runtime_config)
     state = _load_shared_result_state(runtime_config, resource_uri)
     if state["status"] == "missing":
@@ -149,6 +154,8 @@ def read_shared_result(runtime_config: RuntimeConfig, resource_uri: str) -> Shar
 
     envelope = state["envelope"]
     if envelope is None:
+        raise SharedResultStoreError("HANDLE_NOT_FOUND", "共享结果不存在，可能已被删除或尚未生成。")
+    if route_name and envelope.route_name != route_name:
         raise SharedResultStoreError("HANDLE_NOT_FOUND", "共享结果不存在，可能已被删除或尚未生成。")
     return envelope
 

@@ -1,10 +1,12 @@
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
 import https from 'https';
 import { HttpClientConfig, ApiResponse } from './types.js';
+import { QueryCache } from './query-cache.js';
 
 export class LogEaseClient {
     private client: AxiosInstance;
     private username?: string;
+    private queryCache: QueryCache;
 
     constructor(config: HttpClientConfig) {
         this.client = axios.create({
@@ -14,6 +16,7 @@ export class LogEaseClient {
             timeout: config.timeoutMs
         });
         this.username = config.username;
+        this.queryCache = config.queryCache || new QueryCache();
     }
 
     private hasHeader(headers: Record<string, any> | undefined, name: string): boolean {
@@ -101,14 +104,35 @@ export class LogEaseClient {
     }
 
     /**
+     * 解析上游身份标识，用于隔离查询缓存。
+     * axios 把 create 时传入的自定义 header 放在 defaults.headers 顶层，
+     * 只有 axios 内置的默认 header 才在 defaults.headers.common 中，
+     * 因此两处都要查。
+     */
+    private resolveCacheAuthorization(): string | undefined {
+        const defaults = (this.client.defaults.headers || {}) as Record<string, any>;
+        const common = (defaults.common || {}) as Record<string, any>;
+        const found = Object.entries({ ...common, ...defaults })
+            .find(([name, value]) => name.toLowerCase() === 'authorization' && typeof value === 'string');
+        return found?.[1] as string | undefined;
+    }
+
+    /**
      * 执行GET请求
      */
     async get<T>(path: string, params?: Record<string, any>, options?: any): Promise<ApiResponse<T>> {
-        try {
+        const mergedParams = this.mergeUsernameIntoParams(params);
+        // Cache entries must be isolated by the effective upstream identity. In HTTP
+        // mode username is often unset while Authorization is still present.
+        const authorization = this.resolveCacheAuthorization();
+        return this.queryCache.getOrFetch(
+            { method: 'GET', path, params: mergedParams, username: this.username, authorization },
+            async () => {
+              try {
             const response: AxiosResponse<T> = await this.client.get(
                 path,
                 {
-                    params: this.mergeUsernameIntoParams(params),
+                    params: mergedParams,
                     ...this.withDefaultHeaders(options, { Accept: 'application/json' })
                 }
             );
@@ -117,9 +141,12 @@ export class LogEaseClient {
                 data: response.data,
                 message: '请求成功'
             };
-        } catch (error: any) {
+              } catch (error: any) {
             return this.buildTransportError<T>(error);
-        }
+              }
+            },
+            this.queryCache.ttlForPath(path, mergedParams)
+        );
     }
 
     /**

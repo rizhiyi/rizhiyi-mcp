@@ -340,16 +340,9 @@ class RizhiyiFastMCPServer(FastMCP[None]):
             ]
 
         try:
-            envelope = read_shared_result(self.runtime_config, uri)
+            envelope = read_shared_result(self.runtime_config, uri, route_name=self.route_name)
         except SharedResultStoreError as exc:
             raise self._to_shared_result_error(exc, uri) from exc
-
-        if envelope.route_name != self.route_name:
-            raise McpServerError(
-                "资源不存在。请确认 resource_uri 是否来自当前 server。",
-                code=-32004,
-                data={"uri": uri},
-            )
 
         return [
             ReadResourceContents(
@@ -618,7 +611,10 @@ class RizhiyiFastMCPServer(FastMCP[None]):
         return ResourceDefinition(
             uri=envelope.resource_uri,
             name=envelope.resource_title,
-            description=f"{self.title} 工具结果资源，过期时间 {envelope.expires_at}。",
+            description=(
+                f"type={envelope.result_kind} | tool={envelope.tool_name} | "
+                f"expires_at={envelope.expires_at} | {envelope.summary.text}"
+            ),
             mime_type=envelope.resource_mime_type,
         )
 
@@ -642,7 +638,9 @@ class RizhiyiFastMCPServer(FastMCP[None]):
         data = {"error_code": error.code}
         if uri is not None:
             data["uri"] = uri
-        return McpServerError(message, code=-32004, data=data)
+        # TS maps resource read failures to InvalidParams (-32602); keep the
+        # protocol-visible code identical across both implementations.
+        return McpServerError(message, code=-32602, data=data)
 
     @staticmethod
     def _to_protocol_error(error: McpServerError) -> McpError:

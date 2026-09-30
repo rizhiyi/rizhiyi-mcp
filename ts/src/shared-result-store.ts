@@ -512,7 +512,8 @@ export async function saveSharedResult(
 
 export async function readSharedResult(
     resourceUri: string,
-    config: SharedResultStoreConfig = getSharedResultStoreConfig()
+    config: SharedResultStoreConfig = getSharedResultStoreConfig(),
+    routeName?: string
 ): Promise<SharedResultEnvelope> {
     await ensureStoreDir(config.storeDir);
     const state = await loadSharedResultState(resourceUri, config);
@@ -528,11 +529,18 @@ export async function readSharedResult(
         throw new SharedResultStoreError('HANDLE_NOT_FOUND', '共享结果不存在，可能已被删除或尚未生成。');
     }
 
+    // A handle is only addressable within the route that created it. Treat a
+    // cross-route lookup as missing so resource existence is not disclosed.
+    if (routeName && state.envelope.route_name !== routeName) {
+        throw new SharedResultStoreError('HANDLE_NOT_FOUND', '共享结果不存在，可能已被删除或尚未生成。');
+    }
+
     return state.envelope;
 }
 
 export async function listSharedResults(
-    config: SharedResultStoreConfig = getSharedResultStoreConfig()
+    config: SharedResultStoreConfig = getSharedResultStoreConfig(),
+    routeName?: string
 ): Promise<SharedResultEnvelope[]> {
     await cleanupExpiredResults(config);
     await ensureStoreDir(config.storeDir);
@@ -563,7 +571,9 @@ export async function listSharedResults(
     }));
 
     return envelopes
-        .filter((envelope): envelope is SharedResultEnvelope => Boolean(envelope))
+        .filter((envelope) => envelope !== null)
+        .filter((envelope) => !routeName || envelope!.route_name === routeName)
+        .map((envelope) => envelope as SharedResultEnvelope)
         .sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at));
 }
 
