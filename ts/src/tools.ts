@@ -2256,6 +2256,65 @@ export const alertTools: ToolDefinition[] = [
             }
         }
     },
+    {
+        name: 'get_triggered_alerts',
+        description:
+            '获取【已触发告警】的详情列表（读告警执行历史，不是读配置）。' +
+            '数据来自 index=monitor appname:alert_record 的告警执行记录，逐条返回六个要素：' +
+            '告警名称、触发时间、可能涉及的实体、触发级别、触发值、事件描述，并附带来源标记（entity_source/description_source）。' +
+            '默认看最近 24 小时内真正触发了的告警（issue_alert:true 且非恢复）。' +
+            '不传 alert_id / alert_name 即返回全系统所有监控的告警，不需要传通配符。' +
+            'entity_fields 用于指定从告警结果记录里取哪些字段作为实体，默认 ["result.appname","result.ip"]，' +
+            '可换成 ["result.hostname","result.src_ip"] 等任意 result.* 字段。' +
+            '要下钻原始日志请拿 search_url（需 include_search_url=true）或改用日志检索服务。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                alert_id: { type: 'integer', description: '只看某个监控的触发记录（对应 alert_id:<n>）。可选；不传则不限监控。' },
+                alert_name: {
+                    type: 'string',
+                    description:
+                        '按告警名称过滤。可选；不传即不限名称。' +
+                        '默认精确匹配；支持 * 通配符（如 "交换机*" 匹配前缀、"*攻击*" 匹配包含）。' +
+                        '名称里的空格、中文、方括号、斜杠等都会被正确转义，无需自己处理。'
+                },
+                time_range: {
+                    type: 'string',
+                    description: '时间范围。相对写法推荐 "-24h,now"（"-7d,now" / "-30m,now" 同理，两端日志易版本通用）；也支持 "now-24h,now"（会自动归一化）与 epoch 毫秒 "1790076698110,1790681498110"。',
+                    default: '-24h,now'
+                },
+                levels: {
+                    type: 'array',
+                    items: { type: 'string', enum: ['critical', 'high', 'mid', 'low', 'info'] },
+                    description: '按触发级别过滤，可多选。可选；不传则**全部级别**（等于 critical, high, mid, low, info）。'
+                },
+                entity_fields: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: '实体字段名列表，取告警结果记录里的字段（result. 前缀），例如 ["result.appname","result.ip"] 或 ["result.hostname","result.src_ip"]。',
+                    default: ['result.appname', 'result.ip']
+                },
+                include_recovery: {
+                    type: 'boolean',
+                    description: '是否把恢复记录（is_recovery:true，级别为 no_alert）也一并返回。默认 false，只看触发。',
+                    default: false
+                },
+                include_search_url: {
+                    type: 'boolean',
+                    description: '是否返回每条告警的日志检索跳转链接（单条约 600 字节，默认关闭以控制体积）。',
+                    default: false
+                },
+                timezone: { type: 'string', description: '触发时间的输出时区。', default: 'Asia/Shanghai' },
+                size: { type: 'integer', description: '每页返回条数。', default: 20 },
+                page: { type: 'integer', description: '页码，从 0 开始。', default: 0 },
+                sort: {
+                    type: 'string',
+                    description: '排序字段，前缀 - 表示降序。可选 timestamp/event_time/alert_level/alert_id/value，默认 "-timestamp"。',
+                    default: '-timestamp'
+                }
+            }
+        }
+    },
     ...createTypedAlertTools(),
     {
         name: 'update_alert',

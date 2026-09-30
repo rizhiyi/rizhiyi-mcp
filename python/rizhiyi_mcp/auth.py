@@ -97,13 +97,15 @@ def build_auth_context_from_authorization(
 
     authorization = parse_authorization_header(authorization_header)
 
-    # 优先用显式传入的 username，否则从 authorization 里提取
+    # 只从 apikey 的 `user:secret` 里拆分 username：这类部署要求把 username 作为
+    # query 参数传（避免中文用户名写不进 HTTP header）。
+    #
+    # Basic 认证不能这么做——凭据本身就在 Authorization 头里，而另一类日志易版本
+    # 会直接拒绝该参数（4104 Parameters 中不支持传入 username），注入反而把请求打挂。
+    # 显式传入的 LOGEASE_USERNAME 仍然优先。
     username = explicit_username
-    if username is None:
-        if authorization.kind == "basic":
-            username = authorization.username
-        elif authorization.kind == "apikey":
-            username = authorization.username
+    if username is None and authorization.kind == "apikey":
+        username = authorization.username
 
     return AuthContext(
         authorization=authorization,

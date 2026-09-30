@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import re
 import time
+from datetime import datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from .config import RuntimeConfig
 from .servers import ServiceRuntimeState, create_tool_server
@@ -41,7 +44,15 @@ SERVER_LEVEL_INSTRUCTIONS = """使用说明:
    d) 统计分组字段避免高基数（raw_message、timestamp、session_id 等），优先用 appname、status、level、src_ip 等低基数字段。
    e) check_interval 应与时间窗口匹配：窗口 -5min 时间隔 ≤300s，-1h 时 ≤3600s；间隔过大易漏报，过小重复计算浪费资源。
    f) 通知要携带日志原文时，用 extend_query 引用主搜索结果，不要用 stats count() by raw_message 这类把原文放分组的写法。
-   g) 已运行一段时间的监控可查 index=monitor alert_id:<alert_id> 的历史运行数据校准阈值，减少告警疲劳或告警盲区。"""
+   g) 已运行一段时间的监控可查 index=monitor alert_id:<alert_id> 的历史运行数据校准阈值，减少告警疲劳或告警盲区。
+9. 查【已触发告警】用 get_triggered_alerts（默认看最近 24h）。它读的是 index=monitor appname:alert_record 的
+   执行历史，不是配置本身，返回每条告警的名称/触发时间/实体/级别/触发值/描述，并带 entity_source、
+   description_source 两个来源标记（标记为 none 表示该要素确实没取到，不要臆造）。
+   不传 alert_id / alert_name 就是全系统所有监控，不要传 * 占位；alert_name 支持 * 通配（如 "交换机*"、"*攻击*"）。
+   实体默认取告警结果里的 result.appname 与 result.ip，需要别的字段用 entity_fields 指定（如 result.hostname）；
+   若告警是分段（分组）触发的，实体还会带上 result.segmentation_field 指定的字段（如 appname / json.DST_IP）；
+   若返回的 warnings 提示未携带实体，可参考 entity_candidates 里的列名再换一次。
+   要下钻原始日志：传 include_search_url=true 拿跳转链接，或改用日志检索服务的 log_search_sheet。"""
 
 ALERT_JSON_FIELDS = (
     "dataset_ids",
@@ -107,6 +118,141 @@ ALERT_MUTATION_WRITE_FIELDS = (
 ALERT_CREATE_REQUIRED_FIELDS = ("name", "query", "check_interval", "category", "enabled", "check_condition")
 
 DEFAULT_ALERT_LIST_FIELDS = ",".join(("id", "name", "category", "enabled", "check_interval", "window", "app_id"))
+
+# ---- 已触发告警历史（index=monitor appname:alert_record） ----
+
+ALERT_HISTORY_SEARCH_PATH = "/api/v3/search/sheets/"
+ALERT_HISTORY_INDEX = "monitor"
+ALERT_HISTORY_APPNAME = "alert_record"
+ALERT_HISTORY_DEFAULT_TIME_RANGE = "-24h,now"
+ALERT_HISTORY_DEFAULT_SIZE = 20
+ALERT_HISTORY_MAX_SIZE = 200
+ALERT_HISTORY_DEFAULT_TIMEZONE = "Asia/Shanghai"
+# 事件描述的截断长度是展示细节，不是查询语义，因此不作为入参暴露，内部固定。
+ALERT_HISTORY_DESCRIPTION_CHARS = 300
+ALERT_HISTORY_TOP_ALERTS = 10
+ALERT_HISTORY_SORT_FIELDS = ("timestamp", "event_time", "alert_level", "alert_id", "value")
+ALERT_HISTORY_LEVELS = ("critical", "high", "mid", "low", "info")
+ALERT_HISTORY_DEFAULT_ENTITY_FIELDS = ("result.appname", "result.ip")
+# 告警记录自身的 appname，不代表被监控系统，作为实体值没有意义。
+ALERT_HISTORY_MEANINGLESS_ENTITY_VALUES = ("alert_record",)
+# complex_value 形如 "cnt:35"，这些是聚合列，不能当实体。
+ALERT_HISTORY_AGGREGATE_COLUMNS = ("cnt", "count", "value", "avg", "sum", "max", "min", "total")
+
+# ---- alert_name 的字面量转义 ----
+# 实测结论（两套日志易版本一致，见 ALERT_TRIGGERED_DETAIL_TOOL_DESIGN.md §3.2.1）：
+#   1) 带引号的 `alert_name:"x*"` 里 `*` 是**字面量**，静默返回 0 条——不能用来做通配；
+#   2) 不带引号的裸值一旦遇到空格/`-`/`/`/`(`/`[`/`:`/`|` 等字符就会被当语法，
+#      轻则报 300/2100，重则静默变成"多段 AND"返回 0 条；
+#   3) 日志易自己的钻取变量过滤器 `${token|e}` 就是"在特殊字符前面加 `\`"（docs/dashboard.adoc），
+#      实测 `alert_name:K8s_kube\-dns\ \/\ CoreDNS_转发错误` 精确命中；
+#   4) 转义是**幂等安全**的：`\_`、`\.`、`\,`、`\=`、`\>`、`\*`、`\"`、`\\` 都等价于对应字面量，
+#      所以不必逐个甄别"哪些必须转义"，对 ASCII 非字母数字字符统一转义即可。
+# 据此：alert_name 一律拼成**不带引号**的 `alert_name:<转义后的字面量>`，走索引（比 | where like 快）；
+# 入参里的 `*` 保留不转义，作为通配符；要匹配字面星号目前只能改用 log_search_sheet。
+ALERT_HISTORY_WILDCARD_CHARS = ("*",)
+
+# ---- 分段（分组）实体字段 ----
+# 研发确认的 schema：当 result.is_segmentation=true 时，
+#   result.segmentation_field          记录实体字段名（实测取值如 appname / json.DST_IP / json.URL）
+#   result.segmentation_specify_value  记录该字段的值
+# 注意：当前环境没有真正触发的告警，specify_value 尚未被写入（已实测：这些记录 issue_alert=false、
+# 且索引里查不到 specify_value 字段）；一旦有触发数据即会带上。
+# result.is_segmentation 仅作指示标记，保留在投影里供调用方判断该行是否分段；实体是否产出以「值存在」为准。
+# 扁平 segmentation_field / segmentation_value 是更早环境的历史写法（用户提供的页面 URL 里引用过
+# segmentation_value），保留为兼容回退，字段不存在时服务端会静默丢弃，无副作用。
+ALERT_HISTORY_SEGMENTATION_NAME_FIELDS = ("result.segmentation_field", "segmentation_field")
+ALERT_HISTORY_SEGMENTATION_VALUE_FIELDS = ("result.segmentation_specify_value", "segmentation_value")
+
+ALERT_NAME_FALLBACK_FIELDS = ("alert_name", "result.name")
+ALERT_TRIGGER_TIME_FALLBACK_FIELDS = (
+    "timestamp",
+    "event_time",
+    "trigger_timestamp",
+    "result.trigger_timestamp",
+    "result.alert_condition_strategy.trigger_time",
+    "result.strategy.trigger.end_time",
+    "result.exec_time",
+)
+ALERT_LEVEL_FALLBACK_FIELDS = (
+    "alert_level",
+    "event_level",
+    "result.level",
+    "result.strategy.trigger.level",
+    "result.alert_condition_strategy.alert_level",
+)
+ALERT_VALUE_FALLBACK_FIELDS = ("value", "result.result.value")
+ALERT_DESCRIPTION_FALLBACK_FIELDS = (
+    "result.description",
+    "result.strategy.trigger.compare_desc_text",
+    "result.strategy.description",
+)
+
+ALERT_HISTORY_PROJECTION_FLAT_FIELDS = (
+    "alert_name",
+    "alert_id",
+    "alert_level",
+    "event_level",
+    "value",
+    "timestamp",
+    "event_time",
+    "trigger_timestamp",
+    "start_timestamp",
+    "end_timestamp",
+    "issue_alert",
+    "is_recovery",
+    "is_suppressed",
+    "alert_history_id",
+    "appname",
+    "alert_type",
+    "category",
+    "search_url",
+    "segmentation_field",
+    "segmentation_value",
+)
+ALERT_HISTORY_PROJECTION_NESTED_FIELDS = (
+    "result.name",
+    "result.alert_id",
+    "result.level",
+    "result.result.value",
+    "result.description",
+    "result.strategy.description",
+    "result.strategy.trigger.level",
+    "result.strategy.trigger.compare",
+    "result.strategy.trigger.compare_value",
+    "result.strategy.trigger.compare_desc_text",
+    "result.alert_condition_strategy.alert_level",
+    "result.alert_condition_strategy.trigger_time",
+    "result.result.complex_value",
+    "result.result.columns.name",
+    "result.search.query",
+    "result.trigger_timestamp",
+    "result.exec_time",
+    "result.is_segmentation",
+    "result.segmentation_field",
+    "result.segmentation_specify_value",
+)
+ALERT_HISTORY_NOTIFICATION_FIELD = "result.plugin.plugin_result"
+
+ALERT_DESCRIPTION_SOURCE_LABELS = {
+    "result.description": "result.description",
+    "result.strategy.trigger.compare_desc_text": "strategy_trigger_desc",
+    "result.strategy.description": "strategy_description",
+}
+
+_HTML_TAG_RE = re.compile(r"<[^>]*>")
+_WHITESPACE_RE = re.compile(r"\s+")
+# 相对时间窗的 `now-<N><unit>` 写法；不同版本日志易支持度不同，统一归一化成 `-<N><unit>`。
+_RELATIVE_NOW_RE = re.compile(r"^now\s*-\s*(\d+(?:\.\d+)?)\s*([a-zA-Z]+)$")
+_ALERT_NAME_IN_TEXT_RE = re.compile(r"告警名称\s*[:：]\s*(.+?)(?=\s*告警级别|\s*告警描述|\s*告警产生时间|$)")
+_HTML_ENTITY_REPLACEMENTS = (
+    ("&nbsp;", " "),
+    ("&lt;", "<"),
+    ("&gt;", ">"),
+    ("&quot;", '"'),
+    ("&#39;", "'"),
+    ("&amp;", "&"),
+)
 
 ALERT_CATEGORY_META: dict[int, dict[str, Any]] = {
     0: {
@@ -510,6 +656,47 @@ ALERT_TOOLS = with_output_controls(
                 },
             },
         ),
+        ToolDefinition(
+            name="get_triggered_alerts",
+            description=(
+                "获取【已触发告警】的详情列表（读告警执行历史，不是读配置）。"
+                "数据来自 index=monitor appname:alert_record 的告警执行记录，逐条返回六个要素："
+                "告警名称、触发时间、可能涉及的实体、触发级别、触发值、事件描述，并附带来源标记（entity_source/description_source）。"
+                "默认看最近 24 小时内真正触发了的告警（issue_alert:true 且非恢复）。"
+                "不传 alert_id / alert_name 即返回全系统所有监控的告警，不需要传通配符。"
+                "entity_fields 用于指定从告警结果记录里取哪些字段作为实体，默认 [\"result.appname\",\"result.ip\"]，"
+                "可换成 [\"result.hostname\",\"result.src_ip\"] 等任意 result.* 字段。"
+                "要下钻原始日志请拿 search_url（需 include_search_url=true）或改用日志检索服务。"
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "alert_id": {"type": "integer", "description": "只看某个监控的触发记录（对应 alert_id:<n>）。可选；不传则不限监控。"},
+                    "alert_name": {
+                        "type": "string",
+                        "description": (
+                            "按告警名称过滤。可选；不传即不限名称。"
+                            "默认精确匹配；支持 * 通配符（如 \"交换机*\" 匹配前缀、\"*攻击*\" 匹配包含）。"
+                            "名称里的空格、中文、方括号、斜杠等都会被正确转义，无需自己处理。"
+                        ),
+                    },
+                    "time_range": {"type": "string", "description": '时间范围。相对写法推荐 "-24h,now"（"-7d,now" / "-30m,now" 同理，两端日志易版本通用）；也支持 "now-24h,now"（会自动归一化）与 epoch 毫秒 "1790076698110,1790681498110"。', "default": ALERT_HISTORY_DEFAULT_TIME_RANGE},
+                    "levels": {"type": "array", "items": {"type": "string", "enum": list(ALERT_HISTORY_LEVELS)}, "description": f"按触发级别过滤，可多选。可选；不传则**全部级别**（等于 {', '.join(ALERT_HISTORY_LEVELS)}）。"},
+                    "entity_fields": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": '实体字段名列表，取告警结果记录里的字段（result. 前缀），例如 ["result.appname","result.ip"] 或 ["result.hostname","result.src_ip"]。',
+                        "default": list(ALERT_HISTORY_DEFAULT_ENTITY_FIELDS),
+                    },
+                    "include_recovery": {"type": "boolean", "description": "是否把恢复记录（is_recovery:true，级别为 no_alert）也一并返回。默认 false，只看触发。", "default": False},
+                    "include_search_url": {"type": "boolean", "description": "是否返回每条告警的日志检索跳转链接（单条约 600 字节，默认关闭以控制体积）。", "default": False},
+                    "timezone": {"type": "string", "description": "触发时间的输出时区。", "default": ALERT_HISTORY_DEFAULT_TIMEZONE},
+                    "size": {"type": "integer", "description": "每页返回条数。", "default": ALERT_HISTORY_DEFAULT_SIZE},
+                    "page": {"type": "integer", "description": "页码，从 0 开始。", "default": 0},
+                    "sort": {"type": "string", "description": '排序字段，前缀 - 表示降序。可选 timestamp/event_time/alert_level/alert_id/value，默认 "-timestamp"。', "default": "-timestamp"},
+                },
+            },
+        ),
         *_create_typed_alert_tools(),
         ToolDefinition(
             name="update_alert",
@@ -738,6 +925,620 @@ class AlertService(BaseServiceModule):
         if self.is_upstream_business_error(response.data):
             return self.build_error("UPSTREAM_BUSINESS_ERROR", "get_alerts_batch 上游接口返回失败。", "请检查 id_list 是否正确。", response.data)
         return {"raw_data": response.data, "data": response.data}
+
+    # ---- 已触发告警历史 ----
+
+    async def get_triggered_alerts(self, params: dict[str, Any]) -> Any:
+        built = self.build_history_query(params)
+        if built.get("error"):
+            return built["error"]
+        plan: dict[str, Any] = built["value"]
+
+        response = await self.request_json(
+            "get",
+            ALERT_HISTORY_SEARCH_PATH,
+            params={
+                "query": plan["query"],
+                "time_range": plan["time_range"],
+                "page": plan["page"],
+                "size": plan["size"],
+            },
+        )
+        if response.error:
+            return self.api_response_to_error(response)
+        if self.is_upstream_business_error(response.data):
+            return self.build_error(
+                "UPSTREAM_BUSINESS_ERROR",
+                "get_triggered_alerts 上游检索接口返回失败。",
+                "请检查 time_range / alert_id 等过滤条件，或稍后重试。",
+                response.data,
+            )
+
+        rows = self.extract_history_rows(response.data)
+        payload = self.normalize_history(rows, plan, self.extract_history_total(response.data))
+        return {"raw_data": response.data, "data": payload}
+
+    def build_history_query(self, params: dict[str, Any]) -> dict[str, Any]:
+        resolved_time_range = self.normalize_history_time_range(params.get("time_range"))
+
+        entity_result = self.normalize_entity_fields(params.get("entity_fields"))
+        if entity_result.get("error"):
+            return entity_result
+        entity_fields: list[str] = entity_result["value"]
+
+        levels_result = self.normalize_history_levels(params.get("levels"))
+        if levels_result.get("error"):
+            return levels_result
+        levels: list[str] = levels_result["value"]
+
+        size = self.resolve_bounded_int(params.get("size"), ALERT_HISTORY_DEFAULT_SIZE, 1, ALERT_HISTORY_MAX_SIZE)
+        page = self.resolve_bounded_int(params.get("page"), 0, 0, None)
+        sort_value = self.resolve_history_sort(params.get("sort"))
+
+        include_recovery = params.get("include_recovery")
+        if not isinstance(include_recovery, bool):
+            include_recovery = False
+
+        # 本工具只服务"已触发告警"，issue_alert:true 是恒定条件而非开关——
+        # 否则一个叫 get_triggered_alerts 的工具会返回未触发的执行记录，语义自相矛盾。
+        clauses = [f"index={ALERT_HISTORY_INDEX}", f"appname:{ALERT_HISTORY_APPNAME}", "'issue_alert':true"]
+        if not include_recovery:
+            clauses.append("NOT 'is_recovery':true")
+
+        alert_id = self.coerce_history_number(params.get("alert_id"))
+        if alert_id is not None:
+            clauses.append(f"alert_id:{int(alert_id)}")
+
+        name_filter = self.build_history_name_filter(params.get("alert_name"))
+        if name_filter.get("error"):
+            return name_filter
+        if name_filter["value"]["clause"]:
+            clauses.append(name_filter["value"]["clause"])
+
+        if levels:
+            level_clause = " OR ".join(f'alert_level:"{level}"' for level in levels)
+            clauses.append(f"({level_clause})")
+
+        projection = self.build_history_projection(entity_fields)
+        # 刻意不在 SPL 里写 `| limit`：一旦写死条数，HTTP 的 page 参数就翻不动页了
+        # （实测 page>=1 恒返回 0 行）。分页交给 size/page 参数处理。
+        query = " ".join(
+            [" ".join(clauses), f"| sort by {sort_value}", "| fields " + ", ".join(projection)]
+        )
+
+        return {
+            "value": {
+                "query": query,
+                "time_range": resolved_time_range,
+                "page": page,
+                "size": size,
+                "entity_fields": entity_fields,
+                "levels": levels,
+                "include_recovery": include_recovery,
+                "include_search_url": params.get("include_search_url") is True,
+                "timezone": self.resolve_history_timezone(params.get("timezone")),
+                "sort": sort_value,
+            }
+        }
+
+    def build_history_name_filter(self, raw: Any) -> dict[str, Any]:
+        """把 alert_name 入参翻译成主查询里的索引子句。
+
+        返回 ``{"value": {"clause": str}}``；``clause`` 为空表示不过滤。
+
+        语义（已实测，见模块顶部常量注释）：
+        - 不传 / 空串 / 纯 ``*``  → 不过滤，即"全系统所有监控"
+        - 不含 ``*``             → ``alert_name:<转义后的字面量>`` 精确匹配
+        - 含 ``*``               → 同上，但 ``*`` 保留为通配符（``交换机*``、``*攻击*``）
+
+        两种写法都落在**主查询**里（而非 ``| where`` 管道），因此都能吃索引。
+        """
+        if not isinstance(raw, str):
+            return {"value": {"clause": ""}}
+        text = raw.strip()
+        if not text:
+            return {"value": {"clause": ""}}
+        # 纯通配符等价于"不过滤"。用户直觉上会传 *，不能让它静默变成"匹配字面星号"而返回 0 条。
+        if set(text) <= set(ALERT_HISTORY_WILDCARD_CHARS):
+            return {"value": {"clause": ""}}
+
+        keep_wildcard = any(ch in ALERT_HISTORY_WILDCARD_CHARS for ch in text)
+        return {"value": {"clause": f"alert_name:{self.escape_spl_term(text, keep_wildcard=keep_wildcard)}"}}
+
+    @staticmethod
+    def escape_spl_term(text: str, keep_wildcard: bool = False) -> str:
+        """把字面量转义成可以直接拼进 ``field:<值>`` 的形式。
+
+        规则：**ASCII 非字母数字字符**一律前置反斜杠；非 ASCII 字符（汉字、全角标点）原样保留，
+        避免对多字节字符做无法验证的转义。
+
+        实测（env1 `172.21.16.9` + env2 `192.168.43.196`）转义是幂等安全的：``\\_``、``\\.``、``\\,``、
+        ``\\=``、``\\>``、``\\*``、``\\"``、``\\\\`` 都与对应字面量等价；而**不**转义时
+        `` ``、``-``、``/``、``(``、``)``、``[``、``]``、``:``、``|``、``"``、``'``、``!``、``{``、
+        ``}``、``<``、``>`` 会报 300/2100 或静默改变匹配结果。所以统一转义是唯一稳的做法。
+
+        ``keep_wildcard=True`` 时 ``*`` 不转义，保留通配语义。
+        """
+        out: list[str] = []
+        for ch in text:
+            # 原样保留：非 ASCII（汉字、全角标点）、ASCII 字母数字、以及通配模式下的 `*`；
+            # 其余 ASCII 字符（含空格）一律前置反斜杠。
+            if (
+                not ch.isascii()
+                or ch.isalnum()
+                or (keep_wildcard and ch in ALERT_HISTORY_WILDCARD_CHARS)
+            ):
+                out.append(ch)
+            else:
+                out.append("\\" + ch)
+        return "".join(out)
+
+    def normalize_entity_fields(self, raw: Any) -> dict[str, Any]:
+        if raw is None or (isinstance(raw, str) and not raw.strip()):
+            return {"value": list(ALERT_HISTORY_DEFAULT_ENTITY_FIELDS)}
+        parsed = self.parse_array_like(raw)
+        if parsed.get("error"):
+            return parsed
+        fields: list[str] = []
+        for item in parsed["value"]:
+            if isinstance(item, str) and item.strip():
+                name = item.strip()
+                if name not in fields:
+                    fields.append(name)
+        if not fields:
+            return {"value": list(ALERT_HISTORY_DEFAULT_ENTITY_FIELDS)}
+        return {"value": fields}
+
+    def normalize_history_levels(self, raw: Any) -> dict[str, Any]:
+        if raw is None or (isinstance(raw, str) and not raw.strip()):
+            return {"value": []}
+        parsed = self.parse_array_like(raw)
+        if parsed.get("error"):
+            return parsed
+        levels: list[str] = []
+        for item in parsed["value"]:
+            name = str(item).strip().lower() if item is not None else ""
+            if not name:
+                continue
+            if name not in ALERT_HISTORY_LEVELS:
+                return {
+                    "error": self.build_error(
+                        "INVALID_PARAM_VALUE",
+                        f"levels 含不支持的级别：{item}。",
+                        f"可选级别：{', '.join(ALERT_HISTORY_LEVELS)}。",
+                    )
+                }
+            if name not in levels:
+                levels.append(name)
+        return {"value": levels}
+
+    def resolve_history_sort(self, raw: Any) -> str:
+        if not isinstance(raw, str) or not raw.strip():
+            return "-timestamp"
+        candidate = raw.strip()
+        descending = candidate.startswith("-")
+        name = candidate[1:].strip() if descending else candidate
+        if name not in ALERT_HISTORY_SORT_FIELDS:
+            return "-timestamp"
+        return f"-{name}" if descending else name
+
+    @staticmethod
+    def normalize_history_time_range(raw: Any) -> str:
+        """归一化时间窗写法，兼容不同版本的日志易。
+
+        新版只接受 `-<N><unit>,now`（`now-24h,now` 会报 `参数 time_range 的值需满足…`），
+        老版两种都接受。实测 `-<N><unit>,now` 在两端通用，故统一转换；
+        epoch 毫秒、`earliest`、绝对时间等原样透传。
+        """
+        text = raw.strip() if isinstance(raw, str) and raw.strip() else ALERT_HISTORY_DEFAULT_TIME_RANGE
+        parts = text.split(",")
+        if len(parts) != 2:
+            return text
+        normalized: list[str] = []
+        for part in parts:
+            token = part.strip()
+            match = _RELATIVE_NOW_RE.match(token)
+            normalized.append(f"-{match.group(1)}{match.group(2)}" if match else token)
+        return ",".join(normalized)
+
+    def resolve_history_timezone(self, raw: Any) -> str:
+        if not isinstance(raw, str) or not raw.strip():
+            return ALERT_HISTORY_DEFAULT_TIMEZONE
+        candidate = raw.strip()
+        try:
+            ZoneInfo(candidate)
+        except (KeyError, ValueError):
+            return ALERT_HISTORY_DEFAULT_TIMEZONE
+        return candidate
+
+    @staticmethod
+    def resolve_bounded_int(raw: Any, default: int, minimum: int, maximum: int | None) -> int:
+        if isinstance(raw, bool) or raw is None:
+            return default
+        if isinstance(raw, str):
+            text = raw.strip()
+            if not text:
+                return default
+            try:
+                value = int(text)
+            except ValueError:
+                return default
+        elif isinstance(raw, int):
+            value = raw
+        else:
+            return default
+        if value < minimum:
+            return minimum
+        if maximum is not None and value > maximum:
+            return maximum
+        return value
+
+    def build_history_projection(self, entity_fields: list[str]) -> list[str]:
+        rendered: list[str] = []
+
+        def add(name: str) -> None:
+            candidate = f"'{name}'" if "." in name else name
+            if candidate not in rendered:
+                rendered.append(candidate)
+
+        for name in ALERT_HISTORY_PROJECTION_FLAT_FIELDS:
+            add(name)
+        for name in entity_fields:
+            add(name)
+        for name in ALERT_HISTORY_PROJECTION_NESTED_FIELDS:
+            add(name)
+        # 通知正文固定投影：它是"事件描述"的回退来源（正规字段为空时从里面刮），
+        # 属于内部实现细节而非用户要素，所以不做成入参。
+        add(ALERT_HISTORY_NOTIFICATION_FIELD)
+        return rendered
+
+    @staticmethod
+    def extract_history_rows(data: Any) -> list[dict[str, Any]]:
+        if not isinstance(data, dict):
+            return []
+        results = data.get("results")
+        if not isinstance(results, dict):
+            return []
+        sheets = results.get("sheets")
+        if not isinstance(sheets, dict):
+            return []
+        rows = sheets.get("rows")
+        if not isinstance(rows, list):
+            return []
+        return [row for row in rows if isinstance(row, dict)]
+
+    @staticmethod
+    def extract_history_total(data: Any) -> int | None:
+        if not isinstance(data, dict):
+            return None
+        results = data.get("results")
+        if not isinstance(results, dict):
+            return None
+        total = results.get("total_hits")
+        if isinstance(total, bool) or not isinstance(total, (int, float)):
+            return None
+        return int(total)
+
+    @staticmethod
+    def is_empty_record_value(value: Any) -> bool:
+        if value is None:
+            return True
+        if isinstance(value, bool):
+            return False
+        if isinstance(value, str):
+            text = value.strip()
+            return not text or text.lower() == "null"
+        if isinstance(value, (list, dict)):
+            return len(value) == 0
+        return False
+
+    @classmethod
+    def first_present_entry(cls, row: dict[str, Any], fields: tuple[str, ...]) -> tuple[str | None, Any]:
+        for field in fields:
+            if field in row and not cls.is_empty_record_value(row[field]):
+                return field, row[field]
+        return None, None
+
+    @classmethod
+    def first_present(cls, row: dict[str, Any], fields: tuple[str, ...]) -> Any:
+        return cls.first_present_entry(row, fields)[1]
+
+    @staticmethod
+    def coerce_history_number(value: Any) -> int | float | None:
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float):
+            return int(value) if value.is_integer() else value
+        if isinstance(value, str) and value.strip():
+            try:
+                parsed = float(value.strip())
+            except ValueError:
+                return None
+            return int(parsed) if parsed.is_integer() else parsed
+        return None
+
+    @staticmethod
+    def format_history_time(milliseconds: Any, timezone_name: str) -> str | None:
+        number = AlertService.coerce_history_number(milliseconds)
+        if number is None:
+            return None
+        try:
+            moment = datetime.fromtimestamp(float(number) / 1000.0, tz=ZoneInfo(timezone_name))
+        except (KeyError, ValueError, OSError, OverflowError):
+            return None
+        offset = moment.utcoffset()
+        base = moment.strftime("%Y-%m-%dT%H:%M:%S")
+        if offset is None:
+            return base
+        total_minutes = int(offset.total_seconds() // 60)
+        sign = "+" if total_minutes >= 0 else "-"
+        total_minutes = abs(total_minutes)
+        return f"{base}{sign}{total_minutes // 60:02d}:{total_minutes % 60:02d}"
+
+    @staticmethod
+    def strip_html_text(value: Any) -> str:
+        if not isinstance(value, str) or not value:
+            return ""
+        text = _HTML_TAG_RE.sub(" ", value)
+        for entity, replacement in _HTML_ENTITY_REPLACEMENTS:
+            text = text.replace(entity, replacement)
+        return _WHITESPACE_RE.sub(" ", text).strip()
+
+    @staticmethod
+    def truncate_text(text: str, limit: int) -> str:
+        if limit <= 0 or len(text) <= limit:
+            return text
+        return text[:limit]
+
+    def extract_alert_name_from_notification(self, raw: Any) -> str | None:
+        text = self.strip_html_text(raw)
+        if not text:
+            return None
+        match = _ALERT_NAME_IN_TEXT_RE.search(text)
+        if not match:
+            return None
+        return match.group(1).strip() or None
+
+    def resolve_history_description(self, row: dict[str, Any]) -> tuple[str | None, str]:
+        matched_field, raw = self.first_present_entry(row, ALERT_DESCRIPTION_FALLBACK_FIELDS)
+        if matched_field is not None:
+            text = str(raw).strip()
+            if text:
+                return self.truncate_text(text, ALERT_HISTORY_DESCRIPTION_CHARS), ALERT_DESCRIPTION_SOURCE_LABELS.get(
+                    matched_field, matched_field
+                )
+        # 正规描述字段都空时，从通知正文里刮一段作兜底（内部固定策略，不暴露开关）。
+        text = self.strip_html_text(row.get(ALERT_HISTORY_NOTIFICATION_FIELD))
+        if text:
+            return self.truncate_text(text, ALERT_HISTORY_DESCRIPTION_CHARS), "notification_text"
+        return None, "none"
+
+    @classmethod
+    def match_entity_field(cls, row: dict[str, Any], field: str) -> tuple[str, Any] | None:
+        candidates = [field]
+        if not field.startswith("result."):
+            candidates.append(f"result.{field}")
+        for key in candidates:
+            if key not in row:
+                continue
+            value = row[key]
+            if cls.is_empty_record_value(value):
+                continue
+            if isinstance(value, str) and value.strip().lower() in ALERT_HISTORY_MEANINGLESS_ENTITY_VALUES:
+                continue
+            return key, value
+        return None
+
+    @staticmethod
+    def parse_complex_value_entities(raw: Any) -> dict[str, Any]:
+        if not isinstance(raw, str) or not raw.strip():
+            return {}
+        entities: dict[str, Any] = {}
+        for chunk in raw.split(","):
+            if ":" not in chunk:
+                continue
+            key, _, value = chunk.partition(":")
+            key = key.strip()
+            value = value.strip()
+            if not key or not value or key.lower() in ALERT_HISTORY_AGGREGATE_COLUMNS:
+                continue
+            entities[key] = value
+        return entities
+
+    @classmethod
+    def resolve_history_entities(cls, row: dict[str, Any], entity_fields: list[str]) -> tuple[dict[str, Any], str]:
+        entities: dict[str, Any] = {}
+
+        # 1) 分段（分组）实体：研发确认 result.is_segmentation=true 时，
+        #    result.segmentation_field 是实体字段名、result.segmentation_specify_value 是实体字段值。
+        #    以「值存在」为准落地实体——只有标记没有值时（当前环境未真正触发的记录即如此）
+        #    不产出实体，继续走后面的回退链。
+        segmentation_value = cls.first_present(row, ALERT_HISTORY_SEGMENTATION_VALUE_FIELDS)
+        has_segmentation = not cls.is_empty_record_value(segmentation_value)
+        if has_segmentation:
+            raw_key = cls.first_present(row, ALERT_HISTORY_SEGMENTATION_NAME_FIELDS)
+            key_name = raw_key.strip() if isinstance(raw_key, str) and raw_key.strip() else "segmentation_value"
+            if key_name.lower() in ALERT_HISTORY_AGGREGATE_COLUMNS:
+                has_segmentation = False
+            else:
+                entities[key_name] = segmentation_value
+
+        # 2) 用户指定/默认的告警结果字段（与分段实体并存，共同构成"可能涉及的实体"）
+        for field in entity_fields:
+            matched = cls.match_entity_field(row, field)
+            if matched is None:
+                continue
+            key, value = matched
+            if key in entities:
+                continue
+            entities[key] = value
+
+        if entities:
+            return entities, "segmentation_value" if has_segmentation else "entity_fields"
+
+        # 3) complex_value 形如 "src_ip:10.0.0.1,dst_ip:10.0.0.2"
+        complex_entities = cls.parse_complex_value_entities(row.get("result.result.complex_value"))
+        if complex_entities:
+            return complex_entities, "complex_value"
+
+        return {}, "none"
+
+    @staticmethod
+    def resolve_history_recovery(row: dict[str, Any]) -> bool:
+        raw = row.get("is_recovery")
+        if isinstance(raw, bool) and raw:
+            return True
+        if isinstance(raw, str) and raw.strip().lower() == "true":
+            return True
+        level = row.get("alert_level")
+        return bool(isinstance(level, str) and level.strip().lower() == "no_alert")
+
+    @staticmethod
+    def collect_entity_candidates(rows: list[dict[str, Any]]) -> list[str]:
+        candidates: list[str] = []
+        for row in rows:
+            raw = row.get("result.result.columns.name")
+            if isinstance(raw, list):
+                values: list[Any] = raw
+            elif isinstance(raw, str) and raw.strip():
+                try:
+                    parsed = json.loads(raw)
+                except json.JSONDecodeError:
+                    parsed = None
+                if isinstance(parsed, list):
+                    values = parsed
+                else:
+                    values = [chunk for chunk in raw.strip("[]").split(",")]
+            else:
+                values = []
+            for item in values:
+                if not isinstance(item, str):
+                    continue
+                name = item.strip()
+                if not name or name in candidates:
+                    continue
+                if name.lower() in ALERT_HISTORY_AGGREGATE_COLUMNS:
+                    continue
+                candidates.append(name)
+            # 分段字段名（如 appname / json.DST_IP）本身就是最贴切的实体候选，
+            # 在 entities 落空时能直接告诉调用方该换哪个字段下钻。
+            for item in ALERT_HISTORY_SEGMENTATION_NAME_FIELDS:
+                name = row.get(item)
+                if not isinstance(name, str):
+                    continue
+                name = name.strip()
+                if not name or name in candidates:
+                    continue
+                if name.lower() in ALERT_HISTORY_AGGREGATE_COLUMNS:
+                    continue
+                candidates.append(name)
+        return candidates
+
+    def normalize_history_row(self, row: dict[str, Any], plan: dict[str, Any]) -> dict[str, Any]:
+        alert_id = self.coerce_history_number(row.get("alert_id"))
+        if alert_id is None:
+            alert_id = self.coerce_history_number(row.get("result.alert_id"))
+
+        name_value = self.first_present(row, ALERT_NAME_FALLBACK_FIELDS)
+        alert_name = str(name_value).strip() if isinstance(name_value, (str, int, float)) and not isinstance(name_value, bool) else None
+        if not alert_name:
+            alert_name = self.extract_alert_name_from_notification(row.get(ALERT_HISTORY_NOTIFICATION_FIELD))
+        if not alert_name:
+            alert_name = f"alert_id={alert_id}" if alert_id is not None else None
+
+        trigger_ms = self.coerce_history_number(self.first_present(row, ALERT_TRIGGER_TIME_FALLBACK_FIELDS))
+
+        level_value = self.first_present(row, ALERT_LEVEL_FALLBACK_FIELDS)
+        level = level_value.strip().lower() if isinstance(level_value, str) and level_value.strip() else None
+
+        value_number = self.coerce_history_number(self.first_present(row, ALERT_VALUE_FALLBACK_FIELDS))
+
+        description, description_source = self.resolve_history_description(row)
+        entities, entity_source = self.resolve_history_entities(row, plan["entity_fields"])
+
+        history_id = self.first_present(row, ("alert_history_id",))
+        item: dict[str, Any] = {
+            "alert_name": alert_name,
+            "alert_id": alert_id,
+            "alert_history_id": history_id if isinstance(history_id, str) else None,
+            "trigger_time": self.format_history_time(trigger_ms, plan["timezone"]),
+            "trigger_time_ms": trigger_ms,
+            "level": level,
+            "value": value_number,
+            "entities": entities,
+            "entity_source": entity_source,
+            "description": description,
+            "description_source": description_source,
+            "is_recovery": self.resolve_history_recovery(row),
+        }
+        if plan.get("include_search_url"):
+            search_url = row.get("search_url")
+            item["search_url"] = search_url if isinstance(search_url, str) and search_url.strip() else None
+        return item
+
+    def normalize_history(
+        self,
+        rows: list[dict[str, Any]],
+        plan: dict[str, Any],
+        total: int | None,
+    ) -> dict[str, Any]:
+        alerts = [self.normalize_history_row(row, plan) for row in rows]
+
+        level_counts: dict[str, int] = {}
+        for item in alerts:
+            level = item.get("level")
+            if isinstance(level, str) and level and level != "no_alert":
+                level_counts[level] = level_counts.get(level, 0) + 1
+
+        grouped: dict[Any, dict[str, Any]] = {}
+        for item in alerts:
+            key = item.get("alert_id")
+            if key is None:
+                key = item.get("alert_name")
+            if key is None:
+                continue
+            entry = grouped.setdefault(
+                key,
+                {"alert_id": item.get("alert_id"), "alert_name": item.get("alert_name"), "count": 0},
+            )
+            entry["count"] += 1
+        alert_counts = sorted(grouped.values(), key=lambda entry: (-entry["count"], str(entry.get("alert_name") or "")))[
+            :ALERT_HISTORY_TOP_ALERTS
+        ]
+
+        warnings: list[str] = []
+        if total == 0:
+            warnings.append("该时间窗口内没有命中的已触发告警；可放宽 time_range，或把 include_recovery 设为 true 看恢复记录。")
+        if alerts and all(item["entity_source"] == "none" for item in alerts):
+            warnings.append(
+                "本页所有记录都未携带实体信息：可用 entity_fields 指定其它字段（参考 entity_candidates 里的列名），或改用日志检索服务下钻。"
+            )
+        missing_values = sum(1 for item in alerts if item["value"] is None)
+        if missing_values:
+            warnings.append(f"有 {missing_values} 条记录缺少触发值（value 与 result.result.value 均为空）。")
+
+        payload: dict[str, Any] = {
+            "time_range": plan["time_range"],
+            "query_executed": plan["query"],
+            "total": total,
+            "returned": len(alerts),
+            "page": plan["page"],
+            "size": plan["size"],
+            "has_more": total is not None and (plan["page"] + 1) * plan["size"] < total,
+            "level_counts": level_counts,
+            "alert_counts": alert_counts,
+            "alerts": alerts,
+            "warnings": warnings,
+        }
+        # 不回显 entity_fields：那是调用方自己传的入参，默认值也写在 schema 里，
+        # 回显只会和 entity_candidates（真正新增的"数据里有哪些列可用"）混淆。
+        # 每条记录的 entities 的 key 本身就是所用字段名，已自描述。
+        candidates = self.collect_entity_candidates(rows)
+        if candidates:
+            payload["entity_candidates"] = candidates
+        return payload
 
     # ---- CRUD ----
 
@@ -1345,6 +2146,7 @@ def create_alerts_server(runtime_config: RuntimeConfig, service_state: ServiceRu
             "list_alerts": lambda arguments: runtime.execute(tool_name="list_alerts", arguments=arguments, executor=service.list_alerts),
             "get_alert_detail": lambda arguments: runtime.execute(tool_name="get_alert_detail", arguments=arguments, executor=service.get_alert_detail),
             "get_alerts_batch": lambda arguments: runtime.execute(tool_name="get_alerts_batch", arguments=arguments, executor=service.get_alerts_batch),
+            "get_triggered_alerts": lambda arguments: runtime.execute(tool_name="get_triggered_alerts", arguments=arguments, executor=service.get_triggered_alerts),
             "create_keyword_alert": lambda arguments: runtime.execute(tool_name="create_keyword_alert", arguments=arguments, executor=service.create_keyword_alert),
             "create_field_stat_alert": lambda arguments: runtime.execute(tool_name="create_field_stat_alert", arguments=arguments, executor=service.create_field_stat_alert),
             "create_baseline_alert": lambda arguments: runtime.execute(tool_name="create_baseline_alert", arguments=arguments, executor=service.create_baseline_alert),
