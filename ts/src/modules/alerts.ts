@@ -86,6 +86,141 @@ export const ALERT_CREATE_REQUIRED_FIELDS = [
     'check_condition',
 ] as const;
 
+// ---- 已触发告警历史（index=monitor appname:alert_record） ----
+
+export const ALERT_HISTORY_SEARCH_PATH = '/api/v3/search/sheets/';
+export const ALERT_HISTORY_INDEX = 'monitor';
+export const ALERT_HISTORY_APPNAME = 'alert_record';
+export const ALERT_HISTORY_DEFAULT_TIME_RANGE = '-24h,now';
+export const ALERT_HISTORY_DEFAULT_SIZE = 20;
+export const ALERT_HISTORY_MAX_SIZE = 200;
+export const ALERT_HISTORY_DEFAULT_TIMEZONE = 'Asia/Shanghai';
+// 事件描述的截断长度是展示细节，不是查询语义，因此不作为入参暴露，内部固定。
+export const ALERT_HISTORY_DESCRIPTION_CHARS = 300;
+export const ALERT_HISTORY_TOP_ALERTS = 10;
+export const ALERT_HISTORY_SORT_FIELDS = ['timestamp', 'event_time', 'alert_level', 'alert_id', 'value'] as const;
+export const ALERT_HISTORY_LEVELS = ['critical', 'high', 'mid', 'low', 'info'] as const;
+export const ALERT_HISTORY_DEFAULT_ENTITY_FIELDS = ['result.appname', 'result.ip'] as const;
+// 告警记录自身的 appname，不代表被监控系统，作为实体值没有意义。
+export const ALERT_HISTORY_MEANINGLESS_ENTITY_VALUES = ['alert_record'] as const;
+// complex_value 形如 "cnt:35"，这些是聚合列，不能当实体。
+export const ALERT_HISTORY_AGGREGATE_COLUMNS = ['cnt', 'count', 'value', 'avg', 'sum', 'max', 'min', 'total'] as const;
+
+// ---- alert_name 的字面量转义 ----
+// 实测结论（两套日志易版本一致，见 ALERT_TRIGGERED_DETAIL_TOOL_DESIGN.md §3.2.1）：
+//   1) 带引号的 `alert_name:"x*"` 里 `*` 是**字面量**，静默返回 0 条——不能用来做通配；
+//   2) 不带引号的裸值一旦遇到空格/`-`/`/`/`(`/`[`/`:`/`|` 等字符就会被当语法，
+//      轻则报 300/2100，重则静默变成"多段 AND"返回 0 条；
+//   3) 日志易自己的钻取变量过滤器 `${token|e}` 就是"在特殊字符前面加 `\`"（docs/dashboard.adoc），
+//      实测 `alert_name:K8s_kube\-dns\ \/\ CoreDNS_转发错误` 精确命中；
+//   4) 转义是**幂等安全**的：`\_`、`\.`、`\,`、`\=`、`\>`、`\*`、`\"`、`\\` 都等价于对应字面量，
+//      所以不必逐个甄别"哪些必须转义"，对 ASCII 非字母数字字符统一转义即可。
+// 据此：alert_name 一律拼成**不带引号**的 `alert_name:<转义后的字面量>`，走索引（比 | where like 快）；
+// 入参里的 `*` 保留不转义，作为通配符；要匹配字面星号目前只能改用 log_search_sheet。
+export const ALERT_HISTORY_WILDCARD_CHARS = ['*'] as const;
+
+// ---- 分段（分组）实体字段 ----
+// 研发确认的 schema：当 result.is_segmentation=true 时，
+//   result.segmentation_field          记录实体字段名（实测取值如 appname / json.DST_IP / json.URL）
+//   result.segmentation_specify_value  记录该字段的值
+// 注意：当前环境没有真正触发的告警，specify_value 尚未被写入（已实测：这些记录 issue_alert=false、
+// 且索引里查不到 specify_value 字段）；一旦有触发数据即会带上。
+// result.is_segmentation 仅作指示标记，保留在投影里供调用方判断该行是否分段；实体是否产出以「值存在」为准。
+// 扁平 segmentation_field / segmentation_value 是更早环境的历史写法，保留为兼容回退，
+// 字段不存在时服务端会静默丢弃，无副作用。
+export const ALERT_HISTORY_SEGMENTATION_NAME_FIELDS = ['result.segmentation_field', 'segmentation_field'] as const;
+export const ALERT_HISTORY_SEGMENTATION_VALUE_FIELDS = ['result.segmentation_specify_value', 'segmentation_value'] as const;
+
+export const ALERT_NAME_FALLBACK_FIELDS = ['alert_name', 'result.name'] as const;
+export const ALERT_TRIGGER_TIME_FALLBACK_FIELDS = [
+    'timestamp',
+    'event_time',
+    'trigger_timestamp',
+    'result.trigger_timestamp',
+    'result.alert_condition_strategy.trigger_time',
+    'result.strategy.trigger.end_time',
+    'result.exec_time',
+] as const;
+export const ALERT_LEVEL_FALLBACK_FIELDS = [
+    'alert_level',
+    'event_level',
+    'result.level',
+    'result.strategy.trigger.level',
+    'result.alert_condition_strategy.alert_level',
+] as const;
+export const ALERT_VALUE_FALLBACK_FIELDS = ['value', 'result.result.value'] as const;
+export const ALERT_DESCRIPTION_FALLBACK_FIELDS = [
+    'result.description',
+    'result.strategy.trigger.compare_desc_text',
+    'result.strategy.description',
+] as const;
+
+export const ALERT_HISTORY_PROJECTION_FLAT_FIELDS = [
+    'alert_name',
+    'alert_id',
+    'alert_level',
+    'event_level',
+    'value',
+    'timestamp',
+    'event_time',
+    'trigger_timestamp',
+    'start_timestamp',
+    'end_timestamp',
+    'issue_alert',
+    'is_recovery',
+    'is_suppressed',
+    'alert_history_id',
+    'appname',
+    'alert_type',
+    'category',
+    'search_url',
+    'segmentation_field',
+    'segmentation_value',
+] as const;
+export const ALERT_HISTORY_PROJECTION_NESTED_FIELDS = [
+    'result.name',
+    'result.alert_id',
+    'result.level',
+    'result.result.value',
+    'result.description',
+    'result.strategy.description',
+    'result.strategy.trigger.level',
+    'result.strategy.trigger.compare',
+    'result.strategy.trigger.compare_value',
+    'result.strategy.trigger.compare_desc_text',
+    'result.alert_condition_strategy.alert_level',
+    'result.alert_condition_strategy.trigger_time',
+    'result.result.complex_value',
+    'result.result.columns.name',
+    'result.search.query',
+    'result.trigger_timestamp',
+    'result.exec_time',
+    'result.is_segmentation',
+    'result.segmentation_field',
+    'result.segmentation_specify_value',
+] as const;
+export const ALERT_HISTORY_NOTIFICATION_FIELD = 'result.plugin.plugin_result';
+
+export const ALERT_DESCRIPTION_SOURCE_LABELS: Record<string, string> = {
+    'result.description': 'result.description',
+    'result.strategy.trigger.compare_desc_text': 'strategy_trigger_desc',
+    'result.strategy.description': 'strategy_description',
+};
+
+const HTML_TAG_RE = /<[^>]*>/g;
+const WHITESPACE_RE = /\s+/g;
+// 相对时间窗的 `now-<N><unit>` 写法；不同版本日志易支持度不同，统一归一化成 `-<N><unit>`。
+const RELATIVE_NOW_RE = /^now\s*-\s*(\d+(?:\.\d+)?)\s*([a-zA-Z]+)$/;
+const ALERT_NAME_IN_TEXT_RE = /告警名称\s*[:：]\s*(.+?)(?=\s*告警级别|\s*告警描述|\s*告警产生时间|$)/;
+const HTML_ENTITY_REPLACEMENTS: Array<[string, string]> = [
+    ['&nbsp;', ' '],
+    ['&lt;', '<'],
+    ['&gt;', '>'],
+    ['&quot;', '"'],
+    ['&#39;', "'"],
+    ['&amp;', '&'],
+];
+
 export const ALERT_CATEGORY_META: Record<number, {
     name: string;
     description: string;
@@ -366,6 +501,662 @@ export class AlertsModule {
             return this.buildError('UPSTREAM_BUSINESS_ERROR', 'get_alerts_batch 上游接口返回失败。', '请检查 id_list 是否正确。', response.data);
         }
         return { ...response, raw_data: response.data, data: response.data };
+    }
+
+    // ---- 已触发告警历史 ----
+
+    async getTriggeredAlerts(params: any): Promise<any> {
+        const built = this.buildHistoryQuery(params);
+        if (built.error) return built.error;
+        const plan = built.value as Record<string, any>;
+
+        const response = await this.client.get(ALERT_HISTORY_SEARCH_PATH, {
+            query: plan.query,
+            time_range: plan.time_range,
+            page: plan.page,
+            size: plan.size,
+        });
+        if (response.error) return response;
+        if (response.data && typeof response.data === 'object' && (response.data as any).result === false) {
+            return this.buildError(
+                'UPSTREAM_BUSINESS_ERROR',
+                'get_triggered_alerts 上游检索接口返回失败。',
+                '请检查 time_range / alert_id 等过滤条件，或稍后重试。',
+                response.data
+            );
+        }
+
+        const rows = AlertsModule.extractHistoryRows(response.data);
+        const payload = AlertsModule.normalizeHistory(rows, plan, AlertsModule.extractHistoryTotal(response.data));
+        return { ...response, raw_data: response.data, data: payload };
+    }
+
+    buildHistoryQuery(params: any): { value?: Record<string, any>; error?: any } {
+        const timeRange = AlertsModule.normalizeHistoryTimeRange(params?.time_range);
+
+        const entityFields = this.normalizeEntityFields(params?.entity_fields);
+        if (entityFields.error) return entityFields;
+
+        const levels = this.normalizeHistoryLevels(params?.levels);
+        if (levels.error) return levels;
+
+        const size = AlertsModule.resolveBoundedInt(params?.size, ALERT_HISTORY_DEFAULT_SIZE, 1, ALERT_HISTORY_MAX_SIZE);
+        const page = AlertsModule.resolveBoundedInt(params?.page, 0, 0, null);
+        const sort = AlertsModule.resolveHistorySort(params?.sort);
+
+        const includeRecovery = typeof params?.include_recovery === 'boolean' ? params.include_recovery : false;
+
+        // 本工具只服务"已触发告警"，issue_alert:true 是恒定条件而非开关——
+        // 否则一个叫 getTriggeredAlerts 的工具会返回未触发的执行记录，语义自相矛盾。
+        const clauses = [`index=${ALERT_HISTORY_INDEX}`, `appname:${ALERT_HISTORY_APPNAME}`, "'issue_alert':true"];
+        if (!includeRecovery) clauses.push("NOT 'is_recovery':true");
+
+        const alertId = AlertsModule.coerceHistoryNumber(params?.alert_id);
+        if (alertId !== null) clauses.push(`alert_id:${Math.trunc(alertId)}`);
+
+        const nameFilter = this.buildHistoryNameFilter(params?.alert_name);
+        if (nameFilter.error) return nameFilter;
+        if (nameFilter.value!.clause) clauses.push(nameFilter.value!.clause);
+
+        const resolvedLevels = levels.value as string[];
+        if (resolvedLevels.length) {
+            const levelClause = resolvedLevels.map((level) => `alert_level:"${level}"`).join(' OR ');
+            clauses.push(`(${levelClause})`);
+        }
+
+        const projection = AlertsModule.buildHistoryProjection(entityFields.value as string[]);
+        // 刻意不在 SPL 里写 `| limit`：一旦写死条数，HTTP 的 page 参数就翻不动页了
+        // （实测 page>=1 恒返回 0 行）。分页交给 size/page 参数处理。
+        const query = [clauses.join(' '), `| sort by ${sort}`, `| fields ${projection.join(', ')}`].join(' ');
+
+        return {
+            value: {
+                query,
+                time_range: timeRange,
+                page,
+                size,
+                entity_fields: entityFields.value,
+                levels: resolvedLevels,
+                include_recovery: includeRecovery,
+                include_search_url: params?.include_search_url === true,
+                timezone: AlertsModule.resolveHistoryTimezone(params?.timezone),
+                sort,
+            },
+        };
+    }
+
+    /**
+     * 把 alert_name 入参翻译成主查询里的索引子句。
+     *
+     * 返回 { value: { clause } }；clause 为空表示不过滤。
+     *
+     * 语义（已实测，见模块顶部常量注释）：
+     * - 不传 / 空串 / 纯 `*`  → 不过滤，即"全系统所有监控"
+     * - 不含 `*`             → `alert_name:<转义后的字面量>` 精确匹配
+     * - 含 `*`               → 同上，但 `*` 保留为通配符（`交换机*`、`*攻击*`）
+     *
+     * 两种写法都落在**主查询**里（而非 `| where` 管道），因此都能吃索引。
+     */
+    buildHistoryNameFilter(raw: unknown): { value?: { clause: string }; error?: any } {
+        if (typeof raw !== 'string') return { value: { clause: '' } };
+        const text = raw.trim();
+        if (!text) return { value: { clause: '' } };
+        // 纯通配符等价于"不过滤"。用户直觉上会传 *，不能让它静默变成"匹配字面星号"而返回 0 条。
+        if ([...text].every((ch) => (ALERT_HISTORY_WILDCARD_CHARS as readonly string[]).includes(ch))) {
+            return { value: { clause: '' } };
+        }
+
+        const keepWildcard = [...text].some((ch) => (ALERT_HISTORY_WILDCARD_CHARS as readonly string[]).includes(ch));
+        return { value: { clause: `alert_name:${AlertsModule.escapeSplTerm(text, keepWildcard)}` } };
+    }
+
+    /**
+     * 把字面量转义成可以直接拼进 `field:<值>` 的形式。
+     *
+     * 规则：**ASCII 非字母数字字符**一律前置反斜杠；非 ASCII 字符（汉字、全角标点）原样保留，
+     * 避免对多字节字符做无法验证的转义。
+     *
+     * 实测（env1 `172.21.16.9` + env2 `192.168.43.196`）转义是幂等安全的：`\_`、`\.`、`\,`、
+     * `\=`、`\>`、`\*`、`\"`、`\\` 都与对应字面量等价；而**不**转义时
+     * ` `、`-`、`/`、`(`、`)`、`[`、`]`、`:`、`|`、`"`、`'`、`!`、`{`、`}`、`<`、`>`
+     * 会报 300/2100 或静默改变匹配结果。所以统一转义是唯一稳的做法。
+     *
+     * keepWildcard=true 时 `*` 不转义，保留通配语义。
+     */
+    static escapeSplTerm(text: string, keepWildcard = false): string {
+        let out = '';
+        for (const ch of text) {
+            // 非 ASCII（码点 >= 0x80）原样保留；JS 的 for...of 按码点迭代，代理对不会被拆开。
+            if (ch.codePointAt(0)! > 0x7f) {
+                out += ch;
+            } else if (/[0-9A-Za-z]/.test(ch)) {
+                out += ch;
+            } else if (keepWildcard && (ALERT_HISTORY_WILDCARD_CHARS as readonly string[]).includes(ch)) {
+                out += ch;
+            } else {
+                out += '\\' + ch;
+            }
+        }
+        return out;
+    }
+
+    private normalizeEntityFields(raw: unknown): { value?: string[]; error?: any } {
+        if (raw === null || raw === undefined || (typeof raw === 'string' && !raw.trim())) {
+            return { value: [...ALERT_HISTORY_DEFAULT_ENTITY_FIELDS] };
+        }
+        const parsed = this.parseArrayLike(raw);
+        if (parsed.error) return { error: parsed.error };
+        const fields: string[] = [];
+        for (const item of parsed.value as unknown[]) {
+            if (typeof item === 'string' && item.trim() && !fields.includes(item.trim())) {
+                fields.push(item.trim());
+            }
+        }
+        if (!fields.length) return { value: [...ALERT_HISTORY_DEFAULT_ENTITY_FIELDS] };
+        return { value: fields };
+    }
+
+    private normalizeHistoryLevels(raw: unknown): { value?: string[]; error?: any } {
+        if (raw === null || raw === undefined || (typeof raw === 'string' && !raw.trim())) {
+            return { value: [] };
+        }
+        const parsed = this.parseArrayLike(raw);
+        if (parsed.error) return { error: parsed.error };
+        const levels: string[] = [];
+        for (const item of parsed.value as unknown[]) {
+            const name = item === null || item === undefined ? '' : String(item).trim().toLowerCase();
+            if (!name) continue;
+            if (!(ALERT_HISTORY_LEVELS as readonly string[]).includes(name)) {
+                return {
+                    error: this.buildError(
+                        'INVALID_PARAM_VALUE',
+                        `levels 含不支持的级别：${item}。`,
+                        `可选级别：${ALERT_HISTORY_LEVELS.join(', ')}。`
+                    ),
+                };
+            }
+            if (!levels.includes(name)) levels.push(name);
+        }
+        return { value: levels };
+    }
+
+    private parseArrayLike(raw: unknown): { value?: unknown[]; error?: any } {
+        if (Array.isArray(raw)) return { value: raw };
+        if (typeof raw === 'string') {
+            const trimmed = raw.trim();
+            if (!trimmed) return { value: [] };
+            if (trimmed.startsWith('[')) {
+                let parsed: unknown;
+                try {
+                    parsed = JSON.parse(trimmed);
+                } catch (error: any) {
+                    return {
+                        error: this.buildError(
+                            'INVALID_JSON_STRING',
+                            '参数不是合法 JSON 数组字符串。',
+                            '请检查 JSON 语法，例如引号、逗号、括号是否完整。',
+                            { parse_error: String(error?.message || error), preview: trimmed.slice(0, 300) }
+                        ),
+                    };
+                }
+                if (!Array.isArray(parsed)) {
+                    return {
+                        error: this.buildError(
+                            'INVALID_PARAM_TYPE',
+                            '参数必须是数组。',
+                            '请传入数组，或传入可解析为数组的 JSON 字符串。'
+                        ),
+                    };
+                }
+                return { value: parsed };
+            }
+            return { value: trimmed.split(',').map((item) => item.trim()).filter((item) => item.length > 0) };
+        }
+        return {
+            error: this.buildError(
+                'INVALID_PARAM_TYPE',
+                '参数必须是数组、逗号分隔字符串，或合法 JSON 数组字符串。',
+                '请传入数组，或传入逗号分隔字符串。'
+            ),
+        };
+    }
+
+    private static resolveBoundedInt(raw: unknown, defaultValue: number, minimum: number, maximum: number | null): number {
+        if (typeof raw === 'boolean' || raw === null || raw === undefined) return defaultValue;
+        let value: number;
+        if (typeof raw === 'string') {
+            const text = raw.trim();
+            if (!/^-?\d+$/.test(text)) return defaultValue;
+            value = Number(text);
+        } else if (typeof raw === 'number' && Number.isInteger(raw)) {
+            value = raw;
+        } else {
+            return defaultValue;
+        }
+        if (value < minimum) return minimum;
+        if (maximum !== null && value > maximum) return maximum;
+        return value;
+    }
+
+    private static resolveHistorySort(raw: unknown): string {
+        if (typeof raw !== 'string' || !raw.trim()) return '-timestamp';
+        const candidate = raw.trim();
+        const descending = candidate.startsWith('-');
+        const name = descending ? candidate.slice(1).trim() : candidate;
+        if (!(ALERT_HISTORY_SORT_FIELDS as readonly string[]).includes(name)) return '-timestamp';
+        return descending ? `-${name}` : name;
+    }
+
+    /**
+     * 归一化时间窗写法，兼容不同版本的日志易。
+     *
+     * 新版只接受 `-<N><unit>,now`（`now-24h,now` 会报 `参数 time_range 的值需满足…`），
+     * 老版两种都接受。实测 `-<N><unit>,now` 在两端通用，故统一转换；
+     * epoch 毫秒、`earliest`、绝对时间等原样透传。
+     */
+    static normalizeHistoryTimeRange(raw: unknown): string {
+        const text = typeof raw === 'string' && raw.trim() ? raw.trim() : ALERT_HISTORY_DEFAULT_TIME_RANGE;
+        const parts = text.split(',');
+        if (parts.length !== 2) return text;
+        const normalized = parts.map((part) => {
+            const token = part.trim();
+            const match = RELATIVE_NOW_RE.exec(token);
+            return match ? `-${match[1]}${match[2]}` : token;
+        });
+        return normalized.join(',');
+    }
+
+    private static resolveHistoryTimezone(raw: unknown): string {
+        if (typeof raw !== 'string' || !raw.trim()) return ALERT_HISTORY_DEFAULT_TIMEZONE;
+        const candidate = raw.trim();
+        try {
+            new Intl.DateTimeFormat('en-US', { timeZone: candidate });
+        } catch {
+            return ALERT_HISTORY_DEFAULT_TIMEZONE;
+        }
+        return candidate;
+    }
+
+    private static buildHistoryProjection(entityFields: string[]): string[] {
+        const rendered: string[] = [];
+        const add = (name: string): void => {
+            const candidate = name.includes('.') ? `'${name}'` : name;
+            if (!rendered.includes(candidate)) rendered.push(candidate);
+        };
+        for (const name of ALERT_HISTORY_PROJECTION_FLAT_FIELDS) add(name);
+        for (const name of entityFields) add(name);
+        for (const name of ALERT_HISTORY_PROJECTION_NESTED_FIELDS) add(name);
+        // 通知正文固定投影：它是"事件描述"的回退来源（正规字段为空时从里面刮），
+        // 属于内部实现细节而非用户要素，所以不做成入参。
+        add(ALERT_HISTORY_NOTIFICATION_FIELD);
+        return rendered;
+    }
+
+    static extractHistoryRows(data: unknown): Array<Record<string, any>> {
+        if (!data || typeof data !== 'object') return [];
+        const results = (data as any).results;
+        if (!results || typeof results !== 'object') return [];
+        const sheets = results.sheets;
+        if (!sheets || typeof sheets !== 'object') return [];
+        const rows = sheets.rows;
+        if (!Array.isArray(rows)) return [];
+        return rows.filter((row: unknown): row is Record<string, any> => !!row && typeof row === 'object' && !Array.isArray(row));
+    }
+
+    static extractHistoryTotal(data: unknown): number | null {
+        if (!data || typeof data !== 'object') return null;
+        const results = (data as any).results;
+        if (!results || typeof results !== 'object') return null;
+        const total = results.total_hits;
+        if (typeof total === 'boolean' || typeof total !== 'number' || !Number.isFinite(total)) return null;
+        return Math.trunc(total);
+    }
+
+    static isEmptyRecordValue(value: unknown): boolean {
+        if (value === null || value === undefined) return true;
+        if (typeof value === 'boolean') return false;
+        if (typeof value === 'string') {
+            const text = value.trim();
+            return text.length === 0 || text.toLowerCase() === 'null';
+        }
+        if (Array.isArray(value)) return value.length === 0;
+        if (typeof value === 'object') return Object.keys(value as Record<string, unknown>).length === 0;
+        return false;
+    }
+
+    static firstPresentEntry(row: Record<string, any>, fields: readonly string[]): { field: string | null; value: any } {
+        for (const field of fields) {
+            if (field in row && !AlertsModule.isEmptyRecordValue(row[field])) {
+                return { field, value: row[field] };
+            }
+        }
+        return { field: null, value: null };
+    }
+
+    static firstPresent(row: Record<string, any>, fields: readonly string[]): any {
+        return AlertsModule.firstPresentEntry(row, fields).value;
+    }
+
+    static coerceHistoryNumber(value: unknown): number | null {
+        if (typeof value === 'boolean' || value === null || value === undefined) return null;
+        if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+        if (typeof value === 'string' && value.trim()) {
+            const parsed = Number(value.trim());
+            return Number.isFinite(parsed) ? parsed : null;
+        }
+        return null;
+    }
+
+    static formatHistoryTime(milliseconds: unknown, timezoneName: string): string | null {
+        const number = AlertsModule.coerceHistoryNumber(milliseconds);
+        if (number === null) return null;
+        const date = new Date(number);
+        if (Number.isNaN(date.getTime())) return null;
+
+        let parts: Intl.DateTimeFormatPart[];
+        try {
+            parts = new Intl.DateTimeFormat('en-US', {
+                timeZone: timezoneName,
+                hour12: false,
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+            }).formatToParts(date);
+        } catch {
+            return null;
+        }
+
+        const lookup: Record<string, string> = {};
+        for (const part of parts) lookup[part.type] = part.value;
+        const hour = String(Number(lookup.hour) % 24).padStart(2, '0');
+        const base = `${lookup.year}-${lookup.month}-${lookup.day}T${hour}:${lookup.minute}:${lookup.second}`;
+
+        const asUtc = Date.UTC(
+            Number(lookup.year),
+            Number(lookup.month) - 1,
+            Number(lookup.day),
+            Number(hour),
+            Number(lookup.minute),
+            Number(lookup.second)
+        );
+        const offsetMinutes = Math.round((asUtc - Math.floor(date.getTime() / 1000) * 1000) / 60000);
+        const sign = offsetMinutes >= 0 ? '+' : '-';
+        const absolute = Math.abs(offsetMinutes);
+        return `${base}${sign}${String(Math.floor(absolute / 60)).padStart(2, '0')}:${String(absolute % 60).padStart(2, '0')}`;
+    }
+
+    static stripHtmlText(value: unknown): string {
+        if (typeof value !== 'string' || !value) return '';
+        let text = value.replace(HTML_TAG_RE, ' ');
+        for (const [entity, replacement] of HTML_ENTITY_REPLACEMENTS) {
+            text = text.split(entity).join(replacement);
+        }
+        return text.replace(WHITESPACE_RE, ' ').trim();
+    }
+
+    static truncateText(text: string, limit: number): string {
+        if (limit <= 0 || text.length <= limit) return text;
+        return text.slice(0, limit);
+    }
+
+    static extractAlertNameFromNotification(raw: unknown): string | null {
+        const text = AlertsModule.stripHtmlText(raw);
+        if (!text) return null;
+        const match = ALERT_NAME_IN_TEXT_RE.exec(text);
+        if (!match) return null;
+        return match[1].trim() || null;
+    }
+
+    static resolveHistoryDescription(row: Record<string, any>): { description: string | null; source: string } {
+        const matched = AlertsModule.firstPresentEntry(row, ALERT_DESCRIPTION_FALLBACK_FIELDS);
+        if (matched.field !== null) {
+            const text = String(matched.value).trim();
+            if (text) {
+                return {
+                    description: AlertsModule.truncateText(text, ALERT_HISTORY_DESCRIPTION_CHARS),
+                    source: ALERT_DESCRIPTION_SOURCE_LABELS[matched.field] || matched.field,
+                };
+            }
+        }
+        // 正规描述字段都空时，从通知正文里刮一段作兜底（内部固定策略，不暴露开关）。
+        const text = AlertsModule.stripHtmlText(row[ALERT_HISTORY_NOTIFICATION_FIELD]);
+        if (text) {
+            return { description: AlertsModule.truncateText(text, ALERT_HISTORY_DESCRIPTION_CHARS), source: 'notification_text' };
+        }
+        return { description: null, source: 'none' };
+    }
+
+    static matchEntityField(row: Record<string, any>, field: string): { key: string; value: any } | null {
+        const candidates = [field];
+        if (!field.startsWith('result.')) candidates.push(`result.${field}`);
+        for (const key of candidates) {
+            if (!(key in row)) continue;
+            const value = row[key];
+            if (AlertsModule.isEmptyRecordValue(value)) continue;
+            if (typeof value === 'string' && (ALERT_HISTORY_MEANINGLESS_ENTITY_VALUES as readonly string[]).includes(value.trim().toLowerCase())) {
+                continue;
+            }
+            return { key, value };
+        }
+        return null;
+    }
+
+    static parseComplexValueEntities(raw: unknown): Record<string, any> {
+        if (typeof raw !== 'string' || !raw.trim()) return {};
+        const entities: Record<string, any> = {};
+        for (const chunk of raw.split(',')) {
+            const separator = chunk.indexOf(':');
+            if (separator < 0) continue;
+            const key = chunk.slice(0, separator).trim();
+            const value = chunk.slice(separator + 1).trim();
+            if (!key || !value) continue;
+            if ((ALERT_HISTORY_AGGREGATE_COLUMNS as readonly string[]).includes(key.toLowerCase())) continue;
+            entities[key] = value;
+        }
+        return entities;
+    }
+
+    static resolveHistoryEntities(row: Record<string, any>, entityFields: string[]): { entities: Record<string, any>; source: string } {
+        const entities: Record<string, any> = {};
+
+        // 1) 分段（分组）实体：研发确认 result.is_segmentation=true 时，
+        //    result.segmentation_field 是实体字段名、result.segmentation_specify_value 是实体字段值。
+        //    以「值存在」为准落地实体——只有标记没有值时（当前环境未真正触发的记录即如此）
+        //    不产出实体，继续走后面的回退链。
+        const segmentationValue = AlertsModule.firstPresent(row, ALERT_HISTORY_SEGMENTATION_VALUE_FIELDS);
+        let hasSegmentation = !AlertsModule.isEmptyRecordValue(segmentationValue);
+        if (hasSegmentation) {
+            const rawKey = AlertsModule.firstPresent(row, ALERT_HISTORY_SEGMENTATION_NAME_FIELDS);
+            const keyName = typeof rawKey === 'string' && rawKey.trim() ? rawKey.trim() : 'segmentation_value';
+            if ((ALERT_HISTORY_AGGREGATE_COLUMNS as readonly string[]).includes(keyName.toLowerCase())) {
+                hasSegmentation = false;
+            } else {
+                entities[keyName] = segmentationValue;
+            }
+        }
+
+        // 2) 用户指定/默认的告警结果字段（与分段实体并存，共同构成"可能涉及的实体"）
+        for (const field of entityFields) {
+            const matched = AlertsModule.matchEntityField(row, field);
+            if (!matched || matched.key in entities) continue;
+            entities[matched.key] = matched.value;
+        }
+
+        if (Object.keys(entities).length) {
+            return { entities, source: hasSegmentation ? 'segmentation_value' : 'entity_fields' };
+        }
+
+        // 3) complex_value 形如 "src_ip:10.0.0.1,dst_ip:10.0.0.2"
+        const complexEntities = AlertsModule.parseComplexValueEntities(row['result.result.complex_value']);
+        if (Object.keys(complexEntities).length) {
+            return { entities: complexEntities, source: 'complex_value' };
+        }
+
+        return { entities: {}, source: 'none' };
+    }
+
+    static resolveHistoryRecovery(row: Record<string, any>): boolean {
+        const raw = row['is_recovery'];
+        if (typeof raw === 'boolean' && raw) return true;
+        if (typeof raw === 'string' && raw.trim().toLowerCase() === 'true') return true;
+        const level = row['alert_level'];
+        return typeof level === 'string' && level.trim().toLowerCase() === 'no_alert';
+    }
+
+    static collectEntityCandidates(rows: Array<Record<string, any>>): string[] {
+        const candidates: string[] = [];
+        for (const row of rows) {
+            const raw = row['result.result.columns.name'];
+            let values: unknown[];
+            if (Array.isArray(raw)) {
+                values = raw;
+            } else if (typeof raw === 'string' && raw.trim()) {
+                let parsed: unknown = null;
+                try {
+                    parsed = JSON.parse(raw);
+                } catch {
+                    parsed = null;
+                }
+                values = Array.isArray(parsed) ? parsed : raw.replace(/^\[/, '').replace(/\]$/, '').split(',');
+            } else {
+                values = [];
+            }
+            for (const item of values) {
+                if (typeof item !== 'string') continue;
+                const name = item.trim();
+                if (!name || candidates.includes(name)) continue;
+                if ((ALERT_HISTORY_AGGREGATE_COLUMNS as readonly string[]).includes(name.toLowerCase())) continue;
+                candidates.push(name);
+            }
+            // 分段字段名（如 appname / json.DST_IP）本身就是最贴切的实体候选，
+            // 在 entities 落空时能直接告诉调用方该换哪个字段下钻。
+            for (const item of ALERT_HISTORY_SEGMENTATION_NAME_FIELDS) {
+                const rawName = row[item];
+                if (typeof rawName !== 'string') continue;
+                const name = rawName.trim();
+                if (!name || candidates.includes(name)) continue;
+                if ((ALERT_HISTORY_AGGREGATE_COLUMNS as readonly string[]).includes(name.toLowerCase())) continue;
+                candidates.push(name);
+            }
+        }
+        return candidates;
+    }
+
+    static normalizeHistoryRow(row: Record<string, any>, plan: Record<string, any>): Record<string, any> {
+        let alertId = AlertsModule.coerceHistoryNumber(row['alert_id']);
+        if (alertId === null) alertId = AlertsModule.coerceHistoryNumber(row['result.alert_id']);
+
+        const nameValue = AlertsModule.firstPresent(row, ALERT_NAME_FALLBACK_FIELDS);
+        let alertName =
+            (typeof nameValue === 'string' || typeof nameValue === 'number') && !(typeof nameValue === 'boolean')
+                ? String(nameValue).trim()
+                : null;
+        if (!alertName) alertName = AlertsModule.extractAlertNameFromNotification(row[ALERT_HISTORY_NOTIFICATION_FIELD]);
+        if (!alertName) alertName = alertId !== null ? `alert_id=${alertId}` : null;
+
+        const triggerMs = AlertsModule.coerceHistoryNumber(AlertsModule.firstPresent(row, ALERT_TRIGGER_TIME_FALLBACK_FIELDS));
+
+        const levelValue = AlertsModule.firstPresent(row, ALERT_LEVEL_FALLBACK_FIELDS);
+        const level = typeof levelValue === 'string' && levelValue.trim() ? levelValue.trim().toLowerCase() : null;
+
+        const valueNumber = AlertsModule.coerceHistoryNumber(AlertsModule.firstPresent(row, ALERT_VALUE_FALLBACK_FIELDS));
+
+        const description = AlertsModule.resolveHistoryDescription(row);
+        const resolvedEntities = AlertsModule.resolveHistoryEntities(row, plan.entity_fields);
+
+        const historyId = AlertsModule.firstPresent(row, ['alert_history_id']);
+
+        const item: Record<string, any> = {
+            alert_name: alertName,
+            alert_id: alertId,
+            alert_history_id: typeof historyId === 'string' ? historyId : null,
+            trigger_time: AlertsModule.formatHistoryTime(triggerMs, plan.timezone),
+            trigger_time_ms: triggerMs,
+            level,
+            value: valueNumber,
+            entities: resolvedEntities.entities,
+            entity_source: resolvedEntities.source,
+            description: description.description,
+            description_source: description.source,
+            is_recovery: AlertsModule.resolveHistoryRecovery(row),
+        };
+        if (plan.include_search_url) {
+            const searchUrl = row['search_url'];
+            item.search_url = typeof searchUrl === 'string' && searchUrl.trim() ? searchUrl : null;
+        }
+        return item;
+    }
+
+    static normalizeHistory(
+        rows: Array<Record<string, any>>,
+        plan: Record<string, any>,
+        total: number | null
+    ): Record<string, any> {
+        const alerts = rows.map((row) => AlertsModule.normalizeHistoryRow(row, plan));
+
+        const levelCounts: Record<string, number> = {};
+        for (const item of alerts) {
+            const level = item.level;
+            if (typeof level === 'string' && level && level !== 'no_alert') {
+                levelCounts[level] = (levelCounts[level] || 0) + 1;
+            }
+        }
+
+        const grouped = new Map<string, Record<string, any>>();
+        for (const item of alerts) {
+            const key = item.alert_id !== null && item.alert_id !== undefined ? `id:${item.alert_id}` : item.alert_name;
+            if (key === null || key === undefined) continue;
+            const entry = grouped.get(String(key)) || { alert_id: item.alert_id, alert_name: item.alert_name, count: 0 };
+            entry.count += 1;
+            grouped.set(String(key), entry);
+        }
+        const alertCounts = Array.from(grouped.values())
+            .sort((a, b) => {
+                if (b.count !== a.count) return b.count - a.count;
+                // 必须用码点序（与 Python 的字符串比较一致）；localeCompare 会按语言环境排序，导致双端漂移。
+                const left = String(a.alert_name || '');
+                const right = String(b.alert_name || '');
+                if (left === right) return 0;
+                return left < right ? -1 : 1;
+            })
+            .slice(0, ALERT_HISTORY_TOP_ALERTS);
+
+        const warnings: string[] = [];
+        if (total === 0) {
+            warnings.push('该时间窗口内没有命中的已触发告警；可放宽 time_range，或把 include_recovery 设为 true 看恢复记录。');
+        }
+        if (alerts.length && alerts.every((item) => item.entity_source === 'none')) {
+            warnings.push(
+                '本页所有记录都未携带实体信息：可用 entity_fields 指定其它字段（参考 entity_candidates 里的列名），或改用日志检索服务下钻。'
+            );
+        }
+        const missingValues = alerts.filter((item) => item.value === null).length;
+        if (missingValues) {
+            warnings.push(`有 ${missingValues} 条记录缺少触发值（value 与 result.result.value 均为空）。`);
+        }
+
+        const payload: Record<string, any> = {
+            time_range: plan.time_range,
+            query_executed: plan.query,
+            total,
+            returned: alerts.length,
+            page: plan.page,
+            size: plan.size,
+            has_more: total !== null && (plan.page + 1) * plan.size < total,
+            level_counts: levelCounts,
+            alert_counts: alertCounts,
+            alerts,
+            warnings,
+        };
+        // 不回显 entity_fields：那是调用方自己传的入参，默认值也写在 schema 里，
+        // 回显只会和 entity_candidates（真正新增的"数据里有哪些列可用"）混淆。
+        // 每条记录的 entities 的 key 本身就是所用字段名，已自描述。
+        const candidates = AlertsModule.collectEntityCandidates(rows);
+        if (candidates.length) payload.entity_candidates = candidates;
+        return payload;
     }
 
     // ---- CRUD ----

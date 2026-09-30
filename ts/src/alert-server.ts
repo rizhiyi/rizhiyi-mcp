@@ -41,7 +41,15 @@ const SERVER_LEVEL_INSTRUCTIONS = `使用说明:
    d) 统计分组字段避免高基数（raw_message、timestamp、session_id 等），优先用 appname、status、level、src_ip 等低基数字段。
    e) check_interval 应与时间窗口匹配：窗口 -5min 时间隔 ≤300s，-1h 时 ≤3600s；间隔过大易漏报，过小重复计算浪费资源。
    f) 通知要携带日志原文时，用 extend_query 引用主搜索结果，不要用 stats count() by raw_message 这类把原文放分组的写法。
-   g) 已运行一段时间的监控可查 index=monitor alert_id:<alert_id> 的历史运行数据校准阈值，减少告警疲劳或告警盲区。`;
+   g) 已运行一段时间的监控可查 index=monitor alert_id:<alert_id> 的历史运行数据校准阈值，减少告警疲劳或告警盲区。
+9. 查【已触发告警】用 get_triggered_alerts（默认看最近 24h）。它读的是 index=monitor appname:alert_record 的
+   执行历史，不是配置本身，返回每条告警的名称/触发时间/实体/级别/触发值/描述，并带 entity_source、
+   description_source 两个来源标记（标记为 none 表示该要素确实没取到，不要臆造）。
+   不传 alert_id / alert_name 就是全系统所有监控，不要传 * 占位；alert_name 支持 * 通配（如 "交换机*"、"*攻击*"）。
+   实体默认取告警结果里的 result.appname 与 result.ip，需要别的字段用 entity_fields 指定（如 result.hostname）；
+   若告警是分段（分组）触发的，实体还会带上 result.segmentation_field 指定的字段（如 appname / json.DST_IP）；
+   若返回的 warnings 提示未携带实体，可参考 entity_candidates 里的列名再换一次。
+   要下钻原始日志：传 include_search_url=true 拿跳转链接，或改用日志检索服务的 log_search_sheet。`;
 
 export function createAlertServer(context: ServerContext): McpServer {
     const client = new LogEaseClient(createHttpClientConfig(context));
@@ -61,6 +69,7 @@ export function createAlertServer(context: ServerContext): McpServer {
         list_alerts:                (p: Record<string, unknown>) => handleToolExecution('list_alerts',                () => alertsModule.listAlerts(p), p),
         get_alert_detail:           (p: Record<string, unknown>) => handleToolExecution('get_alert_detail',           () => alertsModule.getAlertDetail(p), p),
         get_alerts_batch:           (p: Record<string, unknown>) => handleToolExecution('get_alerts_batch',           () => alertsModule.getAlertsBatch(p), p),
+        get_triggered_alerts:       (p: Record<string, unknown>) => handleToolExecution('get_triggered_alerts',       () => alertsModule.getTriggeredAlerts(p), p),
         create_keyword_alert:       (p: Record<string, unknown>) => handleToolExecution('create_keyword_alert',       () => alertsModule.createKeywordAlert(p), p),
         create_field_stat_alert:    (p: Record<string, unknown>) => handleToolExecution('create_field_stat_alert',    () => alertsModule.createFieldStatAlert(p), p),
         create_baseline_alert:      (p: Record<string, unknown>) => handleToolExecution('create_baseline_alert',      () => alertsModule.createBaselineAlert(p), p),

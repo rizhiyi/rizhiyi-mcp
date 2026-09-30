@@ -320,7 +320,8 @@ async function writeUsageLogSafely(
             routeName: context.requestMeta.routeName || 'unknown',
             status,
             duration_ms: Math.max(0, now.getTime() - startedAt),
-            user: context.authContext.username || null,
+            // Basic 认证不注入 username 参数（见 auth-context.ts），身份这里从凭据里取。
+            user: context.authContext.username || context.authContext.authorization?.username || null,
             error_code: errorCode || null,
             guardrail_action: guardrail?.action || null,
             guardrail_risk_score: Number.isInteger(guardrail?.risk_score) ? Number(guardrail?.risk_score) : null,

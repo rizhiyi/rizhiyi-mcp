@@ -2,11 +2,27 @@
 
 ## Unreleased
 
+### Added
+
+- **告警服务新增 `get_triggered_alerts`（已触发告警详情）**：TS/Python 双端同构实现。数据来自告警执行历史 `index=monitor appname:alert_record`，默认只看最近 24h 内真正触发的记录（`'issue_alert':true AND NOT 'is_recovery':true`），逐条返回六要素：告警名称、触发时间、实体、触发级别、触发值、事件描述。
+  - 每个要素都带显式回退链与来源标记（`entity_source` / `description_source`），标记为 `none` 即表示确实未取到，不会臆造。
+  - 实体优先取分段（分组）字段：当 `result.is_segmentation=true` 时，`result.segmentation_field` 是实体字段名、`result.segmentation_specify_value` 是实体字段值；否则按调用方传入的 `entity_fields` 匹配告警结果字段（默认 `["result.appname","result.ip"]`，可换成 `result.hostname` 等任意 `result.*` 字段），再兜底解析 `result.result.complex_value`。实体落空时 `entity_candidates` 会带上分段字段名（如 `appname` / `json.DST_IP`）作为下钻提示。
+  - 记录里的裸 `appname` 恒为 `alert_record`（记录自身的应用名，不是被监控系统），命中该值时会被判为无意义实体并跳过。
+  - 入参全部可选（共 11 个）：不传 `alert_id` / `alert_name` 即全系统所有监控的最近告警，不需要传 `*` 占位；`levels` 不传即全部级别；`time_range` 默认 `-24h,now`，并兼容 `now-24h,now` 与 epoch 毫秒写法。
+  - `alert_name` 默认精确匹配，支持 `*` 通配（`交换机*` 匹配前缀、`*攻击*` 匹配包含）。名称里的空格、斜杠、括号、引号等特殊字符由工具自动转义，调用方无需处理；唯一限制是名称本身含**字面星号**时无法精确匹配，需改用日志检索工具。
+  - 查询完全由结构化参数拼装，不开放任意 SPL 注入。
+- **HTTP 网关新增上游请求超时配置 `UPSTREAM_TIMEOUT_SECONDS`**（默认 30 秒，TS/Python 同名同默认值）。
+- **HTTP 网关新增请求体大小上限 `MCP_HTTP_MAX_BODY_BYTES`**（默认 4MB）；超限时返回 `413 REQUEST_BODY_TOO_LARGE`。
+- **HTTP 网关新增 session 空闲回收与数量上限**：`MCP_HTTP_SESSION_IDLE_TTL_SECONDS`（默认 1800）与 `MCP_HTTP_SESSION_MAX_COUNT`（默认 256）。后台每 60 秒先按空闲 TTL 清理、再按数量上限淘汰最旧 session，淘汰时关闭其 transport；`GET /healthz` 新增 `session_count`。
+
+### Changed
+
+- **HTTP 网关的上游请求超时不再受护栏开关影响**：护栏处于 `enforce` 且命中 SPL 执行路径时仍使用 `MCP_GUARDRAIL_EXEC_TIMEOUT_SECONDS`，其余情况统一回退到 `UPSTREAM_TIMEOUT_SECONDS`（默认 30 秒）。
+- **TypeScript 网关的 `express.json` 请求体上限由硬编码 4MB 改为读 `MCP_HTTP_MAX_BODY_BYTES`**，与 Python 侧行为对齐。
+
 ### Fixed
 
-- **H2 上游请求超时与护栏解耦**：新增 `UPSTREAM_TIMEOUT_SECONDS`（默认 30 秒，TS/Python 同名同默认值）。TypeScript 的 axios `timeoutMs` 与工具执行 `withTimeout`、Python 的 `asyncio.wait_for` 不再依赖护栏开关；护栏处于 `enforce` 且命中 SPL 执行路径时仍使用 `MCP_GUARDRAIL_EXEC_TIMEOUT_SECONDS`，其余情况回退到 `UPSTREAM_TIMEOUT_SECONDS`。
-- **H3 请求体大小上限**：新增 `MCP_HTTP_MAX_BODY_BYTES`（默认 4MB）。Python 网关 `_consume_request_body` 累计超限即中断读取并返回 `413 REQUEST_BODY_TOO_LARGE`；TypeScript 的 `express.json` 上限由硬编码 `'4mb'` 改为读同一配置键，并通过错误中间件返回一致的 413 JSON。
-- **H4 HTTP session 空闲回收与数量上限**：新增 `MCP_HTTP_SESSION_IDLE_TTL_SECONDS`（默认 1800）与 `MCP_HTTP_SESSION_MAX_COUNT`（默认 256）。两端记录 session 最近活跃时间并在每次请求刷新，后台每 60 秒 GC：先按空闲 TTL 清理，再按数量上限淘汰最旧 session，淘汰时真正关闭 transport（TS 关闭 server + transport，Python 终止 SDK transport）；`GET /healthz` 两端均暴露 `session_count`。
+- **Basic 认证不再注入 `username` query 参数**：此前对所有认证方式都从凭据里拆出 `username` 并附加到请求 URL 上，遇到直接拒绝该参数的日志易版本（Http Basic 部署，返回 `4104 Parameters 中不支持传入 username`）会导致**所有**请求失败。现在只有 `apikey` 认证才派生 `username`（这类部署确实要求把用户名作为 query 参数传入），Basic 认证的身份改从 `Authorization` 头解析结果里读取；显式配置的 `LOGEASE_USERNAME` 仍然优先。
 
 ## 0.3.1
 

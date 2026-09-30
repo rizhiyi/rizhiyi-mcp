@@ -286,7 +286,9 @@ class RizhiyiFastMCPServer(FastMCP[None]):
                     route_name=request_meta.route_name or self.route_name,
                     status=status,
                     duration_ms=duration_ms,
-                    user=context.auth_context.username,
+                    # Basic 认证不注入 username 参数（见 auth.py），身份这里从凭据里取。
+                    user=context.auth_context.username
+                    or (context.auth_context.authorization.username if context.auth_context.authorization else None),
                     error_code=error_code,
                     guardrail=guardrail,
                 )

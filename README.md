@@ -16,7 +16,7 @@
 | 管理解析规则（schema on write） | `rizhiyi_parserule`     | `create_parserule`、`verify_parserule`、`list_parserules`                                            |
 | 管理动态字段（schema on read）  | `rizhiyi_dynamic_field` | `create_fieldconfig`、`list_fieldconfigs`、`apply_fieldconfig`                                       |
 | 管理采集 Agent、pipeline     | `rizhiyi_ingest`        | `list_agent_groups`、`assign_agent_to_group`、`list_pipelines`、`query_agent_status`                  |
-| 管理监控 / 告警配置（关键字/字段统计/SPL/流式/联合） | `rizhiyi_alert`     | `create_keyword_alert` 等 8 个按类型创建工具、`update_alert`、`preview_alert`、`testrun_alert`、`list_alerts`、`get_alert_category_reference` |
+| 管理监控 / 告警配置（关键字/字段统计/SPL/流式/联合） | `rizhiyi_alert`     | `create_keyword_alert` 等 8 个按类型创建工具、`update_alert`、`preview_alert`、`testrun_alert`、`list_alerts`、`get_triggered_alerts`（已触发告警详情）、`get_alert_category_reference` |
 | 管理类通用 OpenAPI           | `rizhiyi_manage`        | 按 tag 分类的增删改查工具（面较小，上下文友好）                                                                         |
 | 完整 OpenAPI 直通（已废弃）     | `openapi_server`        | TypeScript 独立 server 已废弃；请使用 Python HTTP 版的 `openapi` 路由                                                               |
 
