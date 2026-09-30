@@ -388,7 +388,7 @@ def create_http_app(runtime_config: RuntimeConfig | None = None) -> FastAPI:
                 with suppress(asyncio.CancelledError):
                     await gc_task
 
-    app = FastAPI(title="rizhiyi-mcp-python", version="0.3.1", lifespan=lifespan)
+    app = FastAPI(title="rizhiyi-mcp-python", version="0.4.0", lifespan=lifespan)
     app.router.redirect_slashes = False
 
     for route_name, factory in server_registry.items():
