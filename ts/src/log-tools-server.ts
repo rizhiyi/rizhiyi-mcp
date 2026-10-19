@@ -262,9 +262,7 @@ async function handleDataOverview(params: any) {
     }
     const result = await statisticsModule.executeDataOverview(
         params.query || "*",
-        params.time_range,
-        params.metric_field,
-        params.percentiles || [50, 90, 99]
+        params.time_range
     );
     return formatResult(result, params);
 }

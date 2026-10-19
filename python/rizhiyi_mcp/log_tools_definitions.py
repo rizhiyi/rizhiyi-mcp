@@ -99,8 +99,6 @@ BASIC_LOG_TOOLS: list[ToolDefinition] = [
             "properties": {
                 "query": {"type": "string", "description": '搜索查询语句，默认 "*"。', "default": "*"},
                 "time_range": {"type": "string", "description": '时间范围，例如 "now-1h,now"。', "default": "now-15m,now"},
-                "metric_field": {"type": "string", "description": "可选数值字段。"},
-                "percentiles": {"type": "array", "items": {"type": "number"}, "default": [50, 90, 99]},
             },
         },
     ),

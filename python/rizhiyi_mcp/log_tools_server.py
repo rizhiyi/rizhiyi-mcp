@@ -79,7 +79,6 @@ class LogToolsServer(RizhiyiFastMCPServer):
             result = await self._business_service.execute_data_overview(
                 query=self._coerce_str(safe_arguments.get("query"), default="*"),
                 time_range=self._coerce_str(safe_arguments.get("time_range"), default="now-15m,now"),
-                metric_field=self._optional_str(safe_arguments.get("metric_field")),
             )
             return self._format_result(name, result, safe_arguments)
 

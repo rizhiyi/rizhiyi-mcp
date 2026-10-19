@@ -915,7 +915,7 @@ class LogToolsBusinessService:
         )
 
     async def execute_data_overview(
-        self, *, query: str, time_range: str, metric_field: str | None = None
+        self, *, query: str, time_range: str
     ) -> ApiResponse[dict[str, Any]]:
         response = await self._search_rows(query=query, time_range=time_range, size=1)
         if response.error or response.data is None:
@@ -923,7 +923,7 @@ class LogToolsBusinessService:
         total = self._coerce_int(response.data.get("total"), default=0, minimum=0)
         return ApiResponse(
             status=response.status,
-            data={"total": total, "count": total, "query": query, "time_range": time_range, "metric_field": metric_field},
+            data={"total": total, "count": total, "query": query, "time_range": time_range},
             message="数据概览获取成功",
         )
 

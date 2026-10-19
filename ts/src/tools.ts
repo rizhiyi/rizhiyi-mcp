@@ -328,7 +328,7 @@ export const basicLogTools: ToolDefinition[] = [
     },
     {
         name: 'data_overview',
-        description: '数据概览：返回指定时间窗口内的日志总量与每秒事件数（events per second），用于快速判断数据规模；当提供 metric_field 时，额外返回该数值字段的 count/min/max/avg/sum 与百分位数。适合在深入分析前俯瞰全局。',
+        description: '数据概览：返回指定时间范围内的日志总量和基础统计。只用于数量/整体情况概览；趋势、异常和根因请使用对应分析工具。',
         inputSchema: {
             type: 'object',
             properties: {
@@ -341,16 +341,6 @@ export const basicLogTools: ToolDefinition[] = [
                     type: 'string',
                     description: '时间范围，例如："now-1h,now"',
                     default: 'now-15m,now'
-                },
-                metric_field: {
-                    type: 'string',
-                    description: '可选，数值型字段名。提供后会额外返回该字段的统计值与百分位数。'
-                },
-                percentiles: {
-                    type: 'array',
-                    items: { type: 'number' },
-                    description: '当提供 metric_field 时计算的百分位数，默认[50,90,99]',
-                    default: [50, 90, 99]
                 }
             },
             required: ['time_range']

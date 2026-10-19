@@ -499,32 +499,36 @@ export class StatisticsModule {
     }
 
     /**
-     * 计算数据概览
+     * 计算数据概览：返回指定时间范围内的日志总量。
      */
     async executeDataOverview(
         query: string,
-        timeRange: string,
-        metricField?: string,
-        percentiles: number[] = [50, 90, 99]
+        timeRange: string
     ): Promise<ApiResponse<any>> {
         try {
-            const apiPath = '/api/v3/search/overview/';
-            const params = {
+            const result = await this.client.get<any>('/api/v3/search/sheets/', {
                 query,
                 time_range: timeRange,
-                ...(metricField && { metric_field: metricField }),
-                percentiles: percentiles.join(',')
-            };
+                page: 0,
+                size: 1
+            });
 
-            const result = await this.client.get<any>(apiPath, params);
-            
             if (result.error) {
                 return result;
             }
 
+            const rawTotal = result.data?.results?.total_hits;
+            const parsedTotal = Number(rawTotal);
+            const total = Number.isFinite(parsedTotal) ? Math.max(0, Math.trunc(parsedTotal)) : 0;
+
             return {
                 status: result.status,
-                data: result.data,
+                data: {
+                    total,
+                    count: total,
+                    query,
+                    time_range: timeRange
+                },
                 message: '数据概览获取成功'
             };
         } catch (error: any) {
