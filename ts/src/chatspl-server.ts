@@ -17,8 +17,8 @@ const SERVER_LEVEL_INSTRUCTIONS = `使用说明:
 5. 遇到错误时，优先根据 suggestion 字段修正参数后重试一次。`;
 
 export function createChatsplServer(context: ServerContext): McpServer {
-    const client = new LogEaseClient(createHttpClientConfig(context));
     const httpClientConfig = createHttpClientConfig(context);
+    const client = new LogEaseClient(httpClientConfig);
     const chatSplModule = new ChatSplModule(client, httpClientConfig);
 
     const server = new McpServer(

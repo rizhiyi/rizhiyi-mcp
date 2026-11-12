@@ -330,10 +330,53 @@ export function getRuntimeConfig(env: NodeJS.ProcessEnv = process.env): RuntimeC
     };
 }
 
+/**
+ * 进程级共享的 https Agent，按 rejectUnauthorized 值缓存。
+ *
+ * 之前每次 `createHttpClientConfig` 都会新建一个 Agent：HTTP 网关下每个 MCP
+ * session 各持一份连接池，跨 session 无法复用连接。改成按配置缓存后，同类
+ * 配置共用同一个连接池。
+ *
+ * 另外必须显式打开 keepAlive：Node 里手工 `new https.Agent()` 的 keepAlive
+ * 默认为 false，即便 Agent 被复用，每个请求仍会重新做 TCP + TLS 握手。
+ *
+ * 注意：`rejectUnauthorized` 由环境变量 LOGEASE_TLS_REJECT_UNAUTHORIZED 控制，
+ * 默认值保持 false（兼容日志易内部自签证书），不在这里改变默认行为。
+ */
+const sharedHttpsAgents = new Map<boolean, https.Agent>();
+let agentExitHookRegistered = false;
+
+function ensureAgentExitHook(): void {
+    if (agentExitHookRegistered) {
+        return;
+    }
+    agentExitHookRegistered = true;
+    // 'exit' 回调必须是同步的；agent.destroy() 同步关闭空闲 socket。
+    process.once('exit', destroySharedHttpsAgents);
+}
+
 export function createHttpsAgent(runtimeConfig: RuntimeConfig): https.Agent {
-    return new https.Agent({
-        rejectUnauthorized: runtimeConfig.rejectUnauthorized
+    const { rejectUnauthorized } = runtimeConfig;
+    const cached = sharedHttpsAgents.get(rejectUnauthorized);
+    if (cached) {
+        return cached;
+    }
+
+    const agent = new https.Agent({
+        keepAlive: true,
+        rejectUnauthorized
     });
+    sharedHttpsAgents.set(rejectUnauthorized, agent);
+    ensureAgentExitHook();
+    return agent;
+}
+
+/** 关闭并清理进程级共享 Agent（进程退出与测试使用）。 */
+export function destroySharedHttpsAgents(): void {
+    for (const agent of sharedHttpsAgents.values()) {
+        agent.destroy();
+    }
+    sharedHttpsAgents.clear();
 }
 
 export function createHttpClientConfig(context: ServerContext): HttpClientConfig {

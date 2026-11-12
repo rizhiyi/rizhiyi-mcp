@@ -21,6 +21,11 @@ interface SseClientOptions {
     headers?: Record<string, string>;
     body?: string;
     timeoutMs?: number;
+    /**
+     * 与普通 HTTP 请求共用同一个 https Agent，从而复用 LOGEASE_TLS_REJECT_UNAUTHORIZED
+     * 配置与连接池。缺省时使用 Node 默认 Agent（默认校验证书）。
+     */
+    httpsAgent?: https.Agent;
     onEvent?: (event: SseEvent) => void;
 }
 
@@ -132,9 +137,14 @@ export function requestSse(options: SseClientOptions): Promise<SseChatResult> {
             port: url.port || (isHttps ? 443 : 80),
             path: url.pathname + url.search,
             method: options.method || 'POST',
-            headers: reqHeaders,
-            rejectUnauthorized: false
+            headers: reqHeaders
         } as https.RequestOptions;
+
+        // 不再硬编码 rejectUnauthorized:false，改为复用调用方传入的 Agent；
+        // 未传时保持 Node 默认行为（校验证书）。
+        if (isHttps && options.httpsAgent) {
+            reqOptions.agent = options.httpsAgent;
+        }
 
         const result: SseChatResult = { steps: [], raw_events: [] };
         const parser = new SseParser();

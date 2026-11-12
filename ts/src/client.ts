@@ -1,5 +1,4 @@
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
-import https from 'https';
 import { HttpClientConfig, ApiResponse } from './types.js';
 import { QueryCache } from './query-cache.js';
 
@@ -12,7 +11,9 @@ export class LogEaseClient {
         this.client = axios.create({
             baseURL: config.baseURL,
             headers: config.headers,
-            httpsAgent: config.httpsAgent || new https.Agent({ rejectUnauthorized: false }),
+            // 不传时交给 axios 默认 Agent（默认会校验证书）；
+            // 不能在这里兜底成 rejectUnauthorized:false，否则会绕过 TLS 配置。
+            httpsAgent: config.httpsAgent,
             timeout: config.timeoutMs
         });
         this.username = config.username;

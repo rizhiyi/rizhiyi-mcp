@@ -209,6 +209,7 @@ export class ChatSplModule {
                 url,
                 headers,
                 body,
+                httpsAgent: this.httpClientConfig.httpsAgent,
                 timeoutMs: 120000,
                 onEvent: (evt) => {
                     if (evt.event === 'CREATE_STEP') {
