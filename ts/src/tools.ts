@@ -186,7 +186,7 @@ export const basicLogTools: ToolDefinition[] = [
     },
     {
         name: 'log_reduce_preview',
-        description: '根据任务ID(sid)轮询并返回日志聚类结果。适合回答“最近有哪些重复日志模式”“哪几类 raw_message/错误模式最常见”。当 `analyze_patterns=true` 时，会在返回聚类结果的同时，对每个聚类模式补充时间分布、突发性、周期性、异常点和重要性分析，适合继续判断哪些模式更值得优先排查。',
+        description: '根据任务ID(sid)轮询并返回日志聚类结果。适合回答“最近有哪些重复日志模式”“哪几类 raw_message/错误模式最常见”。聚类可能需要数分钟；若本次调用内未完成，会返回 in_progress=true 与 sid，请继续用同一 sid 调用本工具，不要把这种进度结果当作失败。当 `analyze_patterns=true` 时，会在返回聚类结果的同时，对每个聚类模式补充时间分布、突发性、周期性、异常点和重要性分析，适合继续判断哪些模式更值得优先排查。',
         inputSchema: {
             type: 'object',
             properties: {
@@ -210,8 +210,8 @@ export const basicLogTools: ToolDefinition[] = [
                 },
                 deadline_ms: {
                     type: 'integer',
-                    description: '轮询总 deadline（毫秒），默认 30000；超时返回 sid 和 job_status 供后续继续查询',
-                    default: 30000
+                    description: '轮询总 deadline（毫秒），默认 20000，且不会超过工具执行超时（预留 3 秒收尾）。超时返回 sid、job_status 与 in_progress=true 供后续继续查询',
+                    default: 20000
                 },
                 analyze_patterns: {
                     type: 'boolean',

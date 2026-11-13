@@ -369,7 +369,7 @@ export class LogSearchModule {
         sid: string,
         maxRetries: number = 10,
         retryInterval: number = 1000,
-        deadlineMs: number = 30000
+        deadlineMs: number = 20000
     ): Promise<ApiResponse<LogReduceResponse>> {
         try {
             const apiPath = `/api/v3/search/preview/logreduce/`;
@@ -380,8 +380,11 @@ export class LogSearchModule {
             let lastResult: ApiResponse<any> | undefined;
 
             for (let attempt = 0; attempt < retries; attempt += 1) {
+                // 单次请求不能吃掉整个 deadline，否则外层工具超时会先于本工具的
+                // 轮询收尾触发，调用方只能拿到 SPL_EXECUTION_TIMEOUT 和丢失的 sid。
+                const remainingMs = Math.max(1000, deadline - (Date.now() - startedAt));
                 const result = await this.client.get<any>(apiPath, { sid }, {
-                    timeout: 30000, // 增加超时时间到 30 秒
+                    timeout: Math.min(30000, remainingMs),
                     transformResponse: [(data: any) => {
                         // 处理 API 返回重复 result 键的问题
                         if (typeof data === 'string') {
@@ -400,23 +403,37 @@ export class LogSearchModule {
                 lastResult = result;
                 if (result.error) return result;
                 const status = String(result.data?.job_status || '').toUpperCase();
-                if (status === 'COMPLETED' || status === 'FAILED' || result.data?.result?.body || result.data?.tree_layer?.clusters) {
-                    return this.normalizeLogReducePreviewResult(result);
+                // 注意：任务 RUNNING 时上游也可能返回 tree_layer.clusters=[]，
+                // 空数组不能当作“已完成”，否则会提前返回 0 条模式。
+                const patternsBody = result.data?.result?.body;
+                const treeClusters = result.data?.tree_layer?.clusters;
+                const hasPatterns = (Array.isArray(patternsBody) && patternsBody.length > 0)
+                    || (Array.isArray(treeClusters) && treeClusters.length > 0);
+                if (status === 'COMPLETED' || status === 'FAILED' || hasPatterns) {
+                    return this.normalizeLogReducePreviewResult(result, sid);
                 }
                 if (Date.now() - startedAt >= deadline || attempt >= retries - 1) break;
                 const delay = Math.min(initialDelay * (2 ** attempt), 8000, deadline - (Date.now() - startedAt));
                 if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
             }
 
+            // 任务仍在执行不是失败：上游聚类可能需要数分钟。返回可继续轮询的
+            // 进度结果（sid + job_status），避免调用方把“还在跑”当成错误终止。
             const data = lastResult?.data;
+            const jobStatus = data?.job_status || 'RUNNING';
             return {
                 status: lastResult?.status,
-                error: '聚类任务未完成',
-                error_code: 'LOG_REDUCE_TIMEOUT',
-                suggestion: `任务仍在处理中，请稍后使用 sid=${sid} 再次调用 log_reduce_preview。`,
-                retryable: true,
-                details: { sid, job_status: data?.job_status, deadline_ms: deadline, max_retries: retries },
-                message: '达到日志聚类轮询 deadline，已返回可继续查询的任务信息'
+                data: {
+                    sid,
+                    job_status: jobStatus,
+                    in_progress: true,
+                    total_hits: Number(data?.tree_layer?.total_hits ?? data?.result?.total_hits ?? 0),
+                    result: [],
+                    deadline_ms: deadline,
+                    retry_after_ms: 2000,
+                    message: `聚类任务仍在执行（job_status=${jobStatus}）。请稍后使用 sid=${sid} 再次调用 log_reduce_preview。`
+                },
+                message: '日志聚类任务尚未完成，已返回可继续查询的任务信息'
             };
         } catch (error: any) {
             return {
@@ -426,19 +443,24 @@ export class LogSearchModule {
         }
     }
 
-    private normalizeLogReducePreviewResult(result: ApiResponse<any>): ApiResponse<LogReduceResponse> {
+    private normalizeLogReducePreviewResult(result: ApiResponse<any>, requestedSid?: string): ApiResponse<LogReduceResponse> {
             if (result.error) {
                 return result;
             }
 
             const data = result.data;
             
-            // 确定结果数据位置：可能在 result.body 或 tree_layer.clusters
-            let patterns = [];
-            if (data?.result?.body) {
-                patterns = data.result.body;
-            } else if (data?.tree_layer?.clusters) {
-                patterns = data.tree_layer.clusters;
+            // 确定结果数据位置：可能在 result.body 或 tree_layer.clusters。
+            // 上游 RUNNING 时也可能给出空的 body / clusters，优先取非空的一份。
+            const body = data?.result?.body;
+            const clusters = data?.tree_layer?.clusters;
+            let patterns: any[] = [];
+            if (Array.isArray(body) && body.length > 0) {
+                patterns = body;
+            } else if (Array.isArray(clusters) && clusters.length > 0) {
+                patterns = clusters;
+            } else if (Array.isArray(body)) {
+                patterns = body;
             }
 
             // 移除 _cus_raw 字段以节省上下文空间
@@ -453,9 +475,10 @@ export class LogSearchModule {
             return {
                 status: result.status,
                 data: {
-                    sid: data?.sid,
+                    // 上游预览接口不保证回传 sid，回填调用方传入的 sid 以保证可继续轮询。
+                    sid: data?.sid || requestedSid,
                     job_status: data?.job_status,
-                    total_hits: data?.result?.total_hits || 0,
+                    total_hits: Number(data?.tree_layer?.total_hits ?? data?.result?.total_hits ?? 0),
                     result: patterns
                 }
             };

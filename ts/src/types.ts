@@ -57,6 +57,10 @@ export interface LogReduceResponse {
     sid?: string;
     job_status?: string;
     total_hits?: number;
+    in_progress?: boolean;
+    deadline_ms?: number;
+    retry_after_ms?: number;
+    message?: string;
     tree_layer?: {
         clusters?: LogReducePatternCluster[];
     };

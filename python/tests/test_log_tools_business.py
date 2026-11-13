@@ -94,6 +94,74 @@ class LogToolsBusinessGatewayTestCase(LogToolsHttpTestCase):
             {"normal", "anomalous", "bursty", "periodic"},
         )
 
+    def test_log_reduce_preview_running_returns_progress_not_error(self) -> None:
+        """任务未完成时必须是可继续轮询的进度结果，且不能被空 clusters 提前判定完成。"""
+
+        async def fake_request_json(path, *, params=None):
+            self.assertEqual(path, "/api/v3/search/preview/logreduce/")
+            self.assertEqual(params, {"sid": "sid-running"})
+            return api_response(
+                data={
+                    "rc": 0,
+                    "job_status": "RUNNING",
+                    "result": True,
+                    "tree_layer": {"clusters": [], "level": 0, "max_level": 0, "total_hits": 0},
+                }
+            )
+
+        service = LogToolsBusinessService(fake_request_json)
+        response = asyncio.run(
+            service.execute_log_reduce_preview(
+                sid="sid-running",
+                max_retries=10,
+                retry_interval_ms=0,
+                deadline_ms=1000,
+            )
+        )
+
+        self.assertIsNone(response.error, "轮询超时应作为进度结果返回，而不是错误")
+        data = response.data or {}
+        self.assertEqual(data["job_status"], "RUNNING")
+        self.assertTrue(data["in_progress"])
+        self.assertEqual(data["sid"], "sid-running")
+        self.assertEqual(data["result"], [])
+
+    def test_log_reduce_preview_reads_total_hits_from_tree_layer(self) -> None:
+        async def fake_request_json(path, *, params=None):
+            return api_response(
+                data={
+                    "rc": 0,
+                    "job_status": "COMPLETED",
+                    "result": True,
+                    "tree_layer": {
+                        "clusters": [{"id": "c1", "pattern_string": "boom", "count": 7, "_cus_raw": {}}],
+                        "level": 0,
+                        "max_level": 0,
+                        "total_hits": 7,
+                    },
+                }
+            )
+
+        service = LogToolsBusinessService(fake_request_json)
+        response = asyncio.run(
+            service.execute_log_reduce_preview(sid="sid-done", max_retries=1, retry_interval_ms=0)
+        )
+
+        self.assertIsNone(response.error)
+        data = response.data or {}
+        self.assertEqual(data["sid"], "sid-done")
+        self.assertEqual(data["total_hits"], 7)
+        self.assertEqual(len(data["result"]), 1)
+        self.assertNotIn("_cus_raw", data["result"][0])
+
+    def test_log_reduce_deadline_is_clamped_below_tool_timeout(self) -> None:
+        from rizhiyi_mcp.log_tools_server import resolve_log_reduce_deadline_ms
+
+        self.runtime_config.upstream_timeout_seconds = 30
+        self.assertEqual(resolve_log_reduce_deadline_ms(self.runtime_config, None), 20000)
+        self.assertEqual(resolve_log_reduce_deadline_ms(self.runtime_config, 60000), 27000)
+        self.assertEqual(resolve_log_reduce_deadline_ms(self.runtime_config, 5000), 5000)
+
     def test_trend_summary_real_fixture_resource_can_be_reused_by_anomaly_points(self) -> None:
         session_id = self._initialize_session()
         calls: list[dict] = []

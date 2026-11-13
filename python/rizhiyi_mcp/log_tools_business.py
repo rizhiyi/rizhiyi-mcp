@@ -76,7 +76,7 @@ class LogToolsBusinessService:
         sid: str,
         max_retries: int = 10,
         retry_interval_ms: int = 1000,
-        deadline_ms: int = 30000,
+        deadline_ms: int = 20000,
     ) -> ApiResponse[dict[str, Any]]:
         last_response: ApiResponse[dict[str, Any]] | None = None
         retries = max(1, max_retries)
@@ -104,7 +104,8 @@ class LogToolsBusinessService:
                         "sid": data.get("sid") or sid,
                         "job_status": data.get("job_status"),
                         "total_hits": self._coerce_int(
-                            self._dig(data, ["result", "total_hits"]),
+                            self._dig(data, ["tree_layer", "total_hits"])
+                            or self._dig(data, ["result", "total_hits"]),
                             default=0,
                             minimum=0,
                         ),
@@ -119,24 +120,30 @@ class LogToolsBusinessService:
                 if delay > 0:
                     await asyncio.sleep(delay)
 
-        if last_response is not None and last_response.data is not None:
-            data = last_response.data
-            return ApiResponse(
-                status=last_response.status,
-                error="聚类任务未完成",
-                error_code="LOG_REDUCE_TIMEOUT",
-                suggestion=f"任务仍在处理中，请稍后使用 sid={sid} 再次调用 log_reduce_preview。",
-                retryable=True,
-                details={"sid": sid, "job_status": data.get("job_status"), "deadline_ms": max(1000, deadline_ms), "max_retries": retries},
-                message="达到日志聚类轮询 deadline，已返回可继续查询的任务信息",
-            )
-
+        # 任务仍在执行不是失败：上游聚类可能需要数分钟，返回可继续轮询的进度结果。
+        data = last_response.data if last_response is not None and last_response.data is not None else {}
+        job_status_value = str(data.get("job_status") or "RUNNING")
+        total_hits = self._coerce_int(
+            self._dig(data, ["tree_layer", "total_hits"]) or self._dig(data, ["result", "total_hits"]),
+            default=0,
+            minimum=0,
+        )
         return ApiResponse(
-            error="聚类任务未完成",
-            error_code="LOG_REDUCE_TIMEOUT",
-            suggestion=f"任务仍在处理中，请稍后使用 sid={sid} 再次调用 log_reduce_preview。",
-            retryable=True,
-            message="在指定重试次数内未拿到聚类完成结果",
+            status=last_response.status if last_response is not None else None,
+            data={
+                "sid": sid,
+                "job_status": job_status_value,
+                "in_progress": True,
+                "total_hits": total_hits,
+                "result": [],
+                "deadline_ms": max(1000, deadline_ms),
+                "retry_after_ms": 2000,
+                "message": (
+                    f"聚类任务仍在执行（job_status={job_status_value}）。"
+                    f"请稍后使用 sid={sid} 再次调用 log_reduce_preview。"
+                ),
+            },
+            message="日志聚类任务尚未完成，已返回可继续查询的任务信息",
         )
 
     def analyze_pattern_results(
@@ -1374,14 +1381,12 @@ class LogToolsBusinessService:
 
     def _extract_log_reduce_patterns(self, data: dict[str, Any]) -> list[dict[str, Any]]:
         result_body = self._dig(data, ["result", "body"])
-        if isinstance(result_body, list):
-            return [item for item in result_body if isinstance(item, dict)]
         clusters = self._dig(data, ["tree_layer", "clusters"])
-        if isinstance(clusters, list):
-            return [item for item in clusters if isinstance(item, dict)]
         direct = data.get("result")
-        if isinstance(direct, list):
-            return [item for item in direct if isinstance(item, dict)]
+        # 上游 RUNNING 时也可能给出空的 body / clusters，优先返回非空的一份。
+        for candidate in (result_body, clusters, direct):
+            if isinstance(candidate, list) and candidate:
+                return [item for item in candidate if isinstance(item, dict)]
         return []
 
     def _strip_cluster_raw_fields(self, patterns: list[dict[str, Any]]) -> None:

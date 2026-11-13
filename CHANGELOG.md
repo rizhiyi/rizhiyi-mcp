@@ -8,6 +8,12 @@
 
 ### Fixed
 
+- `log_reduce_preview` 不再「必然失败」：
+  - 轮询默认 deadline 原为 30s，与外层统一工具执行超时（`UPSTREAM_TIMEOUT_SECONDS`，默认 30s）完全相等，外层 `withTimeout` 总是先触发，调用方只能拿到不含 `sid` 的 `SPL_EXECUTION_TIMEOUT`，无法继续轮询。现在默认 deadline 收敛到 20s，并按实际执行超时预留 3s 收尾（用户传入更大的 `deadline_ms` 也会被同样收敛），保证工具能自行返回进度结果。
+  - 任务未完成不再作为 error 返回：改为 `in_progress=true`、`job_status`、`sid`、`retry_after_ms` 的进度结果，模型可继续用同一 `sid` 轮询，而不是把它当成失败终止。
+  - 上游在任务 `RUNNING` 时也会返回空的 `tree_layer.clusters`，此前被当作「已完成」，导致聚类预览直接返回 0 条模式。现在空数组不再视为完成，只有 `COMPLETED`/`FAILED` 或存在实际模式时才返回。
+  - `total_hits` 改取 `tree_layer.total_hits`（5.8 的真实响应位置），并在上游未回传 `sid` 时回填请求中的 `sid`，避免后续轮询和共享资源元数据丢 sid。
+  - TypeScript 与 Python 两端同步修复，并新增 `log_reduce_preview` 回归测试（`npm run test:log-reduce`、`python -m pytest tests/test_log_tools_business.py`）。
 - `data_overview` 此前请求了上游并不存在的接口，任何调用都会因 404 失败；现改走与其他检索工具相同的日志检索接口，返回该时间窗内的日志总量。
 
 ## 0.4.0

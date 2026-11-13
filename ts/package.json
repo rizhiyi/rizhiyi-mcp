@@ -20,6 +20,7 @@
     "test:http-guard": "npm run build && node scripts/http-guard-test.mjs",
     "test:analysis-parity": "npm run build && node scripts/analysis-parity-test.mjs",
     "test:shared-store": "npm run build && node scripts/shared-store-test.mjs",
+    "test:log-reduce": "npm run build && node scripts/log-reduce-test.mjs",
     "test:openapi-cache": "npm run build && node scripts/openapi-cache-test.mjs",
     "test:sse-fragmentation": "npm run build && node scripts/sse-fragmentation-test.mjs",
     "test:auth-context": "npm run build && node scripts/auth-context-test.mjs",

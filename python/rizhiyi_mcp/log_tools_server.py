@@ -21,6 +21,27 @@ class ResourceKindMismatch(Exception):
     """resource_uri 的 result_kind 与消费方期望不匹配，需要模型可自我修正的错误。"""
 
 
+def resolve_log_reduce_deadline_ms(runtime_config: RuntimeConfig, requested: Any) -> int:
+    """把轮询 deadline 收敛到统一工具执行超时之内。
+
+    聚类预览是长轮询工具，若自身 deadline 不小于外层工具超时，
+    外层会先抛出 SPL_EXECUTION_TIMEOUT（且不含 sid），调用方将无法继续轮询。
+    这里预留 3 秒收尾，判定逻辑与 ``_execute_tool_with_guardrails`` 保持一致。
+    """
+    if runtime_config.mcp_guardrails_enabled and runtime_config.mcp_guardrail_enforce_mode == "enforce":
+        timeout_seconds = float(runtime_config.mcp_guardrail_exec_timeout_seconds)
+    else:
+        timeout_seconds = float(runtime_config.upstream_timeout_seconds)
+    budget_ms = max(3000, int(timeout_seconds * 1000) - 3000)
+    try:
+        requested_ms = int(requested)
+    except (TypeError, ValueError):
+        requested_ms = 20000
+    if requested_ms <= 0:
+        requested_ms = 20000
+    return max(1000, min(requested_ms, budget_ms))
+
+
 class LogToolsServer(RizhiyiFastMCPServer):
     def __init__(self, runtime_config: RuntimeConfig, service_state: ServiceRuntimeState) -> None:
         super().__init__(
@@ -146,7 +167,7 @@ class LogToolsServer(RizhiyiFastMCPServer):
                 retry_interval_ms=self._coerce_int(
                     safe_arguments.get("retry_interval"), default=1000, minimum=0
                 ),
-                deadline_ms=self._coerce_int(safe_arguments.get("deadline_ms"), default=30000, minimum=1000),
+                deadline_ms=self._resolve_log_reduce_deadline_ms(safe_arguments.get("deadline_ms")),
             )
             if (
                 not result.error
@@ -393,6 +414,9 @@ class LogToolsServer(RizhiyiFastMCPServer):
 
     async def close(self) -> None:
         return None
+
+    def _resolve_log_reduce_deadline_ms(self, requested: Any) -> int:
+        return resolve_log_reduce_deadline_ms(self.runtime_config, requested)
 
     async def _request_json(
         self,

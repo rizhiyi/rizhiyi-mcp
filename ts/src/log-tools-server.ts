@@ -21,7 +21,7 @@ import { LogSearchModule } from './modules/log-search.js';
 import { StatisticsModule } from './modules/statistics.js';
 import { TrendForecastModule } from './modules/trend-forecast.js';
 import { AnomalyDetectionModule } from './modules/anomaly-detection.js';
-import { registerToolDefinitions } from './mcp-tool-helpers.js';
+import { registerToolDefinitions, resolveExecutionTimeoutSeconds } from './mcp-tool-helpers.js';
 import { buildToolSuccessResult, formatErrorPayload } from './result-formatter.js';
 import { QueryCache } from './query-cache.js';
 import {
@@ -32,6 +32,7 @@ import {
     saveSharedResult
 } from './shared-result-store.js';
 import { loadLogToolsInstructions } from './instructions.js';
+import { guardrailConfigFromRuntime } from './spl-guardrails.js';
 
 const SERVER_LEVEL_INSTRUCTIONS = loadLogToolsInstructions();
 
@@ -145,6 +146,31 @@ async function handleLogReducePattern(params: any) {
     return formatResult(result, params);
 }
 
+const DEFAULT_LOG_REDUCE_DEADLINE_MS = 20000;
+const LOG_REDUCE_TIMEOUT_RESERVE_MS = 3000;
+
+/**
+ * 聚类预览是长轮询工具，必须在统一工具执行超时之前收尾。
+ * 否则外层 withTimeout 会先触发，调用方只会收到不含 sid 的
+ * SPL_EXECUTION_TIMEOUT，无法继续轮询任务。
+ */
+function resolveLogReduceDeadlineMs(requested: unknown): number {
+    const executionTimeoutSeconds = resolveExecutionTimeoutSeconds(
+        guardrailConfigFromRuntime(context.runtimeConfig),
+        {
+            routeName: context.requestMeta.routeName || 'log-tools',
+            queryCount: 1,
+            upstreamTimeoutSeconds: context.runtimeConfig.upstreamTimeoutSeconds
+        }
+    );
+    const budgetMs = Math.max(3000, executionTimeoutSeconds * 1000 - LOG_REDUCE_TIMEOUT_RESERVE_MS);
+    const requestedMs = Number(requested);
+    const deadline = Number.isFinite(requestedMs) && requestedMs > 0
+        ? requestedMs
+        : DEFAULT_LOG_REDUCE_DEADLINE_MS;
+    return Math.max(1000, Math.min(deadline, budgetMs));
+}
+
 async function handleLogReducePreview(params: any) {
     const sharedResultRef = getSharedResultReference(params, ['resource_uri']);
     let sid = params?.sid;
@@ -168,7 +194,7 @@ async function handleLogReducePreview(params: any) {
         sid,
         params.max_retries ?? 10,
         params.retry_interval ?? 1000,
-        params.deadline_ms ?? 30000
+        resolveLogReduceDeadlineMs(params.deadline_ms)
     );
 
     if (result.error || !params?.analyze_patterns) {
